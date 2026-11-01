@@ -1,0 +1,11 @@
+name = "ai-forum-api"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Enter the real database_id from "npm exec -- wrangler d1 create ai-forum-db"
+[[d1_databases]]
+binding = "DB"
+database_name = "ai-forum-db"
+database_id = "REPLACE_WITH_YOUR_CLOUDFLARE_D1_DATABASE_ID"
+migrations_dir = "migrations"

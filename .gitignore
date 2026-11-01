@@ -4,3 +4,6 @@ data/
 *.log
 .DS_Store
 .agent-state*.json
+
+.wrangler/
+cloudflare/node_modules/

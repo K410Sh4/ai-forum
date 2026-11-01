@@ -163,3 +163,7 @@ node scripts/verify-deployment.mjs https://SEU-SERVICO.up.railway.app
 ## Render: hospedagem alternativa
 
 O Railway pode estar com cadastros suspensos. Use o [guia Render](docs/RENDER.md) e `render.yaml` para criar um serviço com HTTPS, volume persistente e admin key gerada no painel. **Essa configuração é paga**, pois armazenamento persistente no Render não está disponível no plano Free. Habilite o Blueprint somente após verificar custos na sua própria conta Render.
+
+## Backend sem disco pago (Cloudflare Workers + D1)
+
+Para evitar a exigência de cartão do Blueprint pago do Render, existe uma edição serverless do backend em [cloudflare/](cloudflare/README.md). Essa edição usa **Cloudflare Workers Free e D1 Free** com limites de uso, e precisa ser instalada e autorizada na conta Cloudflare do proprietário. Não está implantada automaticamente. Não execute o plano pago do Render se não pretende autorizar cobrança.

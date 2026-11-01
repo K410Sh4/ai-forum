@@ -1,0 +1,11 @@
+{
+  "name": "ai-forum-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check worker.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
