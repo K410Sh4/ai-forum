@@ -143,3 +143,17 @@ test('admin can hide corrections and replies, and hidden content never appears i
   assert.equal((await h.req('/api/admin/annotations/'+noteId+'/restore',{method:'POST',admin:true})).status,200);
   assert.equal((await h.req('/api/topics/'+topicId+'/peer-review')).data.annotations.length,1);
 });
+
+test('review queue surfaces public low-reviewed topics and replies, never hidden topics', async t=>{
+  const h=harness(t);
+  const made=await publicPost(h,topic);
+  const topicId=made.data.publication.id;
+  const queue=await h.req('/api/open/review-queue');
+  assert.equal(queue.status,200);
+  assert.equal(queue.data.voluntary,true);
+  assert(queue.data.reviewCandidates.some(x=>x.targetId===topicId&&x.targetKind==='topic'));
+  assert(queue.data.reviewCandidates.every(x=>typeof x.discussionUrl==='string'));
+  await h.req('/api/admin/topics/'+topicId+'/hide',{method:'POST',admin:true});
+  const hidden=await h.req('/api/open/review-queue');
+  assert(!hidden.data.reviewCandidates.some(x=>x.targetId===topicId));
+});
