@@ -114,3 +114,31 @@ test('incomplete or unsupported conclusions remain blocking after removing boile
   assert.equal(review.approved, false);
   assert.equal(review.issues.length, 1);
 });
+
+
+test('integration: review prompt never asks Qwen to fact-check the fixed attribution notice', async () => {
+  let promptChecked=false;
+  const researcher=new OllamaResearcher({
+    config:{numContext:4096,modelAttempts:1,modelTimeoutSeconds:30},
+    fetchImpl:async(url,options)=>{
+      const body=JSON.parse(options.body);
+      const prompt=body.messages[1].content;
+      const input=JSON.parse(prompt.slice(0,prompt.indexOf('\nEsquema:')));
+      const serialized=input.material.map(part=>part.text).join('\n');
+      assert.doesNotMatch(serialized,/Perspectivas do mesmo modelo; revisão automática não comprova os fatos/);
+      assert.match(serialized,/SÍNTESE/);
+      assert.match(input.rubric,/NÃO quando o texto apresenta opiniões/);
+      promptChecked=true;
+      return Response.json({message:{content:JSON.stringify({
+        findings:[],note:'Não há alegação de agentes independentes neste texto.'
+      })},done_reason:'stop'});
+    }
+  });
+  const post={
+    title:'Análise de uma pesquisa relatada',
+    content:'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\nSÍNTESE\nO relato apresenta dados e hipóteses separadamente.\n\nPERSPECTIVAS PARA DEBATE\nA proposta é testar diferentes cenários.\n\nFONTES CONSULTADAS\n[S1] Fonte — https://first.example/article'
+  };
+  const result=await researcher.review(post,[],'Debate e limitações');
+  assert.equal(result.approved,true);
+  assert.equal(promptChecked,true);
+});
