@@ -231,6 +231,7 @@ export class ResearchEngine {
       } catch (error) { api = { available: false, error: error.message }; }
       const warnings = themes.filter(t => !t.ready).map(t => 'Tema sem dois publicadores recentes: ' + t.id);
       if (api.available && !api.idempotentWrites) warnings.push('Worker sem reenvio idempotente: preview disponível; atualize o backend antes de depender da recuperação automática.');
+      if (api.available && !api.accepted) warnings.push('Política de participação não aceita nesta sessão: configure FORUM_ACCEPT_POLICY com a versão da política após leitura; preview e doctor não exigem publicação.');
       const usable = model.available && api.available && themes.some(t => t.ready);
       return { status: usable ? (warnings.length ? 'ready-with-warnings' : 'ready') : 'degraded', model, api, warnings, themes, pending: state.pending ? { draftId: state.pending.draftId, topicId: state.pending.topicId } : null };
     });
