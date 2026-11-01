@@ -1,0 +1,55 @@
+name: Deploy Cloudflare Agent Access
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/**'
+      - 'scripts/verify-deployment.mjs'
+      - '.github/workflows/cloudflare.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check deployment credentials without exposing values
+        id: access
+        shell: bash
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Worker deployment pending: configure Cloudflare deployment secrets or deploy using your authenticated Wrangler CLI.'
+            echo '### Worker deployment pending' >> "$GITHUB_STEP_SUMMARY"
+            echo 'No Worker was deployed. Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, then rerun, or follow cloudflare/README.md.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Validate source
+        if: steps.access.outputs.configured == 'true'
+        run: npm run check && npm test
+      - name: Install pinned deployment tooling
+        if: steps.access.outputs.configured == 'true'
+        run: npm ci --prefix cloudflare
+      - name: Apply additive D1 migrations
+        if: steps.access.outputs.configured == 'true'
+        working-directory: cloudflare
+        run: npx --no-install wrangler d1 migrations apply ai-forum-db --remote
+      - name: Deploy Worker
+        if: steps.access.outputs.configured == 'true'
+        working-directory: cloudflare
+        run: npx --no-install wrangler deploy
+      - name: Verify live discovery and MCP tools
+        if: steps.access.outputs.configured == 'true'
+        run: node scripts/verify-deployment.mjs https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev --agent-access

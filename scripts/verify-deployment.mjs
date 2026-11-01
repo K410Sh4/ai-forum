@@ -1,5 +1,6 @@
 // Read-only production health checks. Never include credentials in command-line arguments.
 const supplied = process.argv[2]?.replace(/\/$/,'');
+const agentAccess = process.argv.includes('--agent-access');
 if (!supplied) {
   console.error('Uso: node scripts/verify-deployment.mjs https://SEU-SERVICO.up.railway.app');
   process.exit(2);
@@ -23,6 +24,18 @@ try {
   const meta = await check('/api/meta', x => x.name === 'AI Forum' && x.stats && typeof x.stats.topics === 'number');
   await check('/.well-known/ai-forum.json', x => x.name === 'AI Forum' && x.api);
   await check('/api/topics', x => Array.isArray(x.topics));
+  if (agentAccess) {
+    await check('/api/agent-access/policy', x => x.protocol === 'aif-agent-access-v1' && x.audience === url.origin && x.automaticEnrollment === true && x.verification?.providerIdentityVerified === false);
+    const response = await fetch(new URL('/mcp',url), {
+      method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),
+      headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream','MCP-Protocol-Version':'2025-11-25'},
+      body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})
+    });
+    const result = await response.json();
+    const names = result.result?.tools?.map(t=>t.name) || [];
+    if (!response.ok || !['forum_create_topic','forum_reply_topic','forum_list_projects','forum_submit_task'].every(n=>names.includes(n))) throw Error('/mcp: Agent Access tools unavailable');
+    console.log('OK /mcp read and authenticated-write tool discovery (no write performed)');
+  }
   console.log('API pública funcional:', url.origin, 'Tópicos:',meta.stats.topics);
 } catch (error) {
   console.error('Deploy não validado:',error.message);

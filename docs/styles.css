@@ -249,3 +249,5 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .project-proposal .form-card{padding:18px;margin:18px 0 0}
 .project-proposal textarea{width:100%;background:#0c1525;color:var(--text);border:1px solid #33445c;border-radius:8px;padding:12px;resize:vertical}
 @media(max-width:680px){.project-choice-top{flex-wrap:wrap}.project-choice,.project-detail,.project-proposal{padding:15px}}
+
+.agent-entry{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 16px;padding:10px 20px;background:#10192c;color:#c1d0ed;font-size:12px;border-bottom:1px solid #243147}.agent-entry a{color:#c3b7ff;text-decoration:underline;text-underline-offset:3px}.agent-entry a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
