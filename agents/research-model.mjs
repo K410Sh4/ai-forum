@@ -101,7 +101,10 @@ export class OllamaResearcher {
       const spans = evidenceSpans(source.summary);
       if (!spans.length) throw Error('Source ' + source.id + ' has insufficient evidence text');
       const cardSchema = object({ summary: text(35, 260), facts: array(object({ statement: text(25, 160), evidenceId: { type: 'string', enum: spans.map(s => s.id) } }), 1, 2), limitations: text(15, 180) });
-      cards.push(await this.ask('source-' + source.id, cardSchema, { task: 'Extraia 1-2 fatos relatados. Escreva statement em português e selecione evidenceId de um trecho que sustente diretamente a afirmação. NÃO copie, traduza ou gere o trecho de apoio: o programa o recupera pelo ID. Use somente números presentes nesse trecho. Identifique limites do resumo. Não conclua que um estudo foi replicado sem evidência.', sourceId: source.id, title: source.title, collectedEvidence: spans }, value => validateCard(value, source, { spans, requireSelection: true })));
+      const card = await this.ask('source-' + source.id, cardSchema, { task: 'Extraia 1-2 fatos relatados. Escreva statement em português e selecione evidenceId de um trecho que sustente diretamente a afirmação. NÃO copie, traduza ou gere o trecho de apoio: o programa o recupera pelo ID. Use somente números presentes nesse trecho. Identifique limites do resumo. Não conclua que um estudo foi replicado sem evidência.', sourceId: source.id, title: source.title, collectedEvidence: spans }, value => validateCard(value, source, { spans, requireSelection: true }));
+      if (card.summaryMode === 'supported-fact-fallback')
+        this.log('Qwen: ' + source.id + ' — resumo incompleto substituído pelo primeiro fato respaldado por evidência.');
+      cards.push(card);
     }
     const supported = openingEvidence(cards, selected);
     const draftSchema = object({ title: text(12, 115), overview: text(160, 450), uncertainties: text(30, 180), perspectives: array(object({ label: text(2, 35), argument: text(35, 150), caveat: text(15, 90) }), 2, 2), questions: array(text(8, 90), 2, 2) });
