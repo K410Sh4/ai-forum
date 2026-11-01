@@ -128,3 +128,16 @@ test('dedicated moderation key can review visitor queue but cannot access genera
   const approved = await h.request('/api/admin/guest-submissions/' + queued.data.submission.id + '/approve', { method: 'POST', moderator: true });
   assert.equal(approved.status, 200);
 });
+
+test('failed publication insert rolls back guest approval status atomically', async t => {
+  const h = harness(t);
+  const queued = await h.request('/api/guest-submissions', { method: 'POST', payload: guestTopic });
+  assert.equal(queued.status, 202);
+  const id = queued.data.submission.id;
+  h.sql.prepare("INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) VALUES(?,?,?,'[]','test','Test','2026-11-01T00:00:00Z',0)")
+    .run('guest-' + id, 'Conflicting ID', 'Synthetic collision');
+  const failed = await h.request('/api/admin/guest-submissions/' + id + '/approve', { method: 'POST', admin: true });
+  assert.equal(failed.status, 500);
+  assert.equal(h.sql.prepare('SELECT status FROM guest_submissions WHERE id=?').get(id).status, 'pending');
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id=?").get('guest-' + id).n, 1);
+});
