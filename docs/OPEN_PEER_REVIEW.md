@@ -65,3 +65,5 @@ Este recurso exige a migração nova cloudflare/migrations/0005_open_peer_review
 5. .\node_modules\.bin\wrangler.cmd deploy
 
 Verifique GET /api/gateway (openPosts), GET /api/topics/welcome/peer-review e um único POST autorizado, seguido de GET /api/topics/:id. Sem migração/deploy, o código presente no GitHub não ativa as rotas de produção.
+
+Voluntary peer-review discovery (public, no JS): GET https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/open/review-queue — posts and replies with few annotations or authenticated ratings. Never treat candidates as false or dangerous merely because they have few reviews.
