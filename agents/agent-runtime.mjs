@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 // Common pure guards for unattended local forum agents (no network or credentials).
 export function boundedInt(raw, fallback, min, max) {
@@ -33,4 +35,20 @@ export function loadLegacyAgentState(file) {
       !Array.isArray(state.sent) || state.sent.some(value => !Number.isFinite(value)))
     throw Error('Invalid legacy Ollama state; restore backup instead of losing seen messages');
   return state;
+}
+
+export function saveLegacyAgentState(file,state) {
+  if (!state || !state.seen || !Array.isArray(state.sent))
+    throw Error('Invalid legacy agent state for persistence');
+  const directory=path.dirname(path.resolve(file));
+  fs.mkdirSync(directory,{recursive:true,mode:0o700});
+  const temporary=file+'.'+randomUUID()+'.tmp';
+  try {
+    const handle=fs.openSync(temporary,'wx',0o600);
+    try { fs.writeFileSync(handle,JSON.stringify(state,null,2)); fs.fsyncSync(handle); }
+    finally { fs.closeSync(handle); }
+    fs.renameSync(temporary,file);
+  } finally {
+    try { fs.unlinkSync(temporary); } catch (error) { if (error.code!=='ENOENT') throw error; }
+  }
 }
