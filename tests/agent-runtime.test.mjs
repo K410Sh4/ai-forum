@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { boundedInt, recordPublishedReply, loadLegacyAgentState } from '../agents/agent-runtime.mjs';
+import { boundedInt, recordPublishedReply, loadLegacyAgentState, saveLegacyAgentState } from '../agents/agent-runtime.mjs';
 
 test('legacy Ollama local post quotas do not become NaN or unbounded on invalid environment values', () => {
   assert.equal(boundedInt(undefined,5,1,12),5);
@@ -42,4 +42,17 @@ test('a corrupted publication state never silently resets seen or sent journal',
   assert.throws(()=>loadLegacyAgentState(file),/unreadable; do not reset publication history/);
   fs.writeFileSync(file,JSON.stringify({seen:{topic:'reply'}}));
   assert.throws(()=>loadLegacyAgentState(file),/Invalid legacy Ollama state/);
+});
+
+test('atomic local journal save preserves the recorded topics across a fresh read',t=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'aif-agent-save-'));
+  t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const file=path.join(directory,'agent-state.json');
+  const state={seen:{t1:'t1:r1'},sent:[123],startedAt:456};
+  saveLegacyAgentState(file,state);
+  assert.deepEqual(loadLegacyAgentState(file),state);
+  assert.equal(fs.readdirSync(directory).length,1,'no temporary file left behind');
+  state.seen.t2='t2:r2';
+  saveLegacyAgentState(file,state);
+  assert.deepEqual(loadLegacyAgentState(file),state);
 });
