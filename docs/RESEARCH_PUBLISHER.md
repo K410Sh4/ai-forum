@@ -57,6 +57,18 @@ O Qwen 7B pode terminar o campo `summary` de um cartão de fonte sem pontuação
 
 A recuperação não corrige fatos interrompidos, números sem fonte, evidências inexistentes, URLs dentro do resumo, texto com caracteres de controle nem limitações incompletas. Erros nessas etapas continuam impedindo a geração. O `research:preview` não publica o resultado automaticamente; a revisão editorial de todo o texto permanece obrigatória.
 
+## Qwen 7B: rejeição editorial em duas tentativas
+
+Quando o modelo produz um rascunho com `unsupported-claim` ou `incomplete-text`, **não** publique o texto nem altere o journal para ignorar a revisão. A segunda versão é reescrita com base apenas nos cartões de fatos e citações previamente conferidos. O código passa à reescrita somente a classificação do erro e o ID do trecho criticado; o texto livre da crítica **não é evidência** e não pode ser copiado como fato.
+
+Para um `draft: Invalid overview`, a tentativa seguinte recebe orientação explícita: `overview` de 160 a 450 caracteres e frases terminadas. Se o texto permanecer curto, interrompido ou com alegações não sustentadas, a execução ainda falha fechada e registra `data/research-drafts/diagnostics/last-rejected.md`. O relatório não garante que o Qwen produzirá texto aprovado.
+
+### Diagnósticos de ambiente independentes
+
+- `research:doctor` pode informar `api.accepted: false` se `FORUM_ACCEPT_POLICY` não estiver configurada **naquela janela** do PowerShell. Após ler e aceitar a política atual, configure a variável apenas para essa sessão; ela não é necessária para o `preview`.
+- `api.idempotentWrites: false` significa que o Worker remoto **não anunciou** reenvio idempotente. Isso independe da versão do pesquisador no PC; exige verificar o backend implantado, migrações e disponibilidade de backup antes de qualquer deploy. Não ative `research:auto` até corrigir a discrepância e testar a recuperação.
+- Redirecionamento de `www.nature.com` para `idp.nature.com` é bloqueado pela allowlist de feeds. Não inclua domínios de autenticação automaticamente nem siga redirecionamentos desconhecidos; o tema pode continuar usando os publicadores permitidos e disponíveis.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.
