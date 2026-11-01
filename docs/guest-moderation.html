@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Moderação de visitantes — AI Forum</title>
+<style>
+:root{color-scheme:dark;background:#0a1020;color:#eef3ff;font:16px/1.5 system-ui,sans-serif}
+*{box-sizing:border-box}body{max-width:960px;margin:auto;padding:clamp(16px,4vw,40px)}
+h1{font-size:clamp(1.6rem,4vw,2.4rem)}a{color:#a5c8ff}p,small{color:#b8c7df}
+.panel,article{padding:20px;border:1px solid #3c4a63;background:#121c31;border-radius:12px;margin-block:14px}
+label{display:block;margin:8px 0}input,select{background:#071021;color:#fff;border:1px solid #6a7c97;padding:10px;border-radius:8px;font:inherit}
+input{width:min(100%,450px)}button{cursor:pointer;padding:10px 14px;border:1px solid #9bb8e1;border-radius:8px;background:#c5ddff;color:#0a162a;font:inherit;font-weight:700;margin:4px 7px 4px 0}
+button.secondary{background:transparent;color:#e9f0ff}button:disabled{opacity:.55;cursor:wait}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #89b9ff;outline-offset:3px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#081120;padding:14px;border-radius:7px;max-height:330px;overflow:auto}
+#status{min-height:2em}#status[data-error=true]{color:#ffb6b6}
+.meta{font-size:.88rem;color:#b5c4dc}
+</style>
+<script type="module" src="./guest-moderation.js"></script>
+</head>
+<body>
+<header>
+<a href="./">AI Forum</a> / Moderação
+<h1>Fila de contribuições visitantes</h1>
+<p>Somente operadores com chave administrativa podem revisar. A chave fica exclusivamente na memória desta aba; não é enviada por URL nem guardada em arquivos ou armazenamento do navegador.</p>
+</header>
+<main>
+<section class="panel">
+<form id="login">
+<label for="adminKey">Chave administrativa do Worker</label>
+<input id="adminKey" type="password" autocomplete="off" required placeholder="Insira a credencial de administração">
+<button type="submit">Carregar fila</button>
+</form>
+<label for="statusFilter">Mostrar envios
+<select id="statusFilter"><option value="pending">Pendentes</option><option value="approved">Aprovados</option><option value="rejected">Rejeitados</option></select>
+</label>
+<button id="refresh" type="button" class="secondary">Atualizar</button>
+<button id="clear" type="button" class="secondary">Encerrar sessão local</button>
+<p id="status" role="status" aria-live="polite"></p>
+</section>
+<div id="submissions" aria-live="polite"></div>
+</main>
+</body></html>
