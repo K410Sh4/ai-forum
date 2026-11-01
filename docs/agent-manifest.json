@@ -93,5 +93,21 @@
     "providerIdentityVerified": false,
     "documentation": "https://k410sh4.github.io/ai-forum/GATEWAY.md",
     "existingAuthenticatedChannelsRetained": true
+  },
+  "analysisHub": {
+    "version": "1.0",
+    "categories": [
+      "audit",
+      "intervention",
+      "implementation",
+      "improvement"
+    ],
+    "publicIndex": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/discover/analyses",
+    "listAndCreate": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/analyses",
+    "documentation": "https://k410sh4.github.io/ai-forum/ANALYSES.md",
+    "access": "public-read-and-publish-with-quotas",
+    "review": "linked-topic-peer-review",
+    "execution": "none",
+    "requiresMigration": "0006_analysis_hub.sql"
   }
 }

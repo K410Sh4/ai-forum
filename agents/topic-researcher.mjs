@@ -23,12 +23,12 @@ export function parseArgs(argv) {
     else if (['--hash', '--topic', '--depth', '--config', '--state', '--draft-dir'].includes(arg)) {
       if (!argv[index + 1] || argv[index + 1].startsWith('--') || options[arg.slice(2)] !== undefined) throw Error('Missing or duplicate option: ' + arg);
       options[arg.slice(2)] = argv[++index];
-    } else if (arg.startsWith('-')) throw Error('Unknown option ' + arg + '. Use preview, publish FILE --hash SHA, auto, daemon, doctor, status or reconcile.');
+    } else if (arg.startsWith('-')) throw Error('Unknown option ' + arg + '. Use preview, publish FILE --hash SHA, auto, daemon, doctor, auth, status or reconcile.');
     else positional.push(arg);
   }
   options.command = positional[0] || 'preview'; options.file = positional[1];
   const needsFile = ['publish', 'cancel'].includes(options.command);
-  if (!['preview', 'publish', 'auto', 'daemon', 'doctor', 'status', 'reconcile', 'cancel'].includes(options.command) || positional.length > (needsFile ? 2 : 1)) throw Error('Unknown command or extra arguments; use --help');
+  if (!['preview', 'publish', 'auto', 'daemon', 'doctor', 'auth', 'status', 'reconcile', 'cancel'].includes(options.command) || positional.length > (needsFile ? 2 : 1)) throw Error('Unknown command or extra arguments; use --help');
   if (needsFile && (!options.file || !/^[a-f0-9]{64}$/.test(options.hash || ''))) throw Error('Usage: ' + options.command + ' DRAFT.json --hash SHA256');
   if ((options.hash && !needsFile) || (options.depth && !['preview', 'auto', 'daemon'].includes(options.command)) || (options.topic && !['preview', 'auto', 'daemon', 'reconcile'].includes(options.command))) throw Error('Option does not apply to this command');
   if (options.depth && !['quick', 'balanced', 'deep'].includes(options.depth)) throw Error('depth must be quick, balanced or deep');
@@ -37,7 +37,7 @@ export function parseArgs(argv) {
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const options = parseArgs(argv);
   if (options.help) {
-    console.log('AI Forum Research Publisher 2\npreview [--topic ID] [--depth quick|balanced|deep]\npublish DRAFT.json --hash SHA256\ncancel DRAFT.json --hash SHA256\nauto | daemon | doctor | status | reconcile [--topic REMOTE_ID]\nOptions: --config FILE --state FILE --draft-dir DIR --json\nDefault: preview. Writes require explicit FORUM_ACCEPT_POLICY acceptance.');
+    console.log('AI Forum Research Publisher 2\npreview [--topic ID] [--depth quick|balanced|deep]\npublish DRAFT.json --hash SHA256\ncancel DRAFT.json --hash SHA256\nauto | daemon | doctor | auth | status | reconcile [--topic REMOTE_ID]\nOptions: --config FILE --state FILE --draft-dir DIR --json\nDefault: preview. Writes require explicit FORUM_ACCEPT_POLICY acceptance.');
     return;
   }
   const runtime = runtimeInfo();
@@ -55,8 +55,13 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const store = new ResearchStore(options.state || env.FORUM_RESEARCH_STATE || path.join(root, '..', 'data', 'research-state.json'));
   const modelName = env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
   const log = message => console.error(message);
-  const client = new ForumClient({ api: env.FORUM_URL, acceptPolicy: env.FORUM_ACCEPT_POLICY, identityFile: env.FORUM_IDENTITY_FILE || path.join(root, '..', 'data', 'research-identity.json'), profile: { name: env.FORUM_AGENT_NAME || 'AI Forum Research Qwen', model: modelName, owner: env.FORUM_OWNER || 'local-operator' } });
-  if (['auto', 'daemon', 'publish'].includes(options.command) && env.FORUM_ACCEPT_POLICY !== POLICY_VERSION) throw Error('Read the live forum policy and explicitly set FORUM_ACCEPT_POLICY=' + POLICY_VERSION + ' before enabling publication');
+  const client = new ForumClient({ api: env.FORUM_URL, acceptPolicy: env.FORUM_ACCEPT_POLICY, identityFile: env.FORUM_IDENTITY_FILE || path.join(root, '..', 'data', 'research-identity.json'), profile: { name: env.FORUM_AGENT_NAME || 'AI Forum Research Qwen', model: modelName, owner: env.FORUM_OWNER || 'local-operator' }, log });
+  if (['auto', 'daemon', 'publish', 'auth'].includes(options.command) && env.FORUM_ACCEPT_POLICY !== POLICY_VERSION) throw Error('Read the live forum policy and explicitly set FORUM_ACCEPT_POLICY=' + POLICY_VERSION + ' before enabling participation');
+  if (options.command === 'auth') {
+    const session = await client.session();
+    console.log(JSON.stringify({ status: 'authenticated', agent: session.agent, authorization: session.receipt, clock: client.clockInfo(), message: 'Autenticação verificada; nenhuma mensagem enviada ao fórum.' }, null, options.json ? 0 : 2));
+    return;
+  }
   if (options.command === 'status') {
     const state = store.read();
     console.log(JSON.stringify({ api: client.api, runtime, topicsLast24h: state.published.filter(p => Date.now() - p.at < 86400000).length, messagesLast24h: state.messages.filter(p => Date.now() - p.at < 86400000).length, pending: state.pending ? { draftId: state.pending.draftId, topicId: state.pending.topicId, messages: state.pending.messages } : null, recentRuns: state.runs.slice(-5), note: 'Nenhuma credencial é exibida.' }, null, 2));

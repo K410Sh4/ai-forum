@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export const RESEARCH_VERSION = '2.2.0';
+export const RESEARCH_VERSION = '2.3.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -87,6 +87,15 @@ export function prose(value, min, max, name = 'text') {
   if (typeof value !== 'string' || normalized(value).length < min || normalized(value).length > max || /https?:\/\//i.test(value) || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)) throw Error('Invalid ' + name + ' (length, URL or control character)');
   return normalized(value);
 }
+export function sentence(value, min, max, name = 'sentence') {
+  const result = prose(value, min, max, name);
+  if (/[\uFFFD\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(result)) throw Error('Unexpected characters in Portuguese ' + name + '; rewrite the complete sentence');
+  if (!/[.!?][”"')]*$/.test(result) || /(?:\.{2,}|…)[”"')]*$/.test(result)) throw Error('Incomplete ' + name + '; rewrite a complete sentence with final punctuation, without cutting words');
+  let balance = 0;
+  for (const character of result) { if (character === '(') balance++; if (character === ')' && --balance < 0) throw Error('Unbalanced parentheses in ' + name); }
+  if (balance) throw Error('Unbalanced parentheses in ' + name);
+  return result;
+}
 export function evidenceSpans(value) {
   const original = normalized(value);
   let collected = original.slice(0, 4000);
@@ -111,10 +120,10 @@ export function evidenceSpans(value) {
   return spans;
 }
 export function validateCard(card, source, { spans = [], requireSelection = false } = {}) {
-  const summary = prose(card.summary, 35, 380, 'source summary');
+  const summary = sentence(card.summary, 35, 380, 'source summary');
   if (!Array.isArray(card.facts) || !card.facts.length || card.facts.length > 3) throw Error('Source card needs 1-3 supported facts');
   const facts = card.facts.map(f => {
-    const statement = prose(f.statement, requireSelection ? 25 : 20, requireSelection ? 180 : 220, 'fact');
+    const statement = sentence(f.statement, requireSelection ? 25 : 20, requireSelection ? 180 : 220, 'fact');
     const selected = spans.find(span => span.id === f.evidenceId);
     if (requireSelection && !selected) throw Error('Select an existing evidenceId from the supplied source spans');
     const quote = normalized(selected ? selected.text : f.quote || '');
@@ -123,7 +132,7 @@ export function validateCard(card, source, { spans = [], requireSelection = fals
     if (numbers(statement).some(n => !numbers(quote).includes(n))) throw Error('Numeric fact is absent from its evidence quote');
     return { statement, quote, ...(selected ? { evidenceId: selected.id } : {}) };
   });
-  return { sourceId: source.id, summary, facts, limitations: prose(card.limitations, 15, 220, 'source limitation') };
+  return { sourceId: source.id, summary, facts, limitations: sentence(card.limitations, 15, 220, 'source limitation') };
 }
 export function openingEvidence(cards, sources) {
   const selected = [], publishers = new Set();
@@ -138,7 +147,7 @@ export function openingEvidence(cards, sources) {
   requireDiversity(citedSources(sourceIds, sources, 2));
   return { sourceIds, findings: selected.map(card => ({ text: prose(card.facts?.[0]?.statement, 25, 180, 'supported finding'), sourceIds: [card.sourceId] })) };
 }
-export const REVIEW_KINDS = ['unsupported-claim', 'contradiction', 'hypothesis-as-fact', 'false-consensus', 'false-independence', 'missing-detail', 'style'];
+export const REVIEW_KINDS = ['unsupported-claim', 'contradiction', 'hypothesis-as-fact', 'false-consensus', 'false-independence', 'incomplete-text', 'missing-detail', 'style'];
 export function reviewMaterial(message) {
   if (typeof message?.content !== 'string') throw Error('Review requires a rendered message');
   const body = message.content.split(/\n\n(?:FONTES CONSULTADAS|Fontes:)\n/)[0];
@@ -160,15 +169,15 @@ export function validateReview(value, material) {
 function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
 export function composePost(topic, draft, sources) {
   const title = prose(draft.title, 12, 115, 'title');
-  const overview = prose(draft.overview, 160, 550, 'overview');
-  const uncertainty = prose(draft.uncertainties, 20, 260, 'uncertainties');
+  const overview = sentence(draft.overview, 160, 550, 'overview');
+  const uncertainty = sentence(draft.uncertainties, 20, 260, 'uncertainties');
   if (!Array.isArray(draft.perspectives) || draft.perspectives.length < 2 || draft.perspectives.length > 3 || !Array.isArray(draft.questions) || draft.questions.length !== 2) throw Error('Draft needs 2-3 perspectives and two questions');
   const selected = citedSources(draft.sourceIds, sources, 2); requireDiversity(selected);
-  const views = draft.perspectives.map((v, i) => (i + 1) + '. ' + prose(v.label, 2, 40) + ': ' + prose(v.argument, 35, 220) + ' (Limite: ' + prose(v.caveat, 15, 130) + ')').join('\n');
-  const questions = draft.questions.map(x => '• ' + prose(x, 8, 120)).join('\n');
+  const views = draft.perspectives.map((v, i) => (i + 1) + '. ' + prose(v.label, 2, 40) + ': ' + sentence(v.argument, 35, 220, 'perspective') + ' (Limite: ' + sentence(v.caveat, 15, 130, 'perspective limit') + ')').join('\n');
+  const questions = draft.questions.map(x => '• ' + sentence(x, 8, 120, 'question')).join('\n');
   const findings = (draft.findings || []).map(f => {
     citedSources(f.sourceIds, selected);
-    return '• ' + prose(f.text, 25, 200) + ' [' + f.sourceIds.join(', ') + ']';
+    return '• ' + sentence(f.text, 25, 200, 'finding') + ' [' + f.sourceIds.join(', ') + ']';
   });
   if (findings.length > 3) throw Error('At most three findings per opening post');
   const content = 'Pesquisa assistida por IA local — ' + topic.label + '. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\nSÍNTESE\n' + overview + (findings.length ? '\n\nEVIDÊNCIAS\n' + findings.join('\n') : '') + '\n\nPERSPECTIVAS PARA DEBATE\n' + views + '\n\nINCERTEZAS\n' + uncertainty + '\n\nPERGUNTAS ABERTAS\n' + questions + '\n\nFONTES CONSULTADAS\n' + references(selected);
@@ -181,16 +190,20 @@ export function composeSection(section, sources) {
   const used = new Set();
   const paragraphs = section.paragraphs.map(p => {
     citedSources(p.sourceIds, sources).forEach(s => used.add(s.id));
-    return prose(p.text, 60, 500, 'section paragraph') + ' [' + p.sourceIds.join(', ') + ']';
+    return sentence(p.text, 60, 500, 'section paragraph') + ' [' + p.sourceIds.join(', ') + ']';
   });
   const selected = sources.filter(s => used.has(s.id)); requireDiversity(selected);
-  const content = heading + '\n\n' + paragraphs.join('\n\n') + '\n\nLimitações: ' + prose(section.limitations, 25, 250) + '\n\nFontes:\n' + references(selected);
+  const content = heading + '\n\n' + paragraphs.join('\n\n') + '\n\nLimitações: ' + sentence(section.limitations, 25, 250, 'section limitation') + '\n\nFontes:\n' + references(selected);
   if (content.length > 2900) throw Error('Section exceeds the reply budget');
   return { content };
 }
 export function payloadHash(draft) { const { hash, ...payload } = draft; return digest(payload); }
+export function stampMessages(post, replies, id, fingerprint) {
+  return [post, ...replies].map((message, index, messages) => ({ ...message, content: message.content + '\n\nPesquisa ' + id + ' · parte ' + (index + 1) + '/' + messages.length + ' · ref ' + fingerprint.slice(0, 16) }));
+}
 export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24, maxSourceAgeDays = 14 } = {}) {
-  if (draft?.schemaVersion !== 2 || draft.hash !== payloadHash(draft) || !/^[a-f0-9]{64}$/.test(draft.hash) || !/^[a-f0-9]{24}$/.test(draft.id)) throw Error('Draft hash or format is invalid');
+  if (![2, 3].includes(draft?.schemaVersion) || draft.hash !== payloadHash(draft) || !/^[a-f0-9]{64}$/.test(draft.hash) || !/^[a-f0-9]{24}$/.test(draft.id)) throw Error('Draft hash or format is invalid');
+  if (draft.schemaVersion !== 3) throw Error('Draft predates complete-text validation; cancel any pending delivery of this draft, then generate a fresh preview');
   if (draft.api !== api || draft.policyVersion !== POLICY_VERSION || draft.status !== 'ready' || draft.review?.approved !== true) throw Error('Draft is not approved for this API/policy');
   const created = Date.parse(draft.createdAt);
   if (!Number.isFinite(created) || created > clock + 300000 || clock - created > maxAgeHours * 3600000) throw Error('Draft expired; generate and review a fresh draft');
@@ -203,6 +216,11 @@ export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24
   }
   if (!draft.post || prose(draft.post.title, 5, 120).length < 5 || !Array.isArray(draft.replies) || draft.replies.length > 2) throw Error('Invalid draft messages');
   for (const message of [draft.post, ...draft.replies]) if (typeof message.content !== 'string' || message.content.length < 10 || message.content.length > 3000 || !message.content.includes('Pesquisa ' + draft.id)) throw Error('Invalid draft message or provenance marker');
+  if (!draft.editorial?.opening || !Array.isArray(draft.editorial.sections) || draft.editorial.sections.length !== draft.replies.length) throw Error('Draft needs its validated editorial fields');
+  const expected = stampMessages(composePost(draft.theme, draft.editorial.opening, draft.sources), draft.editorial.sections.map(section => composeSection(section, draft.sources)), draft.id, draft.fingerprint);
+  for (const [index, message] of [draft.post, ...draft.replies].entries()) {
+    if (message.content !== expected[index].content || message.title !== expected[index].title || JSON.stringify(message.tags) !== JSON.stringify(expected[index].tags)) throw Error('Rendered draft differs from its validated editorial fields');
+  }
   return draft;
 }
 export function similarTitle(a, b) {

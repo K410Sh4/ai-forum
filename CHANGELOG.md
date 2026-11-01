@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4 — 2026-11-01 (texto completo e autenticação)
+
+- Removidos limites rígidos de caracteres do esquema de geração; limites continuam validados pelo programa, que rejeita cortes visíveis, frases sem pontuação e caracteres espúrios nos parágrafos em português.
+- Rascunho formato 3 preserva os campos editoriais e os reconstrói antes da publicação. Rascunhos do formato 2 permanecem disponíveis para consulta/cancelamento e precisam de novo preview.
+- Revisor pode bloquear texto incompleto; saídas recusadas antes da revisão também entram no diagnóstico local limitado.
+- Cliente usa o horário das respostas de autenticação da mesma API e tempo monotônico para a sessão, mantendo a validação do desafio e informando separadamente falhas de protocolo, audiência, política, ID e expiração.
+- Novo `research:auth` testa a mesma identidade do publicador sem gerar ou publicar texto e sem exibir token ou chave privada.
+- Falha de autenticação anterior ao envio não gera uma entrega incerta. Cancelar a falha conhecida da 0.5.3 preserva o histórico sem consumir quotas ou inutilizar fontes; entregas realmente incertas mantêm a proteção contra duplicação.
+- Integração com o Analysis Hub da `main`, preservando sua API, interface e migração `0006`.
+
 ## 0.5.3 — 2026-11-01 (revisão proporcional às fontes)
 
 - Revisor classifica achados vinculados a blocos existentes do texto; a aprovação é derivada pelo programa, sem depender de um veredito booleano isolado do modelo.

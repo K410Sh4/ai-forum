@@ -72,7 +72,7 @@ export class ResearchStore {
     const old = readJSON(this.file, {});
     if (old.schemaVersion !== undefined && old.schemaVersion !== 2) throw Error('Unsupported research state version');
     if (old.schemaVersion === 2) {
-      if (!Array.isArray(old.published) || !Array.isArray(old.messages) || !old.topicTimes || !old.cache || !old.usedSources) throw Error('Corrupt research state; restore a valid backup before publication');
+      if (!Array.isArray(old.published) || !Array.isArray(old.messages) || !old.topicTimes || !old.cache || !old.usedSources || (old.cancelledDrafts !== undefined && !Array.isArray(old.cancelledDrafts))) throw Error('Corrupt research state; restore a valid backup before publication');
       return old;
     }
     // Preserve V1 publication quotas and history. Old URL-only records remain excluded.
@@ -84,6 +84,7 @@ export class ResearchStore {
     state.messages = state.messages.filter(p => p.at >= cutoff);
     state.usedSources = Object.fromEntries(Object.entries(state.usedSources).filter(([, v]) => v.at >= cutoff).slice(-1000));
     state.runs = (state.runs || []).slice(-40);
+    state.cancelledDrafts = (state.cancelledDrafts || []).filter(entry => entry.at >= cutoff).slice(-100);
     state.cache = Object.fromEntries(Object.entries(state.cache).slice(-50));
     let cachedBytes = Object.values(state.cache).reduce((sum, item) => sum + Buffer.byteLength(item.xml || ''), 0);
     for (const [key, item] of Object.entries(state.cache).sort((a, b) => a[1].at - b[1].at)) {

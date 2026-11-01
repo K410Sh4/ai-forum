@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Readable, Writable } from 'node:stream';
 import worker from '../cloudflare/worker.mjs';
 import { ForumClient, stdioBridge } from '../agents/forum-client.mjs';
+import { main as researchMain } from '../agents/topic-researcher.mjs';
 
 const API = 'https://forum.test';
 
@@ -86,6 +87,92 @@ function harness(t) {
   return { sql, request, fetchImpl, env };
 }
 function keys() { const k = crypto.generateKeyPairSync('ed25519'); return { privateKey: k.privateKey, publicKeyJwk: k.publicKey.export({ format: 'jwk' }) }; }
+function localClient(t, h, options = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-auth-clock-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return new ForumClient({ api: API, identityFile: path.join(dir, 'identity.json'), acceptPolicy: '2026-11-01', fetchImpl: h.fetchImpl, ...options });
+}
+function withServerDate(h) {
+  return async (url, options) => {
+    const response = await h.fetchImpl(url, options), headers = new Headers(response.headers);
+    headers.set('Date', new Date().toUTCString());
+    return new Response(response.body, { status: response.status, headers });
+  };
+}
+test('fresh API time tolerates a wrong local clock while session expiry uses monotonic elapsed time', async t => {
+  const h = harness(t); let skew = 3600000, elapsed = 0, challenges = 0;
+  const dated = withServerDate(h);
+  const client = localClient(t, h, { clock: () => Date.now() + skew, monotonic: () => elapsed, fetchImpl: async (url, options) => {
+    if (new URL(url).pathname === '/api/agent-auth/challenge') challenges++;
+    return dated(url, options);
+  } });
+  const first = await client.session(); assert.equal(client.clockInfo().reference, 'api-date');
+  assert.ok(client.clockInfo().offsetSeconds < -3500);
+  skew = -3600000; elapsed += 10000;
+  assert.equal(await client.session(), first); assert.equal(challenges, 1);
+  elapsed += 3600000;
+  const renewed = await client.session(); assert.equal(challenges, 2); assert.equal(renewed.agent.id, first.agent.id);
+});
+test('expired challenges and mismatched audience, policy and ID are still rejected before token exchange', async t => {
+  for (const [key, value, pattern] of [
+    ['expiresAt', Date.now() - 10000, /challenge expired/],
+    ['audience', 'https://other.example', /audience mismatch/],
+    ['policyVersion', 'wrong-policy', /policy mismatch/],
+    ['challengeId', 'wrong-id', /ID mismatch/]
+  ]) {
+    const h = harness(t), dated = withServerDate(h); let tokenCalls = 0;
+    const client = localClient(t, h, { fetchImpl: async (url, options) => {
+      if (new URL(url).pathname === '/api/agent-auth/token') tokenCalls++;
+      const response = await dated(url, options);
+      if (new URL(url).pathname !== '/api/agent-auth/challenge') return response;
+      const body = await response.json(), claims = JSON.parse(body.challenge); claims[key] = value;
+      return Response.json({ ...body, challenge: JSON.stringify(claims) }, { status: 201, headers: response.headers });
+    } });
+    await assert.rejects(client.session(), pattern); assert.equal(tokenCalls, 0);
+  }
+});
+test('public GET Date headers cannot move the authentication clock', async t => {
+  const h = harness(t), dated = withServerDate(h);
+  const client = localClient(t, h, { fetchImpl: async (url, options) => {
+    const response = await dated(url, options);
+    if (options.method !== 'GET') return response;
+    const headers = new Headers(response.headers); headers.set('Date', 'Fri, 01 Jan 1999 00:00:00 GMT');
+    return new Response(response.body, { status: response.status, headers });
+  } });
+  const session = await client.session(); await client.request('/api/topics');
+  assert.ok(Math.abs(client.now() - Date.now()) < 3000); assert.equal(await client.session(), session);
+});
+test('authentication failures identify non-delivery; a lost publishing response remains uncertain', async t => {
+  const h = harness(t); let postCalls = 0;
+  const client = localClient(t, h, { acceptPolicy: 'wrong-policy', fetchImpl: async (url, options) => {
+    if (new URL(url).pathname === '/api/topics' && options.method === 'POST') postCalls++;
+    return h.fetchImpl(url, options);
+  } });
+  await assert.rejects(client.authorized('/api/topics', { method: 'POST', body: {} }), error => error.delivery === 'not-sent');
+  assert.equal(postCalls, 0);
+  client.acceptPolicy = '2026-11-01'; await client.session();
+  client.fetch = async (url, options) => { const response = await h.fetchImpl(url, options); if (new URL(url).pathname === '/api/topics' && options.method === 'POST') throw Error('Lost receipt after server commit'); return response; };
+  await assert.rejects(client.authorized('/api/topics', { method: 'POST', body: { title: 'A recoverable delivery', content: 'This message was received before the connection failed.' } }), error => error.delivery === undefined);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+});
+test('research auth uses the configured research identity without model calls, public posts or credential output', async t => {
+  const h = harness(t), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-auth-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const previousFetch = globalThis.fetch, previousLog = console.log, output = [], routes = [];
+  try {
+    globalThis.fetch = async (url, options) => {
+      const parsed = new URL(url); routes.push(parsed.pathname);
+      assert.equal(parsed.origin, API); assert.ok(['/api/agent-access/policy', '/api/agent-auth/challenge', '/api/agent-auth/token'].includes(parsed.pathname));
+      return h.fetchImpl(url, options);
+    };
+    console.log = value => output.push(String(value));
+    await researchMain(['auth'], { FORUM_URL: API, FORUM_ACCEPT_POLICY: '2026-11-01', FORUM_IDENTITY_FILE: path.join(dir, 'research-identity.json'), OLLAMA_URL: 'invalid-and-unused' });
+  } finally { globalThis.fetch = previousFetch; console.log = previousLog; }
+  const result = JSON.parse(output.join(''));
+  assert.equal(result.status, 'authenticated'); assert.equal(fs.existsSync(path.join(dir, 'research-identity.json')), true);
+  assert.doesNotMatch(output.join(''), /aifs_|privateKeyJwk/); assert.equal(routes.length, 3);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
+});
 async function challenge(h, pair, overrides = {}) {
   const x = await h.request('/api/agent-auth/challenge', 'POST', { name: 'Test Agent', model: 'self-declared', owner: 'Test Operator', acceptPolicy: '2026-11-01', publicKeyJwk: pair.publicKeyJwk, ...overrides });
   assert.equal(x.status, 201, JSON.stringify(x.data));

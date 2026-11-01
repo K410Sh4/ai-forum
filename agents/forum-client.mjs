@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const DEFAULT_API = 'https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev';
 const WRITE_TOOLS = new Set(['forum_create_topic', 'forum_reply_topic', 'forum_join_project', 'forum_create_task', 'forum_claim_task', 'forum_submit_task']);
 export class ForumClient {
-  constructor({ api = process.env.FORUM_URL || DEFAULT_API, identityFile = process.env.FORUM_IDENTITY_FILE || path.join(os.homedir(), '.ai-forum', 'identity.json'), acceptPolicy = process.env.FORUM_ACCEPT_POLICY, profile = {}, fetchImpl = fetch } = {}) {
+  constructor({ api = process.env.FORUM_URL || DEFAULT_API, identityFile = process.env.FORUM_IDENTITY_FILE || path.join(os.homedir(), '.ai-forum', 'identity.json'), acceptPolicy = process.env.FORUM_ACCEPT_POLICY, profile = {}, fetchImpl = fetch, clock = Date.now, monotonic = () => performance.now(), log = () => {} } = {}) {
     const url = new URL(api);
     if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname))) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw Error('Use an HTTPS API origin without credentials, query or path');
     this.api = url.origin;
@@ -17,13 +17,22 @@ export class ForumClient {
     this.acceptPolicy = acceptPolicy;
     this.profile = { name: process.env.FORUM_AGENT_NAME || 'Forum Agent', model: process.env.FORUM_MODEL || 'self-declared', owner: process.env.FORUM_OWNER || 'local-operator', ...profile };
     this.fetch = fetchImpl;
+    this.clock = clock; this.monotonic = monotonic; this.log = log; this.serverClock = null;
     this.authorization = null;
   }
+  now() { return this.serverClock ? this.serverClock.time + this.monotonic() - this.serverClock.observedAt : this.clock(); }
+  clockInfo() { return { reference: this.serverClock ? 'api-date' : 'local-clock', offsetSeconds: Math.round((this.now() - this.clock()) / 1000) }; }
   async request(route, { method = 'GET', body, token, idempotencyKey } = {}) {
     if (idempotencyKey !== undefined && !/^[A-Za-z0-9:_-]{12,100}$/.test(idempotencyKey)) throw Error('Invalid idempotency key');
     const url = new URL(route, this.api);
     if (url.origin !== this.api) throw Error('Cross-origin request refused');
     const response = await this.fetch(url, { method, redirect: 'error', headers: { Accept: route === '/mcp' ? 'application/json, text/event-stream' : 'application/json', ...(route === '/mcp' && this.mcpVersion ? { 'MCP-Protocol-Version': this.mcpVersion } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
+    // Only fresh authentication responses from this origin can supply the clock.
+    // Cached public pages must never change challenge or session expiry checks.
+    if (response.ok && method === 'POST' && ['/api/agent-auth/challenge', '/api/agent-auth/token'].includes(url.pathname)) {
+      const time = Date.parse(response.headers.get('Date') || '');
+      if (Number.isFinite(time)) this.serverClock = { time, observedAt: this.monotonic() };
+    }
     if (response.status === 202) return null;
     let result;
     try { result = await response.json(); } catch { throw Error('API returned a non-JSON response'); }
@@ -46,29 +55,41 @@ export class ForumClient {
     return { privateKey, publicKeyJwk };
   }
   async session() {
-    if (this.authorization && this.authorization.until > Date.now() + 30000) return this.authorization;
+    if (this.authorization && this.authorization.untilMonotonic > this.monotonic() + 30000) return this.authorization;
     const policy = await this.request('/api/agent-access/policy');
     if (policy.protocol !== 'aif-agent-access-v1' || policy.audience !== this.api || policy.issuer !== this.api || policy.automaticEnrollment !== true) throw Error('Unsupported or mismatched machine policy');
     if (this.acceptPolicy !== policy.policyVersion) throw Error('Read ' + this.api + '/api/agent-access/policy and explicitly set FORUM_ACCEPT_POLICY=' + policy.policyVersion + ' to authorize forum participation');
     const { privateKey, publicKeyJwk } = this.identity();
     const challenge = await this.request('/api/agent-auth/challenge', { method: 'POST', body: { ...this.profile, publicKeyJwk, acceptPolicy: this.acceptPolicy } });
     const claims = JSON.parse(challenge.challenge);
-    if (claims.audience !== this.api || claims.policyVersion !== this.acceptPolicy || claims.challengeId !== challenge.challengeId || claims.expiresAt <= Date.now()) throw Error('Untrusted or expired enrollment challenge');
+    if (claims.protocol !== policy.protocol) throw Error('Enrollment challenge protocol mismatch');
+    if (claims.audience !== this.api) throw Error('Enrollment challenge audience mismatch');
+    if (claims.policyVersion !== this.acceptPolicy) throw Error('Enrollment challenge policy mismatch');
+    if (claims.challengeId !== challenge.challengeId) throw Error('Enrollment challenge ID mismatch');
+    const lifetime = policy.enrollment?.challengeTtlSeconds || 300;
+    if (!Number.isSafeInteger(claims.expiresAt) || !Number.isFinite(lifetime) || lifetime <= 0 || lifetime > 600 || claims.expiresAt - this.now() > lifetime * 1000 + 2000) throw Error('Enrollment challenge has an invalid expiry');
+    if (claims.expiresAt <= this.now()) throw Error('Enrollment challenge expired using ' + this.clockInfo().reference + '; confira a data e a hora do Windows se a API não fornecer o horário');
+    const timing = this.clockInfo();
+    if (Math.abs(timing.offsetSeconds) > 30) this.log('Autenticação: diferença de ' + timing.offsetSeconds + 's no relógio local; validade conferida pelo horário da API.');
     const thumbprint = crypto.createHash('sha256').update(JSON.stringify({ crv: 'Ed25519', kty: 'OKP', x: publicKeyJwk.x })).digest('base64url');
     if (claims.keyId !== thumbprint || JSON.stringify(claims.profile) !== JSON.stringify(this.profile) || !Array.isArray(claims.scopes) || claims.scopes.some(s => !policy.authorization.scopes.includes(s))) throw Error('Enrollment challenge does not match this agent');
     const signature = crypto.sign(null, Buffer.from(challenge.challenge, 'utf8'), privateKey).toString('base64url');
     const result = await this.request('/api/agent-auth/token', { method: 'POST', body: { challengeId: challenge.challengeId, signature } });
-    if (result.token_type !== 'Bearer' || result.authorization?.audience !== this.api || typeof result.access_token !== 'string') throw Error('Invalid authorization receipt');
-    this.authorization = { token: result.access_token, until: Date.now() + result.expires_in * 1000, receipt: result.authorization, agent: result.agent };
+    if (result.token_type !== 'Bearer' || result.authorization?.audience !== this.api || typeof result.access_token !== 'string' || !Number.isInteger(result.expires_in) || result.expires_in <= 0 || result.expires_in > (policy.authorization?.tokenTtlSeconds || 3600)) throw Error('Invalid authorization receipt');
+    this.authorization = { token: result.access_token, until: this.now() + result.expires_in * 1000, untilMonotonic: this.monotonic() + result.expires_in * 1000, receipt: result.authorization, agent: result.agent };
     return this.authorization;
   }
   async authorized(route, options = {}) {
-    let session = await this.session();
+    const authenticate = async () => {
+      try { return await this.session(); }
+      catch (error) { throw Object.assign(error instanceof Error ? error : Error(String(error)), { delivery: 'not-sent' }); }
+    };
+    let session = await authenticate();
     try { return await this.request(route, { ...options, token: session.token }); }
     catch (error) {
       if (error.status !== 401) throw error;
       this.authorization = null;
-      session = await this.session();
+      session = await authenticate();
       return this.request(route, { ...options, token: session.token });
     }
   }

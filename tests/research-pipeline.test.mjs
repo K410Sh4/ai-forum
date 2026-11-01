@@ -25,10 +25,10 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, criticRejects = 0, criticAdvice = false, idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, brokenDrafts = 0, criticRejects = 0, criticAdvice = false, idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  let now = NOW, criticCalls = 0, writeCalls = 0;
+  let now = NOW, criticCalls = 0, writeCalls = 0, draftCalls = 0;
   const calls = [], waits = [], topics = [], replies = [], receipts = new Map();
   const clock = () => now;
   const sleep = async ms => { waits.push(ms); now += ms; };
@@ -45,7 +45,9 @@ function fixture(t, { depth = 'balanced', invalidModel = false, criticRejects = 
     else if (properties.facts) { stage = 'card'; assert.equal(properties.facts.items.properties.quote, undefined); value = { summary: 'O relatório descreve uma comparação controlada com alcance limitado ao cenário avaliado.', facts: [{ statement: 'O relatório apresenta uma comparação de comportamento em condições determinadas.', evidenceId: input.collectedEvidence[0].id }], limitations: 'O resumo não estabelece generalização para outros cenários.' }; }
     else if (properties.overview) {
       stage = 'draft'; assert.equal(properties.sourceIds, undefined); assert.equal(properties.findings, undefined);
+      assert.equal(properties.overview.maxLength, undefined); assert.equal(properties.overview.minLength, undefined);
       value = { title: 'Comparações controladas e limites dos modelos locais', overview: 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis e propõe perguntas para avaliações adicionais.', uncertainties: 'Os resumos não permitem verificar a transferência dos resultados para outros ambientes.', perspectives: [{ label: 'Aplicações', argument: 'Comparações controladas podem orientar a escolha de novos experimentos.', caveat: 'Isso não demonstra desempenho geral.' }, { label: 'Limitações', argument: 'É preciso examinar os métodos antes de aplicar as conclusões a outros contextos.', caveat: 'Os resumos oferecem contexto limitado.' }], questions: ['Como testar a generalização?', 'Quais variáveis precisam ser controladas?'] };
+      if (draftCalls++ < brokenDrafts) value.overview = 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis. Esses進';
     } else if (properties.heading) {
       stage = 'section'; assert.equal(properties.paragraphs.type, 'object');
       value = { heading: input.focus, paragraphs: Object.fromEntries(input.evidenceCards.map(c => [c.sourceId, 'O relato descreve uma comparação sob condições determinadas. Essa descrição permite formular questões metodológicas, mas não confirma aplicação em cenários diferentes.'])), limitations: 'As descrições disponíveis não substituem a leitura dos métodos completos.' };
@@ -208,6 +210,48 @@ test('missing details in a short feed produce advice without an unnecessary writ
   assert.equal(review.approved, true); assert.equal(review.issues.length, 0); assert.match(review.suggestions[0], /nomes dos pesquisadores/);
   assert.equal(f.calls.filter(c => c.stage === 'draft').length, 1); assert.equal(f.writeCalls, 0);
 });
+test('cut prose is rewritten before review, instead of accepting JSON validity as text quality', async t => {
+  const f = fixture(t, { brokenDrafts: 1 }); const preview = await f.engine.generate();
+  assert.equal(readJSON(preview.file).schemaVersion, 3);
+  assert.equal(f.calls.filter(call => call.stage === 'draft').length, 2);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 1);
+  assert.doesNotMatch(readJSON(preview.file).post.content, /進/); assert.equal(f.writeCalls, 0);
+});
+test('persistently cut text stops auto publishing and saves the invalid fields for diagnosis', async t => {
+  const f = fixture(t, { brokenDrafts: 10 });
+  await assert.rejects(f.engine.generate({ auto: true }), /Unexpected characters/);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 0); assert.equal(f.writeCalls, 0);
+  const report = readJSON(f.store.read().runs.at(-1).diagnosticFile);
+  assert.equal(report.validationErrors.length, 2); assert.match(report.validationErrors[0].output, /進/);
+});
+test('publication rechecks complete editorial fields and rejects older or differently rendered drafts', async t => {
+  const f = fixture(t); const preview = await f.engine.generate(); const draft = readJSON(preview.file);
+  draft.post.content += ' Alteração fora dos campos revisados.'; draft.hash = payloadHash(draft); writeJSON(preview.file, draft);
+  await assert.rejects(f.engine.publish(preview.file, draft.hash), /differs from its validated/); assert.equal(f.writeCalls, 0);
+  draft.schemaVersion = 2; draft.hash = payloadHash(draft); writeJSON(preview.file, draft);
+  await assert.rejects(f.engine.publish(preview.file, draft.hash), /predates complete-text/); assert.equal(f.writeCalls, 0);
+});
+test('authentication failure before a publishing request is safe to retry even with an older Worker', async t => {
+  const f = fixture(t, { idempotent: false }); const preview = await f.engine.generate();
+  const send = f.engine.client.authorized;
+  f.engine.client.authorized = async () => { throw Object.assign(Error('Challenge did not validate'), { delivery: 'not-sent' }); };
+  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Challenge did not validate/);
+  assert.equal(f.store.read().pending.messages[0].status, 'ready'); assert.equal(f.writeCalls, 0);
+  f.engine.client.authorized = send;
+  assert.equal((await f.engine.publish(preview.file, preview.hash)).status, 'published'); assert.equal(f.topics.length, 1);
+});
+test('cancelling the known 0.5.3 enrollment failure preserves the draft without consuming publication quotas', async t => {
+  const f = fixture(t, { idempotent: false }); const preview = await f.engine.generate();
+  f.engine.client.authorized = async () => { throw Error('Untrusted or expired enrollment challenge'); };
+  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Untrusted/);
+  assert.equal(f.store.read().pending.messages[0].status, 'sending');
+  const result = await f.engine.cancel(preview.file, preview.hash), state = f.store.read();
+  assert.equal(result.delivery, 'not-sent'); assert.equal(state.pending, null); assert.equal(state.published.length, 0);
+  assert.deepEqual(state.usedSources, {}); assert.deepEqual(state.topicTimes, {});
+  assert.equal(fs.existsSync(preview.file), true); assert.equal(state.cancelledDrafts[0].id, readJSON(preview.file).id);
+  await assert.rejects(f.engine.publish(preview.file, preview.hash), /cancelled/); assert.equal(f.writeCalls, 0);
+  assert.equal((await f.engine.generate()).status, 'draft');
+});
 test('invalid model JSON propagates as a failure and releases the lock', async t => {
   const f = fixture(t, { invalidModel: true });
   await assert.rejects(f.engine.generate(), /plan:/); assert.equal(fs.existsSync(f.store.file + '.lock'), false);
@@ -274,7 +318,9 @@ test('CLI exits nonzero when model generation returns invalid JSON', t => {
   // Give the second feed a distinct link while keeping all network calls intercepted.
   fs.appendFileSync(preload, '\nconst intercepted=globalThis.fetch;globalThis.fetch=async (url,options)=>{const r=await intercepted(url,options);return new URL(url).hostname==="second.example"?new Response((await r.text()).replaceAll("first.example","second.example")):r;};');
   const result = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, 'agents/topic-researcher.mjs', 'preview', '--config', config, '--state', path.join(f.directory, 'cli-state.json'), '--draft-dir', path.join(f.directory, 'cli-drafts')], { encoding: 'utf8', env: { ...process.env, OLLAMA_URL: 'http://127.0.0.1:11434', FORUM_URL: 'https://forum.example' }, timeout: 10000 });
-  assert.equal(result.status, 1); assert.match(result.stderr, /plan:/); assert.equal(fs.existsSync(path.join(f.directory, 'cli-drafts')), false);
+  assert.equal(result.status, 1); assert.match(result.stderr, /plan:/);
+  assert.deepEqual(fs.readdirSync(path.join(f.directory, 'cli-drafts')), ['diagnostics']);
+  assert.equal(readJSON(path.join(f.directory, 'cli-drafts', 'diagnostics', 'last-rejected.json')).status, 'rejected');
 });
 test('feed access denial is reported without retrying a different path or client', async () => {
   let calls = 0;

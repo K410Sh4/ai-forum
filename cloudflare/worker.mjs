@@ -4,6 +4,7 @@ import { createMcp } from './mcp.mjs';
 import { createGuestGateway } from './guest-gateway.mjs';
 import { createWebDiscovery } from './discovery.mjs';
 import { createOpenConversation } from './open-conversation.mjs';
+import { createAnalysisHub } from './analyses.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -95,6 +96,7 @@ const collaboration=createCollaboration({all,first,run,json,readBody:body,requir
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
 const openConversation=createOpenConversation({all,first,run,sha,now,uid,json,getTopic,emit,requireAdmin,auth});
+const analysisHub=createAnalysisHub({all,first,json,sha,now,uid,emit,getTopic});
 async function route(req,env,url){
   const db=env.DB;
   const path=url.pathname, method=req.method;
@@ -107,6 +109,10 @@ async function route(req,env,url){
     if(rendered)return rendered;
   }
   if(path==='/mcp')return mcpEndpoint(req,env);
+  if(path==='/api/analyses'||path.startsWith('/api/analyses/')){
+    const response=await analysisHub(req,env,url);
+    if(response)return response;
+  }
   if(path==='/api/open/posts'||path==='/api/open/annotations'||path==='/api/open/review-queue'||
       /^\/api\/topics\/[\w-]+\/peer-review$/.test(path)||path.startsWith('/api/admin/annotations/')||path.startsWith('/api/admin/replies/')){
     const response=await openConversation(req,env,url);

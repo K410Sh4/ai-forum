@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { RESEARCH_VERSION, POLICY_VERSION, chooseArticles, sourceFingerprint, payloadHash, validateDraft, similarTitle, publisherId, publicURL } from './research-core.mjs';
+import { RESEARCH_VERSION, POLICY_VERSION, chooseArticles, sourceFingerprint, payloadHash, validateDraft, similarTitle, publisherId, publicURL, stampMessages } from './research-core.mjs';
 import { readJSON, writeJSON, ensurePolicy, pause } from './research-runtime.mjs';
 
 export class ResearchEngine {
@@ -54,10 +54,11 @@ export class ResearchEngine {
   }
   saveRejection(topic, sources, depth, error) {
     const file = path.join(this.draftDir, 'diagnostics', 'last-rejected.json');
-    const report = { reportVersion: 1, status: 'rejected', createdAt: new Date(this.clock()).toISOString(), api: this.client.api, model: this.model.model, theme: topic.id, depth, error: error.message, sources, attempts: this.model.reviewTrace, metrics: this.model.metrics };
+    const report = { reportVersion: 1, status: 'rejected', createdAt: new Date(this.clock()).toISOString(), api: this.client.api, model: this.model.model, theme: topic.id, depth, error: error.message, sources, attempts: this.model.reviewTrace || [], validationErrors: this.model.validationTrace || [], metrics: this.model.metrics };
     writeJSON(file, report);
     const attempts = report.attempts.map((entry, index) => '## Tentativa ' + (index + 1) + '\n\n' + (entry.message.title ? '### ' + entry.message.title + '\n\n' : '') + entry.message.content + '\n\nRevisão:\n\n```json\n' + JSON.stringify(entry.review || { error: entry.error }, null, 2) + '\n```');
-    fs.writeFileSync(file.replace(/\.json$/, '.md'), '# Pesquisa rejeitada — ' + topic.label + '\n\nRegistro local de diagnóstico; este texto não foi publicado. A próxima rejeição substitui este relatório.\n\nMotivo: ' + error.message + '\n\n' + attempts.join('\n\n---\n\n') + '\n', { mode: 0o600 });
+    const invalid = report.validationErrors.length ? '\n\n## Saídas recusadas pela validação\n\n```json\n' + JSON.stringify(report.validationErrors, null, 2) + '\n```' : '';
+    fs.writeFileSync(file.replace(/\.json$/, '.md'), '# Pesquisa rejeitada — ' + topic.label + '\n\nRegistro local de diagnóstico; este texto não foi publicado. A próxima rejeição substitui este relatório.\n\nMotivo: ' + error.message + '\n\n' + attempts.join('\n\n---\n\n') + invalid + '\n', { mode: 0o600 });
     return file;
   }
   async generate({ auto = false, topicId, depth = this.config.depth } = {}) {
@@ -85,8 +86,8 @@ export class ResearchEngine {
           const fingerprint = sourceFingerprint(built.sources, topic.id);
           if (state.published.some(p => p.fingerprint === fingerprint || similarTitle(p.title, built.post.title))) { this.log('Pesquisa repetida; tema pulado'); continue; }
           const id = randomBytes(12).toString('hex'), createdAt = new Date(this.clock()).toISOString();
-          const messages = [built.post, ...built.replies].map((message, i, list) => ({ ...message, content: message.content + '\n\nPesquisa ' + id + ' · parte ' + (i + 1) + '/' + list.length + ' · ref ' + fingerprint.slice(0, 16) }));
-          const draft = { schemaVersion: 2, generatorVersion: RESEARCH_VERSION, id, createdAt, status: 'ready', api: this.client.api, policyVersion: POLICY_VERSION, model: this.model.model, depth, theme: { id: topic.id, label: topic.label, tag: topic.tag }, fingerprint, post: messages[0], replies: messages.slice(1), sources: built.sources, cards: built.cards, plan: built.plan, review: built.review, metrics: built.metrics };
+          const messages = stampMessages(built.post, built.replies, id, fingerprint);
+          const draft = { schemaVersion: 3, generatorVersion: RESEARCH_VERSION, id, createdAt, status: 'ready', api: this.client.api, policyVersion: POLICY_VERSION, model: this.model.model, depth, theme: { id: topic.id, label: topic.label, tag: topic.tag }, fingerprint, post: messages[0], replies: messages.slice(1), editorial: built.editorial, sources: built.sources, cards: built.cards, plan: built.plan, review: built.review, metrics: built.metrics };
           draft.hash = payloadHash(draft);
           validateDraft(draft, { api: this.client.api, clock: this.clock(), maxAgeHours: this.config.maxDraftAgeHours, maxSourceAgeDays: this.config.maxSourceAgeDays });
           const file = path.join(this.draftDir, id + '.json'); writeJSON(file, draft);
@@ -99,7 +100,7 @@ export class ResearchEngine {
           // Publication failures must retain their pending journal and stop this cycle.
           if (state.pending) throw error;
           generationError = error; run.error = error.message; run.metrics = this.model.metrics; this.log('Pesquisa rejeitada: ' + error.message);
-          if (this.model.reviewTrace?.length) {
+          if (this.model.reviewTrace?.length || this.model.validationTrace?.length) {
             try {
               run.diagnosticFile = this.saveRejection(topic, sources, depth, error);
               this.log('Diagnóstico da rejeição: ' + run.diagnosticFile.replace(/\.json$/, '.md'));
@@ -123,7 +124,7 @@ export class ResearchEngine {
     const policy = await this.client.request('/api/agent-access/policy');
     ensurePolicy(policy, this.client.api, this.acceptedPolicy);
     const idempotent = policy.features?.idempotentWrites === true;
-    if (state.published.some(p => p.draftId === draft.id && p.status === 'cancelled')) throw Error('This draft was cancelled and cannot be sent again');
+    if (state.published.some(p => p.draftId === draft.id && p.status === 'cancelled') || state.cancelledDrafts?.some(entry => entry.id === draft.id)) throw Error('This draft was cancelled and cannot be sent again');
     if (state.pending && (state.pending.draftId !== draft.id || state.pending.hash !== draft.hash)) throw Error('Another draft has an unfinished publication');
     if (!state.pending) {
       if (state.published.some(p => p.draftId === draft.id)) return { status: 'already-published', topicId: state.published.find(p => p.draftId === draft.id).id };
@@ -143,7 +144,9 @@ export class ResearchEngine {
       const wait = 21000 - (this.clock() - lastAt);
       if (wait > 0) { this.log('Aguardando o intervalo entre mensagens (' + Math.ceil(wait / 1000) + 's)'); await this.sleep(wait); }
       if (this.signal?.aborted) throw Error('Research interrupted');
-      message.status = 'sending'; this.store.save(state);
+      // Authentication itself cannot deliver a forum message.
+      if (typeof this.client.session === 'function') await this.client.session();
+      message.status = 'sending'; delete message.delivery; delete message.error; this.store.save(state);
       try {
         const route = index === 0 ? '/api/topics' : '/api/topics/' + pending.topicId + '/replies';
         const response = await this.client.authorized(route, { method: 'POST', body: index === 0 ? draft.post : draft.replies[index - 1], idempotencyKey: 'research:' + draft.id + ':' + index });
@@ -153,7 +156,8 @@ export class ResearchEngine {
         if (index === 0) { pending.topicId = receipt.id; this.recordTopic(state, draft, receipt); }
         this.recordMessage(state, receipt); this.store.save(state);
       } catch (error) {
-        if ([400, 401, 403, 404, 409, 413, 429].includes(error.status)) message.status = 'ready';
+        if (error.delivery === 'not-sent' || [400, 401, 403, 404, 409, 413, 429].includes(error.status)) message.status = 'ready';
+        if (error.delivery === 'not-sent') message.delivery = 'not-sent';
         message.error = error.message; this.store.save(state); throw error;
       }
     }
@@ -189,6 +193,17 @@ export class ResearchEngine {
     return this.locked(async state => {
       const draft = readJSON(file, null), pending = state.pending;
       if (!pending || !draft || draft.hash !== expectedHash || payloadHash(draft) !== expectedHash || pending.hash !== expectedHash || pending.draftId !== draft.id) throw Error('Cancellation requires the exact pending draft and its hash');
+      // In 0.5.3 this exact client error occurred before any publishing request.
+      if (!pending.topicId && pending.messages[0]?.status === 'sending' && pending.messages[0].error === 'Untrusted or expired enrollment challenge') {
+        pending.messages[0].status = 'ready'; pending.messages[0].delivery = 'not-sent';
+      }
+      const neverSent = !pending.topicId && pending.messages.every(message => message.status === 'ready');
+      if (neverSent) {
+        (state.cancelledDrafts ||= []).push({ id: draft.id, at: this.clock(), delivery: 'not-sent' });
+        state.runs.push({ at: this.clock(), status: 'cancelled', draftId: draft.id, delivery: 'not-sent', pending });
+        state.pending = null;
+        return { status: 'cancelled', delivery: 'not-sent', topicId: null, message: 'Tentativa encerrada antes da entrega, sem consumir quotas nem marcar fontes como publicadas.' };
+      }
       // Cancellation stops future sends; it does not retract requests already received.
       // Reserve unknown deliveries conservatively and block this fingerprint locally.
       const at = this.clock();

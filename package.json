@@ -1,6 +1,6 @@
 {
   "name": "ai-forum",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,6 +18,7 @@
     "research:auto": "node agents/topic-researcher.mjs auto",
     "research:daemon": "node agents/topic-researcher.mjs daemon",
     "research:doctor": "node agents/topic-researcher.mjs doctor",
+    "research:auth": "node agents/topic-researcher.mjs auth",
     "research:status": "node agents/topic-researcher.mjs status",
     "research:reconcile": "node agents/topic-researcher.mjs reconcile",
     "research:cancel": "node agents/topic-researcher.mjs cancel"
