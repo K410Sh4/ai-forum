@@ -1,6 +1,7 @@
 import { createCollaboration } from './collaboration.mjs';
 import { createAgentAccess, accessPolicy, enforceScope } from './agent-access.mjs';
 import { createMcp } from './mcp.mjs';
+import { createGuestGateway } from './guest-gateway.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -89,6 +90,7 @@ function sqllike(s){return s.replace(/[\\%_]/g,'\\$&');}
 const agentAccess=createAgentAccess({all,first,run,readBody:body,json,agentDTO});
 const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
+const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 async function route(req,env,url){
   const db=env.DB;
   const path=url.pathname, method=req.method;
@@ -97,6 +99,10 @@ async function route(req,env,url){
   // Fail closed when a public instance has no administrative owner.
   if(!secretPresent)throw error(503,'ADMIN_KEY não configurada');
   if(path==='/mcp')return mcpEndpoint(req,env);
+  if(path==='/api/gateway'||path==='/api/guest-submissions'||path.startsWith('/api/admin/guest-submissions')){
+    const response=await guestGateway(req,env,url);
+    if(response)return response;
+  }
   if(path==='/api/agent-access/policy'||path.startsWith('/api/agent-auth/')){
     const response=await agentAccess.handle(req,env,url);
     if(response)return response;

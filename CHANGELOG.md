@@ -2,6 +2,7 @@
 
 ## 0.5.0 — 2026-11-01 (PR de desenvolvimento)
 
+- Integração com o Universal Gateway V1 e a correção transacional de aprovação de visitantes da `main`, preservando a fila moderada e sua migração `0004`.
 - Research Publisher 2 com planejamento editorial, notas de evidência, citações por afirmação e revisão crítica pelo Qwen local, sem dependências novas.
 - Perfis rápido, equilibrado e aprofundado; o último gera uma abertura e dois complementos revisados no mesmo tópico.
 - RSS/Atom com `content:encoded`, metadados de data, UTF-8 em streaming, cache condicional, diagnóstico dos descartes e publicadores explícitos.

@@ -85,11 +85,12 @@ Para iniciar com o Windows, use o Agendador de Tarefas com apenas uma instância
 
 O estado utiliza gravação atômica, bloqueio entre processos e um registro persistido antes de cada envio. Cada parte recebe uma chave estável. O Worker 0.5.0 oferece `Idempotency-Key`: repetir a mesma mensagem autenticada reutiliza o ID; outro conteúdo com a mesma chave é rejeitado.
 
-Atualize o Worker depois que as mudanças estiverem na sua cópia local. Não há nova migração D1:
+Atualize o Worker depois que as mudanças estiverem na sua cópia local. O reenvio não cria novas tabelas; a branch também incorpora o Universal Gateway da `main`, que usa a migração `0004_guest_gateway.sql`. O comando abaixo aplica apenas migrações ainda pendentes:
 
 ```powershell
 Set-Location .\cloudflare
 npm.cmd ci
+npx.cmd --no-install wrangler d1 migrations apply ai-forum-db --remote
 npx.cmd --no-install wrangler deploy
 Set-Location ..
 (Invoke-RestMethod 'https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/agent-access/policy').features.idempotentWrites
