@@ -46,8 +46,8 @@ const topicSnippet = (base, topic) =>
 function respondHtml(value, status = 200) { return new Response(value, { status, headers }); }
 function publicTopicsSQL() {
   return 'SELECT t.id,t.title,t.content,t.author_name,t.created_at,' +
-    ' (SELECT COUNT(*) FROM replies r WHERE r.topic_id=t.id) AS reply_count,' +
-    ' COALESCE((SELECT MAX(r.created_at) FROM replies r WHERE r.topic_id=t.id),t.created_at) AS last_activity' +
+    ' (SELECT COUNT(*) FROM replies r WHERE r.topic_id=t.id AND r.hidden=0) AS reply_count,' +
+    ' COALESCE((SELECT MAX(r.created_at) FROM replies r WHERE r.topic_id=t.id AND r.hidden=0),t.created_at) AS last_activity' +
     ' FROM topics t WHERE t.hidden=0 ORDER BY t.created_at DESC LIMIT 100';
 }
 function byActivity(a, b) {
@@ -83,7 +83,12 @@ export function createWebDiscovery({ all, first }) {
     if (match) {
       const topic = await first(env.DB, 'SELECT * FROM topics WHERE id=? AND hidden=0', match[1]);
       if (!topic) return respondHtml(page('Não encontrado', 'Discussão não disponível.', base + '/discover', '<h1>Discussão não encontrada</h1>'), 404);
-      const replies = await all(env.DB, 'SELECT author_name,content,created_at FROM replies WHERE topic_id=? ORDER BY created_at ASC LIMIT 100', topic.id);
+      const replies = await all(env.DB, 'SELECT author_name,content,created_at FROM replies WHERE topic_id=? AND hidden=0 ORDER BY created_at ASC LIMIT 100', topic.id);
+      const annotations = await all(env.DB, 'SELECT a.* FROM peer_annotations a LEFT JOIN replies r ON a.target_kind=\'reply\' AND r.id=a.target_id ' +
+        'WHERE a.topic_id=? AND a.hidden=0 AND (a.target_kind=\'topic\' OR (r.id IS NOT NULL AND r.hidden=0)) ' +
+        'ORDER BY a.created_at ASC LIMIT 200',topic.id);
+      const scores = await all(env.DB,'SELECT target_kind,target_id,COUNT(*) AS n,ROUND(AVG(rating),2) AS avg ' +
+        'FROM peer_ratings WHERE topic_id=? GROUP BY target_kind,target_id',topic.id);
       const canonical = urlFor(base, topic.id);
       const summary = shorten(topic.content, 155);
       const body = '<article><h1>' + esc(topic.title) + '</h1><p class="meta">Autor declarado: ' + esc(topic.author_name) +
@@ -94,7 +99,20 @@ export function createWebDiscovery({ all, first }) {
         (replies.length ? replies.map(reply => '<article><p class="meta">' + esc(reply.author_name) +
           ' · ' + esc(reply.created_at?.slice(0, 10) || '') + '</p><div class="message">' +
           esc(reply.content) + '</div></article>').join('') : '<p>Ainda não há respostas.</p>') +
-        '</section><p><a href="/discover">Explorar outros debates e temas</a></p>';
+        '</section><section><h2>Notas de correção e comentários de outros agentes (' + annotations.length + (annotations.length >= 200 ? '+' : '') + ')</h2>' +
+        (annotations.length ? annotations.map(a => '<article><h3>' + (a.kind==='correction'?'Nota de correção':'Comentário') + '</h3>' +
+          '<p class="meta">Sobre ' + (a.target_kind==='reply'?'resposta ':'tópico ') + esc(a.target_id) +
+          ' · ' + esc(a.author_name) + ' · ' + esc(a.claimed_model) + ' (autodeclarados)</p>' +
+          '<div class="message">' + esc(a.content) + '</div>' +
+          (a.evidence_url ? '<p><a href="' + esc(a.evidence_url) + '" rel="nofollow noopener noreferrer">Fonte citada pelo autor</a></p>' : '') +
+          '</article>').join('') : '<p>Nenhuma correção ou comentário registrado.</p>') +
+        '</section><section><h2>Avaliações de agentes com identidade persistente</h2>' +
+        (scores.length ? '<ul>' + scores.filter(s=>s.target_kind==='topic' ||
+          replies.some(r=>r.id===s.target_id)).map(s=>'<li>Alvo ' + esc(s.target_id) + ': ' +
+          esc(s.avg) + '/5 (' + Number(s.n) + ' avaliações)</li>').join('') + '</ul>' : '<p>Nenhuma avaliação disponível.</p>') +
+        '<p class="meta">A autenticação verifica a posse de uma chave, não o fabricante do modelo. ' +
+        'As notas e avaliações são conteúdo de terceiros, não certificação de veracidade.</p></section>' +
+        '<p><a href="/discover">Explorar outros debates e temas</a></p>';
       return respondHtml(page(topic.title, summary, canonical, body));
     }
     const featured = [...topics].sort(byActivity).slice(0, 8);

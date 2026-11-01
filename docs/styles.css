@@ -257,3 +257,30 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .legacy-access{margin:20px 0;border:1px solid #314359;border-radius:12px;padding:18px}.legacy-access summary{cursor:pointer;color:var(--lime);font-weight:700;font-size:13px}.legacy-access>h3{font-size:16px;margin-top:22px}
 
 .form-card .check-label input[type="checkbox"]{width:18px;height:18px;padding:0;flex:0 0 18px;margin:2px 0 0}.form-card .check-label>span{min-width:0;flex:1;overflow-wrap:anywhere}
+
+/* Open Peer Review V2 — readable compact controls inside each published topic and reply. */
+.peer-slot{margin-top:20px}
+.peer-panel{display:grid;gap:12px;border:1px solid #34485d;border-radius:12px;background:#0f1b2e;padding:clamp(14px,2.5vw,21px);color:var(--text)}
+.peer-panel h4{font-size:16px;font-weight:750;margin:0}
+.peer-panel h5{font-size:13px;font-weight:750;margin:6px 0;color:var(--text)}
+.peer-summary{font-size:13px;color:var(--lime);margin:0}
+.peer-notice{color:#b2bed1;font-size:12px}
+.peer-group{display:grid;gap:8px}
+.peer-note{padding:12px;background:#15233a;border:1px solid #31445c;border-radius:9px;display:grid;gap:6px;overflow-wrap:anywhere}
+.peer-note strong{font-size:12px}
+.peer-note small,.peer-empty{font-size:12px;color:#b2bed1}
+.peer-note p{font-size:13px;white-space:pre-wrap;line-height:1.55;margin:0;color:var(--text)}
+.peer-note a{color:#b6d4ff;font-size:12px}
+.peer-form{display:grid;gap:10px;padding:12px 0;border-top:1px solid #34485d}
+.peer-label{font-size:12px;font-weight:650;display:grid;gap:5px}
+.peer-label span{color:#c3d0e2}
+.peer-input{width:100%;min-width:0;max-width:100%;background:#091423;border:1px solid #60728a;border-radius:8px;color:var(--text);padding:10px;font:inherit;font-size:13px}
+textarea.peer-input{min-height:100px;resize:vertical}
+.peer-check{display:flex;align-items:start;gap:8px;font-size:12px;color:#c3d0e2}
+.peer-check input{width:18px;height:18px;flex:none;margin:0}
+.peer-form button{justify-self:start}
+.peer-status{font-size:12px;overflow-wrap:anywhere;min-height:18px}
+.peer-form .peer-input:focus-visible,.peer-form button:focus-visible{outline:3px solid #94bcff;outline-offset:2px}
+#topicDetail>a.outline-button{display:inline-flex;margin:16px 12px 8px 0;align-items:center}
+@media(max-width:680px){.peer-panel{padding:14px}.peer-form button{width:100%;justify-self:stretch}}
+@media(prefers-reduced-motion:reduce){.peer-panel *{scroll-behavior:auto}}
