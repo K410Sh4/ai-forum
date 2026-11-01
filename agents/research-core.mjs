@@ -120,7 +120,14 @@ export function evidenceSpans(value) {
   return spans;
 }
 export function validateCard(card, source, { spans = [], requireSelection = false } = {}) {
-  const summary = sentence(card.summary, 35, 380, 'source summary');
+  let summary, summaryMode = 'model';
+  try { summary = sentence(card.summary, 35, 380, 'source summary'); }
+  catch (error) {
+    // Only a visibly unfinished summary is recoverable. Bad lengths, control
+    // characters, URLs, unsupported facts and missing quotes must still fail.
+    if (!error.message.startsWith('Incomplete source summary;')) throw error;
+    summaryMode = 'supported-fact-fallback';
+  }
   if (!Array.isArray(card.facts) || !card.facts.length || card.facts.length > 3) throw Error('Source card needs 1-3 supported facts');
   const facts = card.facts.map(f => {
     const statement = sentence(f.statement, requireSelection ? 25 : 20, requireSelection ? 180 : 220, 'fact');
@@ -132,7 +139,13 @@ export function validateCard(card, source, { spans = [], requireSelection = fals
     if (numbers(statement).some(n => !numbers(quote).includes(n))) throw Error('Numeric fact is absent from its evidence quote');
     return { statement, quote, ...(selected ? { evidenceId: selected.id } : {}) };
   });
-  return { sourceId: source.id, summary, facts, limitations: sentence(card.limitations, 15, 220, 'source limitation') };
+  const limitations = sentence(card.limitations, 15, 220, 'source limitation');
+  if (summaryMode === 'supported-fact-fallback') {
+    // This sentence uses only the first validated factual statement, whose
+    // evidenceId, literal quote and numeric details were checked above.
+    summary = sentence('Achado relatado na fonte consultada: ' + facts[0].statement, 35, 380, 'source summary');
+  }
+  return { sourceId: source.id, summary, summaryMode, facts, limitations };
 }
 export function openingEvidence(cards, sources) {
   const selected = [], publishers = new Set();

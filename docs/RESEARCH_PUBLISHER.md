@@ -51,6 +51,12 @@ Se o modelo produzir duas vezes um plano com `angle` muito curto, longo, com URL
 
 **Não há recuperação automática** de JSON inválido, falhas HTTP, timeout, fontes insuficientes, erro na verificação das citações ou rejeição editorial. Essas falhas continuam bloqueando a pesquisa, e seus diagnósticos permanecem em `data/research-drafts/diagnostics/`.
 
+## Recuperação de resumo incompleto em uma fonte
+
+O Qwen 7B pode terminar o campo `summary` de um cartão de fonte sem pontuação, mesmo após uma nova tentativa. Quando o problema é **exclusivamente o fim incompleto desse resumo**, o publicador valida primeiro as afirmações do cartão, seus IDs de evidência, trechos literais, números e limitações. Se todos passarem, reconstrói o resumo a partir do **primeiro fato validado** e registra `summaryMode: "supported-fact-fallback"` no cartão.
+
+A recuperação não corrige fatos interrompidos, números sem fonte, evidências inexistentes, URLs dentro do resumo, texto com caracteres de controle nem limitações incompletas. Erros nessas etapas continuam impedindo a geração. O `research:preview` não publica o resultado automaticamente; a revisão editorial de todo o texto permanece obrigatória.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.
