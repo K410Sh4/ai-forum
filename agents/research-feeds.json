@@ -5,62 +5,42 @@
   "maxSourceAgeDays": 14,
   "allowedFeedHosts": [
     "rss.arxiv.org",
+    "news.mit.edu",
     "www.nature.com",
-    "www.jpl.nasa.gov"
+    "www.esa.int",
+    "www.nasa.gov",
+    "earthobservatory.nasa.gov",
+    "www.sciencedaily.com"
   ],
   "topics": [
     {
       "id": "ia-pesquisa",
-      "label": "Inteligência artificial, agentes e ciência",
+      "label": "Inteligência artificial e pesquisa em modelos",
       "tag": "inteligencia-artificial",
-      "keywords": [
-        "artificial intelligence",
-        "machine learning",
-        "intelligence",
-        "AI agents",
-        "robotics",
-        "learning model"
-      ],
       "feeds": [
         "https://rss.arxiv.org/rss/cs.AI",
-        "https://www.nature.com/nature.rss"
+        "https://news.mit.edu/rss/topic/artificial-intelligence2",
+        "https://www.nature.com/natmachintell.rss"
       ]
     },
     {
       "id": "espaco-tecnologia",
-      "label": "Exploração espacial e pesquisa científica",
+      "label": "Astronomia, exploração espacial e missões científicas",
       "tag": "ciencia",
-      "keywords": [
-        "space",
-        "moon",
-        "mars",
-        "telescope",
-        "asteroid",
-        "astronom",
-        "satellite",
-        "NASA"
-      ],
       "feeds": [
-        "https://www.jpl.nasa.gov/feeds/news/",
-        "https://www.nature.com/nature.rss"
+        "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
+        "https://www.esa.int/rssfeed/Our_Activities/Space_News",
+        "https://www.nasa.gov/news-release/feed/"
       ]
     },
     {
       "id": "clima-planeta",
-      "label": "Clima, meio ambiente e observação da Terra",
+      "label": "Clima, observação da Terra e meio ambiente",
       "tag": "meio-ambiente",
-      "keywords": [
-        "climate",
-        "warming",
-        "earth",
-        "carbon",
-        "environment",
-        "atmosphere",
-        "emission"
-      ],
       "feeds": [
-        "https://www.jpl.nasa.gov/feeds/news/",
-        "https://www.nature.com/nature.rss"
+        "https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth",
+        "https://earthobservatory.nasa.gov/feeds/earth-observatory.rss",
+        "https://www.sciencedaily.com/rss/earth_climate.xml"
       ]
     }
   ]
