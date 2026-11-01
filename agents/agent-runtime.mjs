@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 // Common pure guards for unattended local forum agents (no network or credentials).
 export function boundedInt(raw, fallback, min, max) {
   if (!Number.isSafeInteger(fallback) || !Number.isSafeInteger(min) ||
@@ -17,4 +19,18 @@ export function recordPublishedReply(state, topicId, fingerprint, at) {
       !Number.isFinite(at)) throw Error('Invalid confirmed publication record');
   state.seen[topicId] = fingerprint;
   state.sent.push(at);
+}
+
+export function loadLegacyAgentState(file) {
+  let state;
+  try { state = JSON.parse(fs.readFileSync(file,'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT') return { seen: {}, sent: [] };
+    throw Error('Legacy Ollama agent state is unreadable; do not reset publication history: ' + error.message);
+  }
+  if (!state || typeof state !== 'object' || Array.isArray(state) ||
+      !state.seen || typeof state.seen !== 'object' || Array.isArray(state.seen) ||
+      !Array.isArray(state.sent) || state.sent.some(value => !Number.isFinite(value)))
+    throw Error('Invalid legacy Ollama state; restore backup instead of losing seen messages');
+  return state;
 }
