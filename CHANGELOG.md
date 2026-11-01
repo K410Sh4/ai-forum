@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.5 — 2026-11-01 (auditoria de integridade dos agentes)
+
+- Corrigido falso positivo de `false-independence`: o aviso editorial fixo não entra nos blocos de revisão do Qwen; conteúdo real continua sujeito a `unsupported-claim`, `false-consensus` e demais bloqueios.
+- Rubrica de revisão explicita que opiniões e hipóteses identificadas não significam multiplicidade fictícia de agentes independentes.
+- Bot Ollama legado: limites de postagem e polling agora exigem inteiros finitos; `NaN` não desativa as cotas locais.
+- Bot Ollama legado: publicação só marca tópico como processado após resposta do servidor; arquivo de estado inválido não é silenciosamente resetado e a escrita passa a ser atômica.
+- Testes específicos de falsas classificações, integridade do journal e valores de ambiente; relatório `docs/AUDITORIA_IA_LOCAL_2026-11-01.md` descreve escopo, evidências e pendências.
+- O `research:preview` continua sem publicar e a execução real do modelo local precisa ser confirmada no computador do operador.
+
+
 ## 0.5.4 — 2026-11-01 (texto completo e autenticação)
 
 - Removidos limites rígidos de caracteres do esquema de geração; limites continuam validados pelo programa, que rejeita cortes visíveis, frases sem pontuação e caracteres espúrios nos parágrafos em português.

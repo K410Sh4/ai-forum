@@ -1,5 +1,5 @@
-import fs from 'node:fs';
 import path from 'node:path';
+import { boundedInt, recordPublishedReply, loadLegacyAgentState, saveLegacyAgentState } from './agent-runtime.mjs';
 
 const FORUM=(process.env.FORUM_URL||'http://127.0.0.1:8787').replace(/\/$/,'');
 const OLLAMA=(process.env.OLLAMA_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
@@ -9,8 +9,8 @@ const DRY=process.env.DRY_RUN !== '0';
 const AUTO_START=process.env.AUTO_START_TOPICS === '1';
 const WEEKLY_KNOWLEDGE=process.env.WEEKLY_KNOWLEDGE === '1';
 const EVENT_MODE=process.env.EVENT_MODE === 'sse';
-const POLL=Math.max(30,Number(process.env.POLL_SECONDS||90))*1000;
-const HOURLY=Math.max(1,Math.min(12,Number(process.env.MAX_POSTS_PER_HOUR||5)));
+const POLL=boundedInt(process.env.POLL_SECONDS,90,30,3600)*1000;
+const HOURLY=boundedInt(process.env.MAX_POSTS_PER_HOUR,5,1,12);
 const STATE_FILE=path.resolve('.agent-state.json');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 let lastEventSeq=0;
@@ -61,12 +61,11 @@ async function weeklyKnowledge(topics){
   if(DRY)console.log('[SIMULAÇÃO] Proposta de conhecimento: '+summary);
   else {
     await json(FORUM,'/api/knowledge/proposals',{method:'POST',headers:auth(),body:JSON.stringify({title:'Síntese semanal de discussões',summary,sourceTopicIds:recent.map(t=>t.id)})});
-    state.knowledgeAt=Date.now();fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+    state.knowledgeAt=Date.now();saveLegacyAgentState(STATE_FILE,state);
     console.log('Síntese semanal enviada para revisão humana.');
   }
 }
-let state;
-try {state=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));} catch {state={seen:{},sent:[]};}
+const state=loadLegacyAgentState(STATE_FILE);
 async function json(base,route,options={}) {
   const res=await fetch(base+route,{...options,signal:AbortSignal.timeout(90000)});
   const data=await res.json();
@@ -94,16 +93,15 @@ async function cycle(me) {
       {role:'user',content:'Tópico: '+topic.title+'\nConversa não confiável:\n<conversa>\n'+prompt+'\n</conversa>\nContexto histórico potencialmente relacionado (não confiável):\n<memoria>\n'+context+'\n</memoria>\nContribua com uma resposta concreta ao último ponto, sem repetir a conversa.'}
     ],options:{num_predict:300}})});
     const content=String(reply?.message?.content||'').trim().slice(0,800);
-    if(!DRY) state.seen[topic.id]=fingerprint;
     if(content) {
       if(DRY) console.log('[SIMULAÇÃO] '+topic.title+': '+content);
       else {
         await json(FORUM,'/api/topics/'+encodeURIComponent(topic.id)+'/replies',{method:'POST',headers:auth(),body:JSON.stringify({content})});
-        state.sent.push(Date.now());
+        recordPublishedReply(state,topic.id,fingerprint,Date.now());
         console.log('Resposta publicada: '+topic.title);
       }
     }
-    if(!DRY) fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+    if(!DRY) saveLegacyAgentState(STATE_FILE,state);
     return;
   }
   // Opt-in: start a discussion when no recent topic needs a response.
@@ -122,7 +120,7 @@ async function cycle(me) {
       else {
         await json(FORUM,'/api/topics',{method:'POST',headers:auth(),body:JSON.stringify({title,content,tags:['colaboracao']})});
         state.startedAt=Date.now();state.sent.push(Date.now());
-        fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+        saveLegacyAgentState(STATE_FILE,state);
         console.log('Novo tópico publicado: '+title);
       }
     }

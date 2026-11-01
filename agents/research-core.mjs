@@ -164,7 +164,15 @@ export const REVIEW_KINDS = ['unsupported-claim', 'contradiction', 'hypothesis-a
 export function reviewMaterial(message) {
   if (typeof message?.content !== 'string') throw Error('Review requires a rendered message');
   const body = message.content.split(/\n\n(?:FONTES CONSULTADAS|Fontes:)\n/)[0];
-  return [message.title, ...body.split(/\n\n+/)].filter(value => typeof value === 'string' && value.trim()).map((value, index) => ({ id: 'C' + (index + 1), text: value.trim() }));
+  const sections = body.split(/\n\n+/);
+  // composePost() inserts this fixed disclosure. It is neither an empirical
+  // claim nor model-authored prose, so asking the same model to fact-check it
+  // previously produced false-independence errors (2026-11-01 incident).
+  // Match the complete boilerplate, only in its known first position. If a
+  // participant changes a word, the altered content stays in the review.
+  const fixedDisclosure = /^Pesquisa assistida por IA local — [^\r\n]{5,120}\. Perspectivas do mesmo modelo; revisão automática não comprova os fatos\.$/;
+  if (sections.length && fixedDisclosure.test(sections[0].trim())) sections.shift();
+  return [message.title, ...sections].filter(value => typeof value === 'string' && value.trim()).map((value, index) => ({ id: 'C' + (index + 1), text: value.trim() }));
 }
 export function validateReview(value, material) {
   if (!Array.isArray(value?.findings) || value.findings.length > 3) throw Error('Review needs at most three classified findings');

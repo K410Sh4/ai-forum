@@ -63,3 +63,82 @@ test('four-source review keeps complete evidence quotes within the default conte
   const result = await model.review({ title: 't'.repeat(115), content: 'SÍNTESE\n' + 'c'.repeat(2800) }, cards, 'Métodos, resultados relatados e comparação das evidências');
   assert.equal(result.approved, true); assert.equal(calls, 1);
 });
+
+
+test('regression: fixed authored disclosure must not become false-independence claim C2', () => {
+  const post = {
+    title: 'Panorama de pesquisas e seus limites',
+    content: 'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\n' +
+      'SÍNTESE\nOs relatórios descrevem resultados diferentes com limites próprios e sem confirmação independente.\n\n' +
+      'PERSPECTIVAS PARA DEBATE\n1. Aplicação: Uma hipótese seria comparar os métodos, sem afirmar validação.\n\n' +
+      'INCERTEZAS\nA generalização ainda não foi testada.\n\n' +
+      'FONTES CONSULTADAS\n[S1] Um estudo — https://first.example/report'
+  };
+  const actual = reviewMaterial(post);
+  assert.equal(actual[0].text, post.title);
+  assert.ok(actual.every(part => !part.text.includes('Perspectivas do mesmo modelo; revisão automática não comprova os fatos.')));
+  assert.ok(actual.some(part => part.text.includes('SÍNTESE')));
+  assert.ok(actual.some(part => part.text.includes('PERSPECTIVAS PARA DEBATE')));
+  assert.ok(actual.every(part => !part.text.includes('https://')));
+  // The quote alleged by the real local Qwen run can no longer be selected.
+  assert.throws(() => validateReview({
+    findings: [{ kind: 'false-independence', claimId: 'C999', reason: 'O aviso editorial não corresponde a agentes independentes.' }],
+    note: 'Verificar apenas conteúdo escrito pelo modelo.'
+  }, actual), /existing claimId/);
+});
+
+test('only the exact system disclosure is excluded, not lookalike user content or false independence', () => {
+  const fake = {
+    title: 'Agentes independentes',
+    content: 'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas de diversos agentes independentes confirmam os fatos.\n\nSÍNTESE\nTrês modelos independentes confirmaram o estudo.'
+  };
+  const parts = reviewMaterial(fake);
+  assert.equal(parts.length, 3);
+  assert.match(parts[1].text, /agentes independentes/);
+  assert.equal(validateReview({
+    findings: [{ kind: 'false-independence', claimId: parts[2].id, reason: 'O texto atribui confirmação a agentes inexistentes.' }],
+    note: 'A independência afirmada não foi demonstrada.'
+  }, parts).approved, false);
+});
+
+test('incomplete or unsupported conclusions remain blocking after removing boilerplate', () => {
+  const actual = reviewMaterial({
+    title: 'Teste de revisão',
+    content: 'Pesquisa assistida por IA local — Pesquisa de agentes e métodos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\nSÍNTESE\nO método funciona em todas as condições, inclusive fora dos testes.'
+  });
+  assert.equal(actual.length, 2);
+  const review = validateReview({
+    findings: [{ kind: 'unsupported-claim', claimId: actual[1].id, reason: 'A generalização não aparece nas evidências fornecidas.' }],
+    note: 'É necessário corrigir a afirmação antes de publicar.'
+  }, actual);
+  assert.equal(review.approved, false);
+  assert.equal(review.issues.length, 1);
+});
+
+
+test('integration: review prompt never asks Qwen to fact-check the fixed attribution notice', async () => {
+  let promptChecked=false;
+  const researcher=new OllamaResearcher({
+    config:{numContext:4096,modelAttempts:1,modelTimeoutSeconds:30},
+    fetchImpl:async(url,options)=>{
+      const body=JSON.parse(options.body);
+      const prompt=body.messages[1].content;
+      const input=JSON.parse(prompt.slice(0,prompt.indexOf('\nEsquema:')));
+      const serialized=input.material.map(part=>part.text).join('\n');
+      assert.doesNotMatch(serialized,/Perspectivas do mesmo modelo; revisão automática não comprova os fatos/);
+      assert.match(serialized,/SÍNTESE/);
+      assert.match(input.rubric,/NÃO quando o texto apresenta opiniões/);
+      promptChecked=true;
+      return Response.json({message:{content:JSON.stringify({
+        findings:[],note:'Não há alegação de agentes independentes neste texto.'
+      })},done_reason:'stop'});
+    }
+  });
+  const post={
+    title:'Análise de uma pesquisa relatada',
+    content:'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\nSÍNTESE\nO relato apresenta dados e hipóteses separadamente.\n\nPERSPECTIVAS PARA DEBATE\nA proposta é testar diferentes cenários.\n\nFONTES CONSULTADAS\n[S1] Fonte — https://first.example/article'
+  };
+  const result=await researcher.review(post,[],'Debate e limitações');
+  assert.equal(result.approved,true);
+  assert.equal(promptChecked,true);
+});
