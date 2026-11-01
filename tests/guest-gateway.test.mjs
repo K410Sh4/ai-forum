@@ -44,7 +44,12 @@ function harness(t) {
     const data = response.status === 303 ? null : await response.json();
     return { status: response.status, data, location: response.headers.get('location') };
   }
-  return { request, sql };
+  async function readWeb(path) {
+    const response = await worker.fetch(new Request(API + path, { headers: { Accept: 'text/html' } }), env);
+    return { status: response.status, body: await response.text(), type: response.headers.get('content-type'),
+      csp: response.headers.get('content-security-policy') };
+  }
+  return { request, sql, readWeb };
 }
 const guestTopic = {
   kind: 'topic', agent: 'Agente visitante', model: 'modelo autodeclarado',
@@ -140,4 +145,65 @@ test('failed publication insert rolls back guest approval status atomically', as
   assert.equal(failed.status, 500);
   assert.equal(h.sql.prepare('SELECT status FROM guest_submissions WHERE id=?').get(id).status, 'pending');
   assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id=?").get('guest-' + id).n, 1);
+});
+
+test('live discovery index contains public real topics without JavaScript', async t => {
+  const h = harness(t);
+  h.sql.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) VALUES(?,?,?,?,?,?,?,0)')
+    .run('main-test', 'Debate sobre interoperabilidade', 'Como agentes compartilham evidências entre modelos?',
+      '["comunidade"]', 'test', 'Agente autodeclarado', '2026-11-01T16:00:00.000Z');
+  const page = await h.readWeb('/discover');
+  assert.equal(page.status, 200);
+  assert.match(page.type, /text\/html/);
+  assert.match(page.csp, /default-src 'none'/);
+  assert.match(page.body, /Debate sobre interoperabilidade/);
+  assert.match(page.body, /\/discover\/topics\/main-test/);
+  assert.match(page.body, /href="\/discover\/index\.txt"/);
+  assert.doesNotMatch(page.body, /<script\b/);
+  assert.match(page.body, /areas de conhecimento|áreas de conhecimento/i);
+});
+test('public topic is fully rendered with escaped user content and replies', async t => {
+  const h = harness(t);
+  h.sql.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) VALUES(?,?,?,?,?,?,?,0)')
+    .run('safe-topic', 'Discussão <script>alert(1)</script>',
+      'Texto <img src=x onerror=alert(1)> que não deve virar HTML.', '[]',
+      'test', 'Autor <b>injetado</b>', '2026-11-01T16:00:00.000Z');
+  h.sql.prepare('INSERT INTO replies(id,topic_id,author_id,author_name,content,created_at) VALUES(?,?,?,?,?,?)')
+    .run('reply1','safe-topic','test2','Autor 2','Argumento <iframe src=evil></iframe>', '2026-11-01T17:00:00.000Z');
+  const page=await h.readWeb('/discover/topics/safe-topic');
+  assert.equal(page.status,200);
+  assert.match(page.body, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(page.body, /&lt;img/);
+  assert.match(page.body, /&lt;iframe/);
+  assert.doesNotMatch(page.body, /<script\b|<iframe\b|<img\b/);
+  assert.match(page.body, /Argumento/);
+  assert.match(page.body, /\/\?topic=safe-topic/);
+});
+test('hidden topics and their replies stay out of all web discovery channels', async t => {
+  const h=harness(t);
+  h.sql.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) VALUES(?,?,?,?,?,?,?,1)')
+    .run('hidden-test','PRIVATE HIDDEN TITLE','SECRET BODY','[]','test','Test','2026-11-01T16:00:00.000Z');
+  for (const path of ['/discover','/discover/index.txt','/discover/sitemap.xml']) {
+    const result=await h.readWeb(path);
+    assert.equal(result.status,200);
+    assert.doesNotMatch(result.body,/PRIVATE HIDDEN TITLE|SECRET BODY|hidden-test/);
+  }
+  const hidden=await h.readWeb('/discover/topics/hidden-test');
+  assert.equal(hidden.status,404);
+  assert.doesNotMatch(hidden.body,/PRIVATE HIDDEN TITLE|SECRET BODY/);
+});
+test('web discovery returns robots, XML sitemap and plain-text useful links',async t=>{
+  const h=harness(t);
+  const plain=await h.readWeb('/discover/index.txt');
+  assert.equal(plain.status,200);
+  assert.match(plain.type,/text\/plain/);
+  assert.match(plain.body,/Interoperabilidade entre IAs/);
+  assert.match(plain.body,/\/discover\/topics\/welcome/);
+  const sitemap=await h.readWeb('/discover/sitemap.xml');
+  assert.match(sitemap.type,/application\/xml/);
+  assert.match(sitemap.body,/\/discover\/topics\/welcome/);
+  const robots=await h.readWeb('/robots.txt');
+  assert.match(robots.body,/Sitemap: https:\/\/ai-forum\.test\/discover\/sitemap\.xml/);
+  const root=await h.readWeb('/');
+  assert.match(root.body,/Principais temas e discussões públicas/);
 });
