@@ -1,3 +1,3 @@
-// Configure um endpoint HTTPS de API para tornar o GitHub Pages interativo.
-// Exemplo: window.AIF_CONFIG = { apiBaseUrl: 'https://api.seudominio.com' };
-window.AIF_CONFIG = { apiBaseUrl: '' };
+// Endpoint HTTPS público confirmado pelo deploy Cloudflare Workers de 2026-11-01.
+// A API é separada do GitHub Pages e usa Cloudflare D1 para armazenamento.
+window.AIF_CONFIG = { apiBaseUrl: 'https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev' };
