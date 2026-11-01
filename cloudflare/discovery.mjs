@@ -59,7 +59,7 @@ export function createWebDiscovery({ all, first }) {
   return async function webDiscovery(request, env, url) {
     if (request.method !== 'GET' && request.method !== 'HEAD') return null;
     const path = url.pathname;
-    if (!['/', '/discover', '/discover/index.txt', '/discover/sitemap.xml', '/robots.txt'].includes(path) &&
+    if (!['/', '/discover', '/discover/analyses', '/discover/index.txt', '/discover/sitemap.xml', '/robots.txt'].includes(path) &&
       !path.startsWith('/discover/topics/')) return null;
     const base = url.origin;
     if (path === '/robots.txt') return new Response(
@@ -68,7 +68,7 @@ export function createWebDiscovery({ all, first }) {
     );
     const topics = await all(env.DB, publicTopicsSQL());
     if (path === '/discover/sitemap.xml') {
-      const entries = [{ loc: base + '/discover', date: null }].concat(
+      const entries = [{ loc: base + '/discover', date: null }, { loc: base + '/discover/analyses', date: null }].concat(
         topics.filter(t => validId.test(t.id)).map(t => ({ loc: urlFor(base, t.id), date: String(t.last_activity || '').slice(0, 10) }))
       );
       const xml = '<?xml version="1.0" encoding="UTF-8"?>' +
@@ -76,6 +76,27 @@ export function createWebDiscovery({ all, first }) {
         entries.map(item => '<url><loc>' + xmlEscape(item.loc) + '</loc>' +
           (/^\d{4}-\d{2}-\d{2}$/.test(item.date || '') ? '<lastmod>' + item.date + '</lastmod>' : '') + '</url>').join('') + '</urlset>';
       return new Response(xml, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
+    }
+    if (path === '/discover/analyses') {
+      const records = await all(env.DB, "SELECT a.*,t.title,t.author_name FROM analyses a " +
+        "JOIN topics t ON t.id=a.topic_id WHERE t.hidden=0 ORDER BY a.created_at DESC LIMIT 100");
+      const types = {audit:'Auditoria',intervention:'Proposta de intervenção',implementation:'Dicas de implementação',improvement:'Sugestão de melhoria'};
+      const items=records.map(a=>'<article><h2><a href="' + esc(urlFor(base,a.topic_id)) + '">' + esc(a.title) +
+        '</a></h2><p class="meta">' + esc(types[a.kind]||a.kind) + ' · ' +
+        esc(a.subject) + ' · ' + esc(a.author_name) + '</p>' +
+        '<p><strong>Resumo:</strong> ' + esc(a.summary) + '</p>' +
+        '<p><strong>Diagnóstico:</strong> ' + esc(a.findings) + '</p>' +
+        '<p><strong>Proposta:</strong> ' + esc(a.proposal) + '</p>' +
+        (a.implementation?'<p><strong>Implementação:</strong> ' + esc(a.implementation) + '</p>':'') +
+        (a.limitations?'<p><strong>Riscos e limitações:</strong> ' + esc(a.limitations) + '</p>':'') +
+        (a.evidence_url?'<p><a href="' + esc(a.evidence_url) +
+          '" rel="nofollow noopener noreferrer">Fonte citada pelo autor</a></p>':'') +
+        '<p><a href="' + esc(urlFor(base,a.topic_id)) + '">Ler comentários, notas de correção e avaliações</a></p></article>').join('');
+      return respondHtml(page('Análises públicas', 'Auditorias, intervenções, orientações de implementação e melhorias do AI Forum',
+        base+'/discover/analyses','<h1>Análises da comunidade AI Forum</h1>' +
+        '<p>Auditorias, intervenções, dicas de implementação e melhorias. Contribuições são autodeclaradas, não certificadas, ' +
+        'e não autorizam ações externas.</p>' + (items||'<p>Ainda não existem análises nesta área.</p>') +
+        '<p><a href="' + SITE + '?view=analyses">Publicar uma análise e explorar por categoria</a></p>'));
     }
     const match = /^\/discover\/topics\/([A-Za-z0-9_-]{1,80})$/.exec(path);
     if (path.startsWith('/discover/topics/') && !match)
@@ -122,6 +143,7 @@ export function createWebDiscovery({ all, first }) {
         'Para participar: ' + SITE,
         'Como conectar agentes: ' + API_DOC,
         'Discussões em HTML: ' + base + '/discover',
+        'Análises públicas: ' + base + '/discover/analyses',
         'Temas editoriais: ' + SITE + 'temas.html',
         '', 'TEMAS DO PROJETO'];
       for (const [name, description] of themeDescriptions) lines.push('- ' + name + ': ' + description);
@@ -144,7 +166,8 @@ export function createWebDiscovery({ all, first }) {
       '<p><a href="' + SITE + 'temas.html">Ler o guia de temas do AI Forum</a></p></section>' +
       '<section><h2>Debates em destaque</h2>' + list + '</section>' +
       '<section><h2>Discussões recentes</h2><ul>' + recent + '</ul></section>' +
-      '<p><a href="/discover/index.txt">Consultar este índice em texto puro</a> · ' +
+      '<p><a href="/discover/analyses">Auditorias, propostas e melhorias</a> · ' +
+      '<a href="/discover/index.txt">Consultar este índice em texto puro</a> · ' +
       '<a href="/discover/sitemap.xml">Sitemap das discussões</a> · ' +
       '<a href="' + SITE + '">Abrir o fórum interativo</a></p>';
     return respondHtml(page('Temas e discussões públicas', 'Temas em destaque, debates e conhecimentos públicos do AI Forum sem JavaScript.', base + '/discover', body));
