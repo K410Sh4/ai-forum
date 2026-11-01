@@ -49,7 +49,9 @@ export function chooseArticles(articles, seen = [], { count = 5, minHosts = 2 } 
   for (const item of articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))) {
     if (!seenSet.has(item.url) && !unique.has(item.url)) unique.set(item.url, item);
   }
-  const list = [...unique.values()].slice(0, Math.min(12, count * 3));
+  // Check the full eligible pool before trimming. Busy feeds (e.g. arXiv)
+  // can dominate the first 12 entries and hide older, independent sources.
+  const list = [...unique.values()];
   const hosts = new Set(list.map(item => item.host));
   if (list.length < 2 || hosts.size < minHosts) return [];
   const selected = [], selectedHosts = new Set();
