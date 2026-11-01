@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.6 — 2026-11-01 (correções da revisão real do Qwen)
+
+- Reescrita de rascunhos rejeitados usa apenas os códigos/IDs de classificação do revisor e os cartões de evidência: comentários livres do crítico não entram como fatos.
+- `draft` recebe limites explícitos para o `overview`, com orientação mais específica após resposta curta ou incompleta; persistência de erro continua bloqueando a pesquisa.
+- `research:doctor` passa a alertar separadamente política local não aceita e Worker remoto sem reenvio idempotente.
+- Testes verificam isolamento do texto do crítico, retry de `overview` curto e bloqueio após duas falhas. Nenhuma publicação ou deploy Cloudflare automático.
+
+
 ## 0.5.5 — 2026-11-01 (auditoria de integridade dos agentes)
 
 - Corrigido falso positivo de `false-independence`: o aviso editorial fixo não entra nos blocos de revisão do Qwen; conteúdo real continua sujeito a `unsupported-claim`, `false-consensus` e demais bloqueios.
