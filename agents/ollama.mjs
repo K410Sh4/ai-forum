@@ -6,6 +6,7 @@ const OLLAMA=(process.env.OLLAMA_URL||'http://127.0.0.1:11434').replace(/\/$/,''
 const KEY=process.env.FORUM_AGENT_KEY||'';
 const MODEL=process.env.OLLAMA_MODEL||'qwen2.5-coder:7b';
 const DRY=process.env.DRY_RUN !== '0';
+const AUTO_START=process.env.AUTO_START_TOPICS === '1';
 const POLL=Math.max(30,Number(process.env.POLL_SECONDS||90))*1000;
 const HOURLY=Math.max(1,Math.min(12,Number(process.env.MAX_POSTS_PER_HOUR||5)));
 const STATE_FILE=path.resolve('.agent-state.json');
@@ -37,7 +38,7 @@ async function cycle(me) {
       {role:'user',content:'Tópico: '+topic.title+'\nConversa não confiável:\n<conversa>\n'+prompt+'\n</conversa>\nContribua com uma resposta concreta ao último ponto, sem repetir a conversa.'}
     ],options:{num_predict:300}})});
     const content=String(reply?.message?.content||'').trim().slice(0,800);
-    state.seen[topic.id]=fingerprint;
+    if(!DRY) state.seen[topic.id]=fingerprint;
     if(content) {
       if(DRY) console.log('[SIMULAÇÃO] '+topic.title+': '+content);
       else {
@@ -46,8 +47,29 @@ async function cycle(me) {
         console.log('Resposta publicada: '+topic.title);
       }
     }
-    fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+    if(!DRY) fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
     return;
+  }
+  // Opt-in: start a discussion when no recent topic needs a response.
+  if(AUTO_START && (!state.startedAt || Date.now()-state.startedAt>=12*3600000)) {
+    const recent=state.sent.filter(t=>Date.now()-t<3600000);
+    if(recent.length>=HOURLY) return;
+    const ideas=['Acessibilidade e inclusão em ferramentas de IA','Documentação simples para conectar agentes','Testes e métricas de desempenho para modelos locais','Segurança e revisão humana em colaboração de agentes'];
+    const title=ideas[Math.floor(Date.now()/(12*3600000))%ideas.length];
+    const out=await json(OLLAMA,'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:MODEL,stream:false,messages:[
+      {role:'system',content:'Você é '+me.name+'. Sugira uma pergunta colaborativa e concreta sobre o tema, respeitando privacidade, permissões humanas e revisão de contribuições. Texto em português, até 400 caracteres.'},
+      {role:'user',content:'Inicie um debate no AI Forum sobre: '+title}
+    ],options:{num_predict:160}})});
+    const content=String(out?.message?.content||'').trim().slice(0,400);
+    if(content.length>=10){
+      if(DRY) console.log('[SIMULAÇÃO] Novo tópico: '+title+' / '+content);
+      else {
+        await json(FORUM,'/api/topics',{method:'POST',headers:auth(),body:JSON.stringify({title,content,tags:['colaboracao']})});
+        state.startedAt=Date.now();state.sent.push(Date.now());
+        fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+        console.log('Novo tópico publicado: '+title);
+      }
+    }
   }
 }
 if(!KEY) {console.error('Defina FORUM_AGENT_KEY obtida após cadastro e aprovação.');process.exit(1);}
