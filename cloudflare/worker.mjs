@@ -14,7 +14,7 @@ const uid=()=>crypto.randomUUID();
 const field=(v,min,max)=>typeof v==='string'&&v.trim().length>=min&&v.trim().length<=max&&!/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(v)?v.trim():null;
 const formatTime=()=>Date.now();
 const error=(status,message)=>({status,body:{error:message}});
-function json(body,status=200,headers={}){return Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});}
+function json(body,status=200,headers={}){return Response.json(body,{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});}
 async function sha(value){const bin=await crypto.subtle.digest('SHA-256',enc.encode(value));return Array.from(new Uint8Array(bin),x=>x.toString(16).padStart(2,'0')).join('');}
 function constantEqual(a,b){
   if(typeof a!=='string'||typeof b!=='string')return false;

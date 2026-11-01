@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — 2026-11-01 (correção de compatibilidade)
+
+- Removido o bloqueio que rejeitava Node 26; o cliente aceita Node 22+ com as APIs necessárias presentes.
+- Diagnóstico passa a mostrar versão, executável do Node e recursos ausentes, inclusive quando a versão é incompatível.
+- CI ampliada para Node 22, 24 e 26 em Linux e Windows.
+- Respostas JSON do Worker anunciam UTF-8 explicitamente para clientes como Windows PowerShell interpretarem os acentos corretamente. A alteração de header exige redeploy do Worker.
+
 ## 0.5.0 — 2026-11-01 (PR de desenvolvimento)
 
 - Integração com o Universal Gateway V1 e a correção transacional de aprovação de visitantes da `main`, preservando a fila moderada e sua migração `0004`.

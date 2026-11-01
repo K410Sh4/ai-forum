@@ -7,6 +7,13 @@ import { OllamaResearcher } from './research-model.mjs';
 import { ResearchEngine } from './research-engine.mjs';
 import { POLICY_VERSION } from './research-core.mjs';
 
+export function runtimeInfo(version = process.versions.node, capabilities = globalThis) {
+  const major = Number(String(version).replace(/^v/, '').split('.')[0]);
+  const required = { fetch: capabilities.fetch, TextDecoder: capabilities.TextDecoder, ReadableStream: capabilities.ReadableStream, 'AbortSignal.any': capabilities.AbortSignal?.any, 'AbortSignal.timeout': capabilities.AbortSignal?.timeout };
+  const missingCapabilities = Object.entries(required).filter(([, value]) => typeof value !== 'function').map(([name]) => name);
+  return { node: 'v' + String(version).replace(/^v/, ''), executable: process.execPath, minimumMajor: 22, compatible: Number.isInteger(major) && major >= 22 && missingCapabilities.length === 0, missingCapabilities };
+}
+
 export function parseArgs(argv) {
   const options = {}, positional = [];
   for (let index = 0; index < argv.length; index++) {
@@ -28,11 +35,17 @@ export function parseArgs(argv) {
   return options;
 }
 export async function main(argv = process.argv.slice(2), env = process.env) {
-  const major = Number(process.versions.node.split('.')[0]);
-  if (major < 22 || major >= 26) throw Error('Use Node.js 22 or 24 for this release');
   const options = parseArgs(argv);
   if (options.help) {
     console.log('AI Forum Research Publisher 2\npreview [--topic ID] [--depth quick|balanced|deep]\npublish DRAFT.json --hash SHA256\ncancel DRAFT.json --hash SHA256\nauto | daemon | doctor | status | reconcile [--topic REMOTE_ID]\nOptions: --config FILE --state FILE --draft-dir DIR --json\nDefault: preview. Writes require explicit FORUM_ACCEPT_POLICY acceptance.');
+    return;
+  }
+  const runtime = runtimeInfo();
+  if (!runtime.compatible) {
+    const message = 'Node detectado: ' + runtime.node + ' (' + runtime.executable + '). Requer Node.js 22 ou superior' + (runtime.missingCapabilities.length ? '; recursos ausentes: ' + runtime.missingCapabilities.join(', ') : '') + '. Instale uma versão LTS em https://nodejs.org/en/download e abra um novo terminal.';
+    if (options.command !== 'doctor') throw Error(message);
+    console.log(JSON.stringify({ status: 'unsupported-runtime', runtime, message }, null, options.json ? 0 : 2));
+    process.exitCode = 1;
     return;
   }
   const root = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +59,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   if (['auto', 'daemon', 'publish'].includes(options.command) && env.FORUM_ACCEPT_POLICY !== POLICY_VERSION) throw Error('Read the live forum policy and explicitly set FORUM_ACCEPT_POLICY=' + POLICY_VERSION + ' before enabling publication');
   if (options.command === 'status') {
     const state = store.read();
-    console.log(JSON.stringify({ api: client.api, topicsLast24h: state.published.filter(p => Date.now() - p.at < 86400000).length, messagesLast24h: state.messages.filter(p => Date.now() - p.at < 86400000).length, pending: state.pending ? { draftId: state.pending.draftId, topicId: state.pending.topicId, messages: state.pending.messages } : null, recentRuns: state.runs.slice(-5), note: 'Nenhuma credencial é exibida.' }, null, 2));
+    console.log(JSON.stringify({ api: client.api, runtime, topicsLast24h: state.published.filter(p => Date.now() - p.at < 86400000).length, messagesLast24h: state.messages.filter(p => Date.now() - p.at < 86400000).length, pending: state.pending ? { draftId: state.pending.draftId, topicId: state.pending.topicId, messages: state.pending.messages } : null, recentRuns: state.runs.slice(-5), note: 'Nenhuma credencial é exibida.' }, null, 2));
     return;
   }
   const shutdown = new AbortController();
@@ -61,7 +74,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     do {
       try {
         let result;
-        if (options.command === 'doctor') result = await engine.doctor();
+        if (options.command === 'doctor') result = { ...await engine.doctor(), runtime };
         else if (options.command === 'publish') result = await engine.publish(path.resolve(options.file), options.hash);
         else if (options.command === 'cancel') result = await engine.cancel(path.resolve(options.file), options.hash);
         else if (options.command === 'reconcile') result = await engine.reconcile({ topicId: options.topic });

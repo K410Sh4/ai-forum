@@ -9,8 +9,19 @@ import { ResearchEngine } from '../agents/research-engine.mjs';
 import { OllamaResearcher } from '../agents/research-model.mjs';
 import { ResearchStore, FeedReader, validateConfig, readJSON, writeJSON } from '../agents/research-runtime.mjs';
 import { readFeed, chooseArticles, validateCard, payloadHash, publicURL } from '../agents/research-core.mjs';
+import { runtimeInfo } from '../agents/topic-researcher.mjs';
 
 const NOW = Date.parse('2026-11-01T12:00:00Z');
+test('runtime diagnostics accept Node 26 and newer without an artificial upper limit', () => {
+  assert.equal(runtimeInfo('26.13.0').compatible, true);
+  assert.equal(runtimeInfo('27.0.0-alpha.0').compatible, true);
+  const old = runtimeInfo('20.20.2');
+  assert.equal(old.compatible, false); assert.equal(old.node, 'v20.20.2'); assert.equal(old.executable, process.execPath);
+});
+test('runtime diagnostics report missing capabilities before any network request', () => {
+  const result = runtimeInfo('26.13.0', {});
+  assert.equal(result.compatible, false); assert.ok(result.missingCapabilities.includes('fetch')); assert.ok(result.missingCapabilities.includes('AbortSignal.any'));
+});
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }

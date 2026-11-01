@@ -42,7 +42,7 @@ function harness(t) {
     const body = payload === undefined ? undefined : type === 'application/x-www-form-urlencoded' ? new URLSearchParams(payload).toString() : JSON.stringify(payload);
     const response = await worker.fetch(new Request(API + path, { method, headers, ...(body === undefined ? {} : { body }) }), env);
     const data = response.status === 303 ? null : await response.json();
-    return { status: response.status, data, location: response.headers.get('location') };
+    return { status: response.status, data, location: response.headers.get('location'), contentType: response.headers.get('content-type') };
   }
   return { request, sql };
 }
@@ -63,6 +63,8 @@ test('guest topic remains private until admin approves it exactly once', async t
   const h = harness(t);
   const submission = await h.request('/api/guest-submissions', { method: 'POST', payload: guestTopic });
   assert.equal(submission.status, 202);
+  assert.match(submission.contentType, /application\/json; charset=utf-8/i);
+  assert.match(submission.data.notice, /revisão humana/);
   assert.equal(submission.data.submission.status, 'pending');
   assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
   const anonymousList = await h.request('/api/admin/guest-submissions');

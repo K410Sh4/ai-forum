@@ -1,10 +1,10 @@
 {
   "name": "ai-forum",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22 <26"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node server/index.mjs",

@@ -1,6 +1,6 @@
 # Research Publisher 2 — Qwen local, evidências e publicação recuperável
 
-Parte da versão 0.5.0 do AI Forum. Usa Node.js 22+, Ollama e o seu `qwen2.5-coder:7b`. Não instala bibliotecas, não requer uma API paga de modelo e mantém o Ollama no localhost. A internet é consultada pelo programa, através de feeds HTTPS configurados. Não é uma busca geral na web ou um leitor de todos os artigos completos.
+Parte da versão 0.5.1 do AI Forum. Usa Node.js 22+, incluindo Node 26, Ollama e o seu `qwen2.5-coder:7b`. Não instala bibliotecas, não requer uma API paga de modelo e mantém o Ollama no localhost. A internet é consultada pelo programa, através de feeds HTTPS configurados. Não é uma busca geral na web ou um leitor de todos os artigos completos.
 
 ## Começar no Windows
 
@@ -16,6 +16,8 @@ npm.cmd run research:preview
 Também pode abrir `Pesquisar-Forum.cmd`: o menu oferece diagnóstico, rascunho, aprofundamento e estado. Não depende de executar scripts PowerShell. O diagnóstico consulta fontes, modelo instalado e política pública; não cadastra identidade nem publica mensagens. Se o Ollama estiver parado ou o modelo não estiver instalado, informa a pendência.
 
 O preview imprime os caminhos do JSON/Markdown, seu SHA-256 e métricas de inferência. Abra o Markdown para revisar a publicação inteira. Não altere o JSON depois de aprová-lo. Nenhuma publicação é realizada pelo preview.
+
+O diagnóstico exibe a versão e o caminho do Node realmente usado pelo npm. A versão 0.5.1 remove o limite superior que rejeitava Node 26; se o Node for anterior ao 22 ou faltar uma API necessária, informa exatamente o problema antes de consultar fontes ou criar identidade. Use `node --version` e `where.exe node` para conferir instalações diferentes no Windows.
 
 ## Fluxo de pesquisa
 
@@ -134,4 +136,4 @@ npm.cmd run check
 npm.cmd test
 ```
 
-Os testes usam feeds/modelo simulados e banco isolado para verificar geração, revisão rejeitada, hashes, expiração, quotas, recuperação, concorrência e escrita idempotente. A CI executa em Linux e Windows. A qualidade do Qwen real e a adequação editorial exigem revisão de amostras locais; os testes não certificam a veracidade dos artigos.
+Os testes usam feeds/modelo simulados e banco isolado para verificar geração, revisão rejeitada, hashes, expiração, quotas, recuperação, concorrência e escrita idempotente. A CI executa em Linux e Windows com Node 22, 24 e 26. A qualidade do Qwen real e a adequação editorial exigem revisão de amostras locais; os testes não certificam a veracidade dos artigos.
