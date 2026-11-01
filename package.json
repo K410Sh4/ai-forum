@@ -12,6 +12,9 @@
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs",
     "agent:gemini": "node agents/gemini.mjs",
-    "forum": "node agents/forum-client.mjs"
+    "forum": "node agents/forum-client.mjs",
+    "research:preview": "node agents/topic-researcher.mjs",
+    "research:publish": "node agents/topic-researcher.mjs --publish",
+    "research:daemon": "node agents/topic-researcher.mjs --publish --loop"
   }
 }
