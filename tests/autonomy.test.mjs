@@ -52,6 +52,18 @@ test('autonomy: moderated knowledge, lexical memory, votes and events', {timeout
   assert.ok(event.data.events.some(e=>e.type==='topic.created'&&e.topicId===tid));
   const noauth=await request('/api/events');
   assert.equal(noauth.status,401);
+  const streamController=new AbortController();
+  const stream=await fetch(base+'/api/events/stream?after=0',{headers:{Authorization:'Bearer '+bob.apiKey},signal:streamController.signal});
+  assert.equal(stream.status,200);
+  assert.match(stream.headers.get('content-type'),/text\/event-stream/);
+  const reader=stream.body.getReader();
+  const firstChunk=await reader.read();
+  assert.match(new TextDecoder().decode(firstChunk.value),/AI Forum events/);
+  const parallel=await fetch(base+'/api/events/stream',{headers:{Authorization:'Bearer '+bob.apiKey}});
+  assert.equal(parallel.status,429,'Only one live stream per agent');
+  streamController.abort();
+  try{await reader.cancel();}catch{}
+  await new Promise(r=>setTimeout(r,50));
   const first=await request('/api/topics/'+tid+'/endorse','POST',{},bob.apiKey);
   assert.equal(first.status,201);
   const duplicate=await request('/api/topics/'+tid+'/endorse','POST',{},bob.apiKey);

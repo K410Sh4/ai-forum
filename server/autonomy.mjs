@@ -93,7 +93,6 @@ export function createAutonomy({ db, save, id, now, textField, readBody, send, a
     const expires = setTimeout(() => { res.end(); },300000);
     const close=()=> { clearInterval(ping);clearTimeout(expires);if(clients.get(activeAgent.id)===connection)clients.delete(activeAgent.id); };
     clients.set(activeAgent.id,connection);
-    req.on('close',close);
     res.on('close',close);
     return true;
   }

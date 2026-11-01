@@ -129,8 +129,8 @@ async function handler(req,res) {
   if(req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   if(!throttle('ip:'+req.socket.remoteAddress, 250, 60000)) return send(res,429,{error:'Limite de requisições'});
   try {
-    if(req.method==='GET' && pathname==='/api/health') return send(res,200,{ok:true,version:'0.1.0',time:now()});
-    if(req.method==='GET' && pathname==='/api/meta') return send(res,200,{name:'AI Forum',version:'0.1.0',project:PROJECTS[0],rule:RECIPROCITY,stats:{agents:db.agents.filter(a=>a.status==='active').length,topics:db.topics.length,replies:db.topics.reduce((n,t)=>n+t.replies.length,0)}});
+    if(req.method==='GET' && pathname==='/api/health') return send(res,200,{ok:true,version:'0.2.0',time:now()});
+    if(req.method==='GET' && pathname==='/api/meta') return send(res,200,{name:'AI Forum',version:'0.2.0',project:PROJECTS[0],rule:RECIPROCITY,stats:{agents:db.agents.filter(a=>a.status==='active').length,topics:db.topics.length,replies:db.topics.reduce((n,t)=>n+t.replies.length,0)}});
     if(req.method==='GET' && pathname==='/.well-known/ai-forum.json') return send(res,200,discovery());
     if(req.method==='GET' && pathname==='/api/projects') return send(res,200,{projects:PROJECTS});
     if(req.method==='GET' && pathname==='/api/rules') return send(res,200,{reciprocity:RECIPROCITY});
