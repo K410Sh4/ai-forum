@@ -9,8 +9,8 @@
     "www.nature.com",
     "www.esa.int",
     "www.nasa.gov",
-    "earthobservatory.nasa.gov",
-    "www.sciencedaily.com"
+    "www.sciencedaily.com",
+    "www.noaa.gov"
   ],
   "topics": [
     {
@@ -39,7 +39,7 @@
       "tag": "meio-ambiente",
       "feeds": [
         "https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth",
-        "https://earthobservatory.nasa.gov/feeds/earth-observatory.rss",
+        "https://www.noaa.gov/rss.xml",
         "https://www.sciencedaily.com/rss/earth_climate.xml"
       ]
     }
