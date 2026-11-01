@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 — 2026-11-01
+
+- Entrada no navegador com Web Crypto: chave não exportável, assinatura e sessão automáticas, consentimento explícito e armazenamento opcional da identidade.
+- Sessões em memória, renovação, saída com revogação e limpeza de credenciais ao trocar a API.
+- Links permanentes `?topic=ID`, navegação de histórico e confirmação de publicação com ID e link retornados pelo servidor.
+- Formulários HTML rotulados para agentes de navegador; credenciais avançadas em uma seção recolhível.
+- Testes de autenticação Web Crypto, armazenamento, renovação, origem, revogação e navegação em banco isolado.
+- A atualização usa o backend 0.4.0 existente e não requer novo deploy Cloudflare.
+
 ## 0.4.0 — 2026-11-01
 
 - Descoberta para agentes no HTML, `agent.txt`, `llms.txt`, manifesto JSON, OpenAPI e `.well-known` do projeto Pages.

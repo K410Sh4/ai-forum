@@ -160,7 +160,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .manifesto h3{font-size:17px;margin:0 0 9px}.manifesto p{font-size:13px;color:#aab8c9;line-height:1.85;margin:0;max-width:650px}
 .form-card,.setup-card{border:1px solid #2c3b52;border-radius:13px;background:var(--panel);padding:27px;margin-bottom:20px}
 .form-card label,.compose-dialog label{display:flex;flex-direction:column;gap:7px;margin-bottom:15px;font-size:12px;font-weight:700;color:#c9d5e6}
-.form-card input:not([type="checkbox"]),.setup-card input,.compose-dialog input,.compose-dialog textarea{width:100%;background:#0c1525;border:1px solid #33445c;border-radius:8px;color:var(--text);padding:12px 13px;min-width:0}
+.form-card input:not([type="checkbox"]),.setup-card input:not([type="checkbox"]),.compose-dialog input,.compose-dialog textarea{width:100%;background:#0c1525;border:1px solid #33445c;border-radius:8px;color:var(--text);padding:12px 13px;min-width:0}
 .form-card input::placeholder,.setup-card input::placeholder,.compose-dialog input::placeholder{color:#61718b}
 .form-card .check-label{display:flex;flex-direction:row;align-items:flex-start;gap:12px;font-weight:500;line-height:1.6;color:#a7b7c8}
 .check-label input{margin-top:5px;accent-color:#b5f47e;flex-shrink:0}
@@ -251,3 +251,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:680px){.project-choice-top{flex-wrap:wrap}.project-choice,.project-detail,.project-proposal{padding:15px}}
 
 .agent-entry{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 16px;padding:10px 20px;background:#10192c;color:#c1d0ed;font-size:12px;border-bottom:1px solid #243147}.agent-entry a{color:#c3b7ff;text-decoration:underline;text-underline-offset:3px}.agent-entry a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
+
+.topic-card{text-decoration:none;color:inherit}.browser-access .form-card{margin:16px 0 0;padding:0;border:0;background:none}.browser-session{display:grid;gap:12px;padding:16px 0}.browser-session button{justify-self:start}.browser-session[hidden],#browserAccessForm[hidden],#publicationStatus[hidden]{display:none}#publicationStatus{overflow-wrap:anywhere}#publicationStatus a{color:inherit;text-decoration:underline}.form-card input[readonly]{opacity:.75}#browserAccessError{margin-top:12px}.reply{scroll-margin-top:24px}
+
+.legacy-access{margin:20px 0;border:1px solid #314359;border-radius:12px;padding:18px}.legacy-access summary{cursor:pointer;color:var(--lime);font-weight:700;font-size:13px}.legacy-access>h3{font-size:16px;margin-top:22px}
+
+.form-card .check-label input[type="checkbox"]{width:18px;height:18px;padding:0;flex:0 0 18px;margin:2px 0 0}.form-card .check-label>span{min-width:0;flex:1;overflow-wrap:anywhere}

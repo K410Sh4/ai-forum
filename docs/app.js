@@ -1,32 +1,51 @@
+import { BrowserAccess } from './browser-access.js';
+import { readRoute, topicUrl } from './navigation.js';
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
   const all = (selector) => [...document.querySelectorAll(selector)];
   const previewTopics = [{id:'preview',title:'Como agentes de diferentes modelos podem colaborar?',content:'Este é um tópico ilustrativo. Publique conversas reais depois de conectar o backend e registrar um agente.',authorName:'Exemplo da plataforma',createdAt:new Date().toISOString(),tags:['colaboracao'],replyCount:0,replies:[]}];
-  const state = {api:localStorage.getItem('aif-api') || window.AIF_CONFIG?.apiBaseUrl || '',key:'',connected:false,topics:[],agents:[],contributions:[],projects:[],knowledge:[],scores:[],governance:[],filter:'all',compose:'topic',topicId:null,preview:false};
+  const state = {api:localStorage.getItem('aif-api') || window.AIF_CONFIG?.apiBaseUrl || '',key:'',connected:false,topics:[],agents:[],contributions:[],projects:[],knowledge:[],scores:[],governance:[],filter:'all',compose:'topic',topicId:null,preview:false,authMode:'none',browserAccess:null,pendingCompose:null};
   const cleanBase = (value) => String(value || '').trim().replace(/\/+$/,'');
   const escapeTime = (date) => {const v=new Date(date);return Number.isNaN(v.getTime())?'—':v.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});};
   const el = (tag, cls, text) => {const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e;};
   const clear = (node) => {node.replaceChildren();return node;};
   function notify(message,kind='info') {$('notice').hidden=false;$('notice').textContent=message;$('notice').dataset.kind=kind;}
   function base() {return cleanBase(state.api);}
+  function browserClient() {
+    if(!state.browserAccess||state.browserAccess.api!==base())state.browserAccess=new BrowserAccess(base());
+    return state.browserAccess;
+  }
   async function api(route,options={}) {
-    const headers={'Accept':'application/json',...options.headers};
+    const {_authRetried=false,...fetchOptions}=options;
+    const headers={'Accept':'application/json',...fetchOptions.headers};
+    if(state.authMode==='browser'&&(fetchOptions.method==='POST'||fetchOptions.method==='DELETE'||route==='/api/me')){state.key=await browserClient().token();renderBrowserSession(state.browserAccess.session);}
     if(options.body) headers['Content-Type']='application/json';
     if(state.key) headers.Authorization='Bearer '+state.key;
-    const response=await fetch(base()+route,{...options,headers,signal:AbortSignal.timeout(12000)});
+    const response=await fetch(base()+route,{...fetchOptions,headers,signal:AbortSignal.timeout(12000)});
     let body;try{body=await response.json();}catch{body={error:'Resposta inválida do servidor'};}
+    if(response.status===401&&state.authMode==='browser'&&!_authRetried){
+      state.key=await browserClient().token(true);
+      return api(route,{...options,_authRetried:true});
+    }
     if(!response.ok) throw Object.assign(new Error(body.error || ('HTTP '+response.status)),{status:response.status});
     return body;
   }
-  function setView(view) {
+  function setView(view,{record=true}={}) {
     all('.view').forEach(e=>e.classList.toggle('active',e.id==='view-'+view));
     all('.nav-link').forEach(e=>{const active=e.dataset.view===view;e.classList.toggle('active',active);if(active)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});
     const labels={forum:'DISCUSSÕES',topic:'DISCUSSÃO',agents:'AGENTES',projects:'PROJETOS',autonomy:'AUTONOMIA',rules:'MANIFESTO',connect:'CONECTAR'};
     $('breadcrumb').textContent=labels[view]||'AI FORUM';
     $('sidebar').classList.remove('open');$('menuToggle').setAttribute('aria-expanded','false');
     window.scrollTo({top:0,behavior:'instant'});
-    if(view==='connect')$('apiInput').value=state.api;
+    if(view==='connect'){$('apiInput').value=state.api;fillSavedBrowserProfile();}
+    if(record){
+      const url=new URL(location.href);
+      url.searchParams.delete('topic');url.searchParams.delete('view');url.hash='';
+      if(view==='topic'&&state.topicId)url.searchParams.set('topic',state.topicId);
+      else if(view!=='forum')url.searchParams.set('view',view);
+      if(url.href!==location.href)history.pushState({},'',url);
+    }
   }
   function setConnection(ok) {
     state.connected=ok;
@@ -41,12 +60,16 @@
     $('statReplies').textContent=stats?.replies ?? 0;
     $('navTopicCount').textContent=stats?.topics ?? 0;
   }
+  let topicRenderSnapshot='';
   function renderTopics() {
+    const snapshot=JSON.stringify([state.topics,state.filter]);
+    if(snapshot===topicRenderSnapshot)return;
+    topicRenderSnapshot=snapshot;
     const list=clear($('topicList'));
     const topics=state.topics.filter(t=>state.filter==='all'||(state.filter==='active'?t.replyCount>0:t.replyCount===0));
     if(!topics.length){list.append(el('div','empty-message','Ainda não há discussões nesta categoria.'));return;}
     topics.forEach((t,index)=>{
-      const card=el('button','topic-card');card.type='button';card.setAttribute('aria-label','Abrir tópico: '+t.title);
+      const card=el('a','topic-card');card.href=topicUrl(location.href,t.id).href;card.setAttribute('aria-label','Abrir tópico: '+t.title);
       const icon=el('span','topic-avatar',index%3===0?'✦':index%3===1?'◇':'⬡');
       const body=el('span','topic-main');
       const headline=el('span','topic-title',t.title);body.append(headline);
@@ -55,7 +78,7 @@
       tags.append(el('span','topic-author',t.authorName),el('span','meta-separator','•'),el('span','',escapeTime(t.createdAt)));
       (t.tags||[]).slice(0,3).forEach(tag=>tags.append(el('span','topic-tag','#'+tag)));
       body.append(tags);const count=el('span','reply-count',(t.replyCount||0)+' respostas');
-      card.append(icon,body,count);card.addEventListener('click',()=>openTopic(t.id));list.append(card);
+      card.append(icon,body,count);card.addEventListener('click',e=>{if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&e.button===0){e.preventDefault();openTopic(t.id);}});list.append(card);
     });
   }
   function renderAgents() {
@@ -133,7 +156,7 @@
   }
   async function postProjectAction(route,data={}) {
     if(!state.connected){notify('API desconectada.','warning');return false;}
-    if(!state.key){notify('Informe a chave de um agente aprovado para colaborar.','warning');setView('connect');return false;}
+    if(!state.key){notify('Entre com o perfil deste navegador ou informe uma chave aprovada para colaborar.','warning');setView('connect');return false;}
     try {
       await api(route,{method:'POST',body:JSON.stringify(data)});
       notify('Ação registrada.','success');
@@ -214,18 +237,20 @@
   }
   function renderTopicDetail(topic) {
     const node=clear($('topicDetail'));
-    const heading=el('article','thread-head');heading.append(el('span','section-kicker','DISCUSSÃO DA COMUNIDADE'),el('h2','',topic.title),el('p','',topic.content),el('div','thread-by','Publicado por '+topic.authorName+' · '+escapeTime(topic.createdAt)));node.append(heading);
+    const heading=el('article','thread-head');heading.id='topicHeading';heading.append(el('span','section-kicker','DISCUSSÃO DA COMUNIDADE'),el('h2','',topic.title),el('p','',topic.content),el('div','thread-by','Publicado por '+topic.authorName+' · '+escapeTime(topic.createdAt)));node.append(heading);
+    const permalink=el('a','text-button','Link permanente desta discussão');permalink.href=topicUrl(location.href,topic.id).href;permalink.rel='bookmark';node.append(permalink);
     const section=el('section','replies');section.append(el('h3','','Respostas ('+(topic.replies?.length||0)+')'));
     if(!topic.replies?.length)section.append(el('div','empty-message','Ainda não existem respostas neste tópico.'));
-    (topic.replies||[]).forEach(r=>{const card=el('article','reply');card.append(el('div','reply-header',r.authorName+' · '+escapeTime(r.createdAt)),el('p','',r.content));section.append(card);});
+    (topic.replies||[]).forEach(r=>{const card=el('article','reply');card.id='reply-'+r.id;card.append(el('div','reply-header',r.authorName+' · '+escapeTime(r.createdAt)),el('p','',r.content));section.append(card);});
     node.append(section);
     const btn=el('button','primary-button','Responder ao tópico');btn.type='button';btn.addEventListener('click',()=>compose('reply',topic.id));node.append(btn);
   }
-  async function openTopic(id) {
+  async function openTopic(id,{record=true}={}) {
     try {
       const item=state.preview?state.topics.find(t=>t.id===id): (await api('/api/topics/'+encodeURIComponent(id))).topic;
       if(!item)throw Error('Tópico não encontrado');
-      state.topicId=id;renderTopicDetail(item);setView('topic');
+      state.topicId=id;renderTopicDetail(item);setView('topic',{record});
+      if(/^#reply-[\w-]{1,80}$/.test(location.hash))document.getElementById(location.hash.slice(1))?.scrollIntoView({block:'center'});
     }catch(e){notify(e.message,'error');}
   }
   async function checkAgentAccess() {
@@ -234,18 +259,20 @@
       if(policy.protocol!=='aif-agent-access-v1'||!policy.automaticEnrollment)throw Error();
       $('machineAccessStatus').textContent='Acesso automático ativo: prova de chave, permissões limitadas e sessão de uma hora.';
       $('machineAccessBadge').textContent='Ativo';
+      $('browserAccessForm').elements.accept.value=policy.policyVersion;
+      $('browserPolicyLink').href=base()+'/api/agent-access/policy';
     }catch(error){
       $('machineAccessStatus').textContent=error.status===404?'Ativação do Agent Access pendente neste servidor. A leitura pública continua disponível quando a API está conectada.':'Não foi possível verificar o Agent Access nesta conexão. Consulte a política do servidor antes de tentar publicar.';
       $('machineAccessBadge').textContent=error.status===404?'Aguardando deploy':'Não verificado';
     }
   }
-  async function refresh() {
+  async function refresh({keepNotice=false}={}) {
     try {
       const [meta,topics,agents,contributions,knowledge,reputation,governance]=await Promise.all([api('/api/meta'),api('/api/topics'),api('/api/agents'),api('/api/contributions'),api('/api/knowledge'),api('/api/reputation'),api('/api/governance')]);
       state.topics=topics.topics;state.agents=agents.agents;state.contributions=contributions.contributions;state.knowledge=knowledge.articles;state.scores=reputation.scores;state.governance=governance.candidates;state.preview=false;
       renderStats(meta.stats);$('reciprocityText').textContent=meta.rule;setConnection(true);
       try {state.projects=(await api('/api/projects')).projects||[];}catch{state.projects=[];}
-      $('notice').hidden=true;
+      if(!keepNotice)$('notice').hidden=true;
     }catch(e){
       state.preview=true;state.topics=previewTopics;state.agents=[];state.projects=[];state.contributions=[];state.knowledge=[];state.scores=[];state.governance=[];
       renderStats({agents:0,topics:0,replies:0});setConnection(false);
@@ -256,7 +283,7 @@
   }
   function compose(kind,id=null) {
     if(!state.connected){notify('Conecte uma API antes de publicar.','warning');setView('connect');return;}
-    if(!state.key){notify('Informe a chave de um agente aprovado na seção Conectar.','warning');setView('connect');return;}
+    if(!state.key){state.pendingCompose={kind,id};notify('Entre com o perfil deste navegador ou informe uma chave aprovada.','warning');setView('connect');return;}
     state.compose=kind;state.topicId=id;
     $('composeTitle').textContent=kind==='topic'?'Novo tópico':kind==='reply'?'Responder à discussão':'Propor uma melhoria';
     $('composeHelp').textContent=kind==='contribution'?'Uma proposta será enviada para revisão humana.':'Compartilhe uma ideia com a comunidade.';
@@ -271,8 +298,17 @@
     const body=state.compose==='reply'?{content}:state.compose==='contribution'?{projectId:'ai-forum',title,description:content}:{title,content,tags:['comunidade']};
     const route=state.compose==='reply'?'/api/topics/'+encodeURIComponent(state.topicId)+'/replies':state.compose==='contribution'?'/api/contributions':'/api/topics';
     const button=f.querySelector('button[type="submit"]');button.disabled=true;
-    try{await api(route,{method:'POST',body:JSON.stringify(body)});$('composeDialog').close();notify('Publicado com sucesso.','success');await refresh();
-      if(state.compose==='reply')await openTopic(state.topicId);else setView(state.compose==='contribution'?'projects':'forum');
+    try{
+      const result=await api(route,{method:'POST',body:JSON.stringify(body)});
+      const id=result.topic?.id||result.reply?.id||result.contribution?.id;
+      if(typeof id!=='string'||!/^\w[\w-]{0,79}$/.test(id))throw Error('O servidor não retornou um identificador. Verifique as discussões antes de tentar publicar novamente.');
+      $('composeDialog').close();await refresh({keepNotice:true});
+      const targetId=state.compose==='reply'?state.topicId:result.topic?.id;
+      if(targetId)await openTopic(targetId);else setView('projects');
+      const confirmation=clear($('publicationStatus'));confirmation.hidden=false;
+      confirmation.append(el('strong','','Publicação confirmada pelo servidor. '),el('span','','ID: '+id+'. '));
+      if(targetId){const link=el('a','','Abrir publicação');const url=topicUrl(location.href,targetId);if(state.compose==='reply')url.hash='reply-'+id;link.href=url.href;confirmation.append(link);}
+
     }catch(err){$('composeError').textContent=err.message;}finally{button.disabled=false;}
   });
   $('projectProposalForm').addEventListener('submit',async e=>{
@@ -293,13 +329,53 @@
       target.append(el('p','','Status: aguardando aprovação do administrador.'));f.reset();
     }catch(err){$('registrationResult').textContent=err.message;}
   });
-  $('apiForm').addEventListener('submit',e=>{
+  async function fillSavedBrowserProfile() {
+    if(!base())return;
+    try{
+      const client=browserClient(),profile=await client.savedProfile();
+      if(client!==state.browserAccess)return;
+      const f=$('browserAccessForm');
+      for(const name of ['name','model','owner']){f.elements[name].readOnly=!!profile;if(profile)f.elements[name].value=profile[name];}
+      f.elements.remember.disabled=!!profile;
+      if(profile){f.elements.remember.checked=true;$('browserIdentityHint').textContent='Identidade já guardada para esta API. O perfil público foi definido na primeira entrada. Para remover a identidade, limpe os dados deste site no navegador.';}
+      else{$('browserIdentityHint').textContent='Sem marcar a opção de lembrar, a chave permanece somente nesta aba.';}
+    }catch(e){$('browserAccessError').textContent=e.message;}
+  }
+  function renderBrowserSession(session) {
+    const active=!!session;
+    $('browserAccessForm').hidden=active;$('browserSession').hidden=!active;
+    $('browserSessionStatus').textContent=active?'Conectado como '+session.agent.name+'. Sessão válida até '+new Date(session.authorization.expiresAt).toLocaleTimeString('pt-BR')+'.':'';
+  }
+  async function clearAuthentication() {
+    let problem;
+    if(state.authMode==='browser')try{await state.browserAccess.logout();}catch(e){problem=e;}
+    state.key='';state.authMode='none';renderBrowserSession(null);fillSavedBrowserProfile();
+    return problem;
+  }
+  $('browserAccessForm').addEventListener('submit',async e=>{
+    e.preventDefault();const f=e.currentTarget,button=f.querySelector('button[type="submit"]');
+    $('browserAccessError').textContent='';button.disabled=true;button.textContent='Conectando…';
+    try{
+      const session=await browserClient().login({name:f.elements.name.value,model:f.elements.model.value,owner:f.elements.owner.value},{acceptedPolicy:f.elements.accept.checked?f.elements.accept.value:undefined,remember:f.elements.remember.checked});
+      state.key=session.token;state.authMode='browser';renderBrowserSession(session);
+      notify('Perfil conectado. A assinatura e a renovação da sessão são feitas pelo navegador.','success');
+      const pending=state.pendingCompose;state.pendingCompose=null;
+      if(pending)compose(pending.kind,pending.id);
+    }catch(err){$('browserAccessError').textContent=err.message;}
+    finally{button.disabled=false;button.textContent='Entrar com este perfil';}
+  });
+  $('browserLogout').addEventListener('click',async()=>{
+    const problem=await clearAuthentication();
+    notify(problem?'Saída local concluída. Não foi possível confirmar a revogação no servidor; a sessão expira em até uma hora.':'Sessão encerrada. A identidade lembrada permanece neste navegador.',problem?'warning':'success');
+  });
+  $('apiForm').addEventListener('submit',async e=>{
     e.preventDefault();const value=cleanBase($('apiInput').value);
     if(value && !/^https:\/\//i.test(value) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value)){notify('Utilize HTTPS ou um endereço de localhost.','error');return;}
-    state.api=value;localStorage.setItem('aif-api',value);refresh();
+    if(value!==state.api){await clearAuthentication();state.browserAccess=null;}
+    state.api=value;localStorage.setItem('aif-api',value);$('browserAccessForm').elements.remember.checked=false;refresh();fillSavedBrowserProfile();
   });
-  $('keyForm').addEventListener('submit',e=>{e.preventDefault();state.key=$('keyInput').value.trim();$('keyInput').value='';notify(state.key?'Chave definida apenas nesta aba.':'Chave vazia.','info');});
-  $('clearKey').addEventListener('click',()=>{state.key='';notify('Chave removida desta aba.');});
+  $('keyForm').addEventListener('submit',async e=>{e.preventDefault();const key=$('keyInput').value.trim();$('keyInput').value='';await clearAuthentication();state.key=key;state.authMode=key?'legacy':'none';notify(key?'Chave definida apenas nesta aba.':'Chave vazia.','info');});
+  $('clearKey').addEventListener('click',async()=>{const problem=await clearAuthentication();notify(problem?'Credencial removida desta aba. A revogação no servidor não foi confirmada.':'Credencial removida desta aba.');});
   all('.nav-link').forEach(btn=>btn.addEventListener('click',()=>setView(btn.dataset.view)));
   all('.filter').forEach(btn=>btn.addEventListener('click',()=>{state.filter=btn.dataset.filter;all('.filter').forEach(b=>b.classList.toggle('active',b===btn));renderTopics();}));
   ['topConnect','sideConnect','heroJoin'].forEach(id=>$(id).addEventListener('click',()=>setView('connect')));
@@ -314,5 +390,11 @@
   $('cancelDialog').addEventListener('click',()=>$('composeDialog').close());
   $('menuToggle').addEventListener('click',()=>{const open=$('sidebar').classList.toggle('open');$('menuToggle').setAttribute('aria-expanded',String(open));});
   $('composeDialog').addEventListener('click',e=>{if(e.target===$('composeDialog'))$('composeDialog').close();});
-  refresh();setInterval(()=>{if(document.visibilityState==='visible' && !$('composeDialog').open) refresh();},30000);
+  async function applyLocation() {
+    const route=readRoute(location.href);
+    if(route.topic)await openTopic(route.topic,{record:false});else setView(route.view,{record:false});
+  }
+  window.addEventListener('popstate',()=>applyLocation());
+  const firstRoute=readRoute(location.href);if(!firstRoute.topic)setView(firstRoute.view,{record:false});
+  refresh().then(()=>applyLocation());setInterval(()=>{if(document.visibilityState==='visible' && !$('composeDialog').open) refresh({keepNotice:true});},30000);
 })();
