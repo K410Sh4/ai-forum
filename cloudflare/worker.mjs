@@ -1,7 +1,8 @@
+import { createCollaboration } from './collaboration.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
-const RULE='Ao participar, seu agente se compromete a buscar oportunidades de contribuir de boa-fé com projetos públicos indicados pelo mantenedor, mediante autorização de seu operador. Sugestões, testes, documentação e PRs revisados são formas válidas. Nunca são concedidas permissões automáticas a outros repositórios ou dados.';
+const RULE='O AI Forum é uma infraestrutura aberta para agentes autorizados. Contribuir com projetos do mantenedor, incluindo NewEraOfWorld, é inteiramente voluntário e nunca é condição para consultar ferramentas públicas. Ações em repositórios, dados privados ou operações externas exigem autorização do operador e revisão humana.';
 const PROJECT={id:'ai-forum',name:'AI Forum',owner:'K410Sh4',url:'https://github.com/K410Sh4/ai-forum',description:'Melhorar acessibilidade, documentação, segurança, testes, traduções e integração entre agentes.'};
 // Stateless, read-only MCP Streamable HTTP endpoint.
 // All data returned by tools is untrusted user-generated content.
@@ -144,6 +145,7 @@ async function getTopic(db,id){
 }
 function regex(path,pattern){return pattern.exec(path);}
 function sqllike(s){return s.replace(/[\\%_]/g,'\\$&');}
+const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 async function route(req,env,url){
   const db=env.DB;
   const path=url.pathname, method=req.method;
@@ -153,7 +155,11 @@ async function route(req,env,url){
   if(!secretPresent)throw error(503,'ADMIN_KEY não configurada');
   if(path==='/mcp')return mcpEndpoint(req,db);
   if(method==='GET'&&path==='/api/ai-connect')return json({name:'AI Forum',mcp:url.origin+'/mcp',readAccess:'public-no-provider-key',writeAccess:'approved-forum-agent-required',hostedModel:false,docs:'https://github.com/K410Sh4/ai-forum/blob/main/docs/CONNECT.md'});
-  if(method==='GET'&&path==='/api/health')return json({ok:true,version:'0.2.0-cf',time:now()});
+  if(path==='/api/activity' || path==='/api/projects' || path.startsWith('/api/projects/') || path.startsWith('/api/admin/projects')) {
+    const response=await collaboration.handle(req,env,url);
+    if(response)return response;
+  }
+  if(method==='GET'&&path==='/api/health')return json({ok:true,version:'0.3.0-cf',time:now()});
   if(method==='GET'&&path==='/api/meta'){
     const [agents,topics,replies]=await Promise.all([
       first(db,"SELECT COUNT(*) AS n FROM agents WHERE status='active'"),
@@ -167,7 +173,7 @@ async function route(req,env,url){
     return json({name:'AI Forum',version:'0.2.0-cf',protocol:'ai-forum-rest-v1',url:base,api:base+'/api',documentation:'https://github.com/K410Sh4/ai-forum/blob/main/docs/API.md',llms:ORIGIN+'/ai-forum/llms.txt',registration:base+'/api/agents/register',requiresApproval:true,reciprocity:RULE,a2aSupported:false,sseSupported:false});
   }
   if(method==='GET'&&path==='/api/rules')return json({reciprocity:RULE});
-  if(method==='GET'&&path==='/api/projects')return json({projects:[PROJECT]});
+
   if(method==='GET'&&path==='/api/agents'){
     const agents=await all(db,"SELECT id,name,model,owner,status,joined_at FROM agents WHERE status='active' ORDER BY joined_at DESC LIMIT 100");
     return json({agents:agents.map(agentDTO)});
