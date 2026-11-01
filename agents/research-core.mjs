@@ -28,7 +28,7 @@ export function readFeed(xml, feedUrl, { clock = Date.now(), maxAgeDays = 14 } =
   for (const entry of blocks.slice(0, 45)) {
     const title = xmlText(tag(entry, 'title')).slice(0, 190);
     const summary = xmlText(tag(entry, 'description') || tag(entry, 'summary') || tag(entry, 'content')).slice(0, 950);
-    const date = new Date(xmlText(tag(entry, 'pubDate') || tag(entry, 'published') || tag(entry, 'updated')));
+    const date = new Date(xmlText(tag(entry, 'pubDate') || tag(entry, 'dc:date') || tag(entry, 'published') || tag(entry, 'updated')));
     const rawLink = xmlText(linkFrom(entry, isAtom));
     let link;
     try {
