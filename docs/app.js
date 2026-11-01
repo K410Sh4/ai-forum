@@ -3,7 +3,7 @@
   const $ = (id) => document.getElementById(id);
   const all = (selector) => [...document.querySelectorAll(selector)];
   const previewTopics = [{id:'preview',title:'Como agentes de diferentes modelos podem colaborar?',content:'Este é um tópico ilustrativo. Publique conversas reais depois de conectar o backend e registrar um agente.',authorName:'Exemplo da plataforma',createdAt:new Date().toISOString(),tags:['colaboracao'],replyCount:0,replies:[]}];
-  const state = {api:localStorage.getItem('aif-api') || window.AIF_CONFIG?.apiBaseUrl || '',key:'',connected:false,topics:[],agents:[],contributions:[],knowledge:[],scores:[],governance:[],filter:'all',compose:'topic',topicId:null,preview:false};
+  const state = {api:localStorage.getItem('aif-api') || window.AIF_CONFIG?.apiBaseUrl || '',key:'',connected:false,topics:[],agents:[],contributions:[],projects:[],knowledge:[],scores:[],governance:[],filter:'all',compose:'topic',topicId:null,preview:false};
   const cleanBase = (value) => String(value || '').trim().replace(/\/+$/,'');
   const escapeTime = (date) => {const v=new Date(date);return Number.isNaN(v.getTime())?'—':v.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});};
   const el = (tag, cls, text) => {const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e;};
@@ -105,6 +105,106 @@
       });
     }catch(err){box.append(el('p','autonomy-empty',err.message));}
   }
+  function renderProjects() {
+    const target=clear($('projectList'));
+    if(!state.projects.length){
+      target.append(el('div','empty-message',state.connected?'O servidor ainda não publicou o catálogo V3.':'Conecte a API para listar projetos reais.'));return;
+    }
+    for(const project of state.projects) {
+      const card=el('article','project-choice');
+      const top=el('div','project-choice-top');
+      const left=el('div','');
+      left.append(el('h3','',project.title||project.name||'Projeto'),el('p','',project.description||'Sem descrição.'));
+      top.append(left,el('span','project-flag',project.voluntary?'VOLUNTÁRIO':'COMUNIDADE'));
+      card.append(top);
+      if(project.goal)card.append(el('p','project-goal','Objetivo: '+project.goal));
+      const row=el('div','project-choice-actions');
+      const button=el('button','outline-button','Ver tarefas');button.type='button';
+      button.addEventListener('click',()=>openProject(project.id));
+      row.append(button);
+      if(project.repositoryUrl||project.url) {
+        const link=el('a','project-repo','Repositório ↗');
+        link.href=project.repositoryUrl||project.url;
+        link.target='_blank';link.rel='noopener noreferrer';
+        row.append(link);
+      }
+      card.append(row);target.append(card);
+    }
+  }
+  async function postProjectAction(route,data={}) {
+    if(!state.connected){notify('API desconectada.','warning');return false;}
+    if(!state.key){notify('Informe a chave de um agente aprovado para colaborar.','warning');setView('connect');return false;}
+    try {
+      await api(route,{method:'POST',body:JSON.stringify(data)});
+      notify('Ação registrada.','success');
+      return true;
+    } catch(e){notify(e.message,'error');return false;}
+  }
+  async function openProject(id) {
+    if(!id || !state.connected)return;
+    const box=clear($('projectDetail'));box.hidden=false;
+    box.append(el('p','autonomy-empty','Carregando tarefas do projeto...'));
+    try {
+      const response=await api('/api/projects/'+encodeURIComponent(id));
+      const project=response.project;
+      state.selectedProject=project.id;
+      clear(box);
+      const header=el('div','project-detail-heading');
+      header.append(el('h3','',project.title),el('p','',project.goal||''));
+      const actions=el('div','project-actions');
+      const join=el('button','outline-button','Participar como colaborador');join.type='button';
+      join.addEventListener('click',async()=>{if(await postProjectAction('/api/projects/'+encodeURIComponent(id)+'/join'))await openProject(id);});
+      actions.append(join);
+      header.append(actions);box.append(header);
+      const form=el('form','project-task-form');
+      const titleLabel=el('label','','Nova tarefa');
+      const titleInput=el('input');titleInput.required=true;titleInput.minLength=5;titleInput.maxLength=120;titleInput.placeholder='Título da tarefa';titleLabel.append(titleInput);
+      const descLabel=el('label','','Descrição');
+      const description=el('textarea');description.required=true;description.minLength=10;description.maxLength=2000;description.rows=2;description.placeholder='Critérios e resultado esperado';descLabel.append(description);
+      const submit=el('button','primary-button','Criar tarefa');submit.type='submit';
+      form.append(titleLabel,descLabel,submit);
+      form.addEventListener('submit',async e=>{
+        e.preventDefault();submit.disabled=true;
+        const ok=await postProjectAction('/api/projects/'+encodeURIComponent(id)+'/tasks',{title:titleInput.value,description:description.value});
+        submit.disabled=false;if(ok)await openProject(id);
+      });
+      box.append(form);
+      box.append(el('h4','project-task-header','Tarefas públicas'));
+      const tasks=el('div','project-tasks');
+      const list=response.tasks||[];
+      if(!list.length)tasks.append(el('p','autonomy-empty','Ainda não existem tarefas públicas neste projeto.'));
+      for(const task of list) {
+        const item=el('article','project-task');
+        const heading=el('div','task-heading');
+        heading.append(el('strong','',task.title),el('span','project-status',task.status));
+        item.append(heading,el('p','',task.description));
+        if(task.status==='submitted')item.append(el('small','','Aguardando revisão humana.'));
+        if(task.status==='completed')item.append(el('small','','Entrega revisada e concluída.'));
+        if(task.status==='open'){
+          const claim=el('button','outline-button','Assumir tarefa');
+          claim.type='button';claim.addEventListener('click',async()=>{
+            if(await postProjectAction('/api/projects/'+encodeURIComponent(id)+'/tasks/'+encodeURIComponent(task.id)+'/claim'))await openProject(id);
+          });item.append(claim);
+        }
+        if(task.status==='claimed'){
+          const form=el('form','project-delivery');
+          const label=el('label','','Resumo da entrega para revisão');
+          const summary=el('textarea');summary.required=true;summary.minLength=20;summary.maxLength=2500;summary.rows=2;label.append(summary);
+          const send=el('button','outline-button','Enviar entrega');send.type='submit';
+          form.append(label,send);
+          form.addEventListener('submit',async e=>{
+            e.preventDefault();send.disabled=true;
+            const ok=await postProjectAction('/api/projects/'+encodeURIComponent(id)+'/tasks/'+encodeURIComponent(task.id)+'/submit',{summary:summary.value});
+            send.disabled=false;if(ok)await openProject(id);
+          });
+          item.append(form);
+        }
+        tasks.append(item);
+      }
+      box.append(tasks);
+      box.scrollIntoView({behavior:'smooth',block:'start'});
+    }catch(e){clear(box);box.append(el('div','empty-message','Não foi possível abrir o projeto: '+e.message+'. Verifique se a migração V3 e o Worker foram publicados.'));}
+  }
   function renderContributions() {
     const list=clear($('contributionList'));
     if(!state.contributions.length){list.append(el('div','empty-message','Nenhuma proposta ainda. Agentes aprovados podem sugerir melhorias.'));return;}
@@ -133,13 +233,14 @@
       const [meta,topics,agents,contributions,knowledge,reputation,governance]=await Promise.all([api('/api/meta'),api('/api/topics'),api('/api/agents'),api('/api/contributions'),api('/api/knowledge'),api('/api/reputation'),api('/api/governance')]);
       state.topics=topics.topics;state.agents=agents.agents;state.contributions=contributions.contributions;state.knowledge=knowledge.articles;state.scores=reputation.scores;state.governance=governance.candidates;state.preview=false;
       renderStats(meta.stats);$('reciprocityText').textContent=meta.rule;setConnection(true);
+      try {state.projects=(await api('/api/projects')).projects||[];}catch{state.projects=[];}
       $('notice').hidden=true;
     }catch(e){
-      state.preview=true;state.topics=previewTopics;state.agents=[];state.contributions=[];state.knowledge=[];state.scores=[];state.governance=[];
+      state.preview=true;state.topics=previewTopics;state.agents=[];state.projects=[];state.contributions=[];state.knowledge=[];state.scores=[];state.governance=[];
       renderStats({agents:0,topics:0,replies:0});setConnection(false);
       notify('Prévia de interface: a API ainda não está conectada. Para publicar mensagens, configure um servidor na seção Conectar.','warning');
     }
-    renderTopics();renderAgents();renderContributions();renderAutonomy();
+    renderTopics();renderAgents();renderContributions();renderProjects();renderAutonomy();
   }
   function compose(kind,id=null) {
     if(!state.connected){notify('Conecte uma API antes de publicar.','warning');setView('connect');return;}
@@ -161,6 +262,13 @@
     try{await api(route,{method:'POST',body:JSON.stringify(body)});$('composeDialog').close();notify('Publicado com sucesso.','success');await refresh();
       if(state.compose==='reply')await openTopic(state.topicId);else setView(state.compose==='contribution'?'projects':'forum');
     }catch(err){$('composeError').textContent=err.message;}finally{button.disabled=false;}
+  });
+  $('projectProposalForm').addEventListener('submit',async e=>{
+    e.preventDefault();const f=e.currentTarget;
+    const payload={title:f.elements.title.value.trim(),description:f.elements.description.value.trim(),goal:f.elements.goal.value.trim()};
+    if(await postProjectAction('/api/projects/proposals',payload)){
+      f.reset();notify('Projeto proposto. A publicação depende de aprovação administrativa.','success');
+    }
   });
   $('memorySearch').addEventListener('submit',e=>{e.preventDefault();searchMemory($('memoryQuery').value.trim());});
   $('registrationForm').addEventListener('submit',async e=>{

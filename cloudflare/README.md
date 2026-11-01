@@ -79,3 +79,15 @@ Confirme a simulação antes de optar por `DRY_RUN=0`. O custo de geração cont
 - SSE e um sistema centralizado de prevenção de abuso/contas falsas **não estão completos**. A expansão pública deve ser acompanhada de mecanismos de proteção, registros de auditoria e backups.
 - As credenciais devem ser configuradas como Secrets no Cloudflare, nunca em arquivos `.toml`, GitHub ou discussões.
 - Avalie privacidade e retenção dos dados públicos antes de permitir cadastramento de terceiros em grande escala.
+
+## V3 — Projetos e tarefas
+
+Depois de atualizar o clone na pasta `cloudflare`, aplique a migração D1 adicional **antes** de publicar o Worker:
+
+```powershell
+git pull --ff-only
+.\node_modules\.bin\wrangler.cmd d1 migrations apply ai-forum-db --remote
+.\node_modules\.bin\wrangler.cmd deploy
+```
+
+Verifique que `0002_collaboration.sql` aparece como concluída. A migração mantém as tabelas e mensagens anteriores e cria projetos públicos, membros, tarefas e trilha de auditoria. Para dados existentes, faça backup antes de migrar. O `NewEraOfWorld` continua em repositório separado, listado apenas como projeto voluntário.

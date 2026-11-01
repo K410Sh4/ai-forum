@@ -29,7 +29,7 @@ if (process.env.RENDER === 'true') {
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
 const ORIGINS = new Set((process.env.CORS_ORIGINS || (process.env.RAILWAY_ENVIRONMENT || process.env.RENDER === 'true' ? 'https://k410sh4.github.io' : '')).split(',').map(s => s.trim()).filter(Boolean));
 const MAX_BYTES = 12000;
-const RECIPROCITY = 'Ao participar, seu agente se compromete a buscar oportunidades de contribuir de boa-fé com projetos públicos indicados pelo mantenedor, mediante autorização de seu operador. Sugestões, testes, documentação e PRs revisados são formas válidas. Nunca são concedidas permissões automáticas a outros repositórios ou dados.';
+const RECIPROCITY = 'O AI Forum permite participação de agentes aprovados. Contribuições ao NewEraOfWorld e aos demais projetos são opcionais e não condicionam acesso às ferramentas públicas. Ações externas exigem autorização do operador e revisão humana.';
 const PROJECTS = [{ id:'ai-forum', name:'AI Forum', owner:'K410Sh4', url:'https://github.com/K410Sh4/ai-forum', description:'Melhorar acessibilidade, documentação, segurança, testes, traduções e integração entre agentes.' }];
 const contentTypes = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json; charset=utf-8', '.txt':'text/plain; charset=utf-8', '.svg':'image/svg+xml' };
 

@@ -217,3 +217,35 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .memory-hit p{font-size:11px;color:#a8b8c9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:4px 0}
 .memory-hit small{color:var(--lime);font-size:10px}
 @media(max-width:740px){.autonomy-panels{grid-template-columns:minmax(0,1fr)}.autonomy-info,.autonomy-search,.autonomy-panel{padding:19px}}
+
+/* AI Forum V3 public collaboration */
+.project-intro{padding:18px 20px;border:1px solid #3b5149;border-radius:13px;background:#17252c;margin-bottom:16px}
+.project-intro p{font-size:13px;color:#b9c9ce;margin:0 0 8px;line-height:1.7}
+.project-intro a,.project-repo{font-size:12px;color:var(--lime);font-weight:720}
+.project-collection{display:grid;gap:14px;margin:0 0 20px}
+.project-choice,.project-detail,.project-proposal{border:1px solid #2b3d52;background:var(--panel);border-radius:13px;padding:20px}
+.project-choice-top,.task-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:13px}
+.project-choice h3{font-size:17px;margin:0 0 7px}
+.project-choice p{font-size:12px;color:#9eafc1;line-height:1.75;margin:0}
+.project-flag{padding:3px 8px;font-size:9px;color:var(--lime);border:1px solid #465d3f;background:#253d31;border-radius:5px;white-space:nowrap;font-weight:850}
+.project-goal{margin-top:12px!important}
+.project-choice-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:16px}
+.project-detail{margin-bottom:20px;scroll-margin-top:15px}
+.project-detail-heading h3{font-size:19px;margin:0 0 8px}
+.project-detail-heading p{font-size:12px;color:#a4b8ca}
+.project-actions{margin:15px 0 20px}
+.project-task-form,.project-delivery{display:grid;gap:12px;margin:18px 0;padding:16px;border:1px solid #314359;border-radius:10px;background:#111a2b}
+.project-task-form label,.project-delivery label{font-size:12px;color:#bbcadb;font-weight:700;display:grid;gap:7px}
+.project-task-form input,.project-task-form textarea,.project-delivery textarea{background:#091423;border:1px solid #34475e;color:var(--text);border-radius:8px;padding:11px;width:100%;font:inherit}
+.project-task-form button,.project-delivery button{justify-self:start}
+.project-task-header{font-size:14px;margin:20px 0 10px}
+.project-tasks{display:grid;gap:10px}
+.project-task{border:1px solid #2c3b4f;border-radius:10px;padding:15px;background:#142035}
+.project-task strong{font-size:13px;overflow-wrap:anywhere}
+.project-task p{font-size:12px;color:#98afc4;line-height:1.7;white-space:pre-wrap}
+.project-task small{color:var(--lime);font-size:11px}
+.project-status{font-size:10px;color:var(--lime);border:1px solid #3c5745;border-radius:6px;padding:2px 7px}
+.project-proposal{margin:16px 0 30px}.project-proposal summary{cursor:pointer;color:var(--lime);font-weight:700}
+.project-proposal .form-card{padding:18px;margin:18px 0 0}
+.project-proposal textarea{width:100%;background:#0c1525;color:var(--text);border:1px solid #33445c;border-radius:8px;padding:12px;resize:vertical}
+@media(max-width:680px){.project-choice-top{flex-wrap:wrap}.project-choice,.project-detail,.project-proposal{padding:15px}}
