@@ -1,5 +1,6 @@
 import { BrowserAccess } from './browser-access.js';
 import { readRoute, topicUrl } from './navigation.js';
+import { mountPeerReview } from './peer-review.js';
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -238,11 +239,13 @@ import { readRoute, topicUrl } from './navigation.js';
   function renderTopicDetail(topic) {
     const node=clear($('topicDetail'));
     const heading=el('article','thread-head');heading.id='topicHeading';heading.append(el('span','section-kicker','DISCUSSÃO DA COMUNIDADE'),el('h2','',topic.title),el('p','',topic.content),el('div','thread-by','Publicado por '+topic.authorName+' · '+escapeTime(topic.createdAt)));node.append(heading);
+    const topicReview=el('div','peer-slot');topicReview.dataset.targetKind='topic';topicReview.dataset.targetId=topic.id;node.append(topicReview);
     const permalink=el('a','text-button','Link permanente desta discussão');permalink.href=topicUrl(location.href,topic.id).href;permalink.rel='bookmark';node.append(permalink);
     const section=el('section','replies');section.append(el('h3','','Respostas ('+(topic.replies?.length||0)+')'));
     if(!topic.replies?.length)section.append(el('div','empty-message','Ainda não existem respostas neste tópico.'));
-    (topic.replies||[]).forEach(r=>{const card=el('article','reply');card.id='reply-'+r.id;card.append(el('div','reply-header',r.authorName+' · '+escapeTime(r.createdAt)),el('p','',r.content));section.append(card);});
+    (topic.replies||[]).forEach(r=>{const card=el('article','reply');card.id='reply-'+r.id;card.append(el('div','reply-header',r.authorName+' · '+escapeTime(r.createdAt)),el('p','',r.content));const reviewSlot=el('div','peer-slot');reviewSlot.dataset.targetKind='reply';reviewSlot.dataset.targetId=r.id;card.append(reviewSlot);section.append(card);});
     node.append(section);
+    const guestReply=el('a','outline-button','Responder como visitante (sem cadastro)');guestReply.href='./visitor.html?topic='+encodeURIComponent(topic.id);node.append(guestReply);
     const btn=el('button','primary-button','Responder ao tópico');btn.type='button';btn.addEventListener('click',()=>compose('reply',topic.id));node.append(btn);
   }
   async function openTopic(id,{record=true}={}) {
@@ -250,6 +253,18 @@ import { readRoute, topicUrl } from './navigation.js';
       const item=state.preview?state.topics.find(t=>t.id===id): (await api('/api/topics/'+encodeURIComponent(id))).topic;
       if(!item)throw Error('Tópico não encontrado');
       state.topicId=id;renderTopicDetail(item);setView('topic',{record});
+      if(!state.preview){
+        try {
+          const review=await api('/api/topics/'+encodeURIComponent(id)+'/peer-review');
+          if(state.topicId!==id)return;
+          document.querySelectorAll('#topicDetail .peer-slot').forEach(slot=>{
+            mountPeerReview(slot,{topicId:id,targetKind:slot.dataset.targetKind,targetId:slot.dataset.targetId,
+              review,apiBase:base(),
+              getKey:async()=>state.authMode==='browser'?browserClient().token():state.key,
+              reload:async()=>openTopic(id,{record:false}),connect:()=>setView('connect')});
+          });
+        }catch(err){const hint=el('p','peer-status','Revisões indisponíveis neste servidor. '+err.message);$('topicDetail').append(hint);}
+      }
       if(/^#reply-[\w-]{1,80}$/.test(location.hash))document.getElementById(location.hash.slice(1))?.scrollIntoView({block:'center'});
     }catch(e){notify(e.message,'error');}
   }
@@ -283,7 +298,7 @@ import { readRoute, topicUrl } from './navigation.js';
   }
   function compose(kind,id=null) {
     if(!state.connected){notify('Conecte uma API antes de publicar.','warning');setView('connect');return;}
-    if(!state.key){state.pendingCompose={kind,id};notify('Entre com o perfil deste navegador ou informe uma chave aprovada.','warning');setView('connect');return;}
+    if(!state.key){if(kind==='topic'||kind==='reply'){location.href='./visitor.html'+(kind==='reply'?'?topic='+encodeURIComponent(id):'');return;}state.pendingCompose={kind,id};notify('Entre com um perfil autorizado para criar propostas.','warning');setView('connect');return;}
     state.compose=kind;state.topicId=id;
     $('composeTitle').textContent=kind==='topic'?'Novo tópico':kind==='reply'?'Responder à discussão':'Propor uma melhoria';
     $('composeHelp').textContent=kind==='contribution'?'Uma proposta será enviada para revisão humana.':'Compartilhe uma ideia com a comunidade.';
