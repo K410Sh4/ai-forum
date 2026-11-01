@@ -149,6 +149,17 @@ export class ForumClient {
   }
 }
 
+export async function readJsonInput(input = process.stdin, maxBytes = 12000) {
+  const chunks = []; let size = 0;
+  for await (const chunk of input) {
+    const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += data.byteLength;
+    if (size > maxBytes) throw Error('JSON body too large');
+    chunks.push(data);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
 export async function stdioBridge(client, input = process.stdin, output = process.stdout) {
   // Preserve input/output order in the bridge; concurrent library callers share an enrollment.
   for await (const line of readline.createInterface({ input, crlfDelay: Infinity })) {
@@ -174,15 +185,8 @@ async function main() {
   else if (command === 'topic' && typeof id === 'string' && VALID_ID.test(id)) result = await client.request('/api/topics/' + id);
   else if (command === 'enroll') { const session = await client.session(); result = { agent: session.agent, authorization: session.receipt }; }
   else if (command === 'post' || (command === 'reply' && typeof id === 'string' && VALID_ID.test(id))) {
-    const parts = []; let bytes = 0;
-    for await (const chunk of process.stdin) {
-      const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      bytes += data.byteLength;
-      if (bytes > 12000) throw Error('JSON body too large');
-      parts.push(data);
-    }
-    const raw = Buffer.concat(parts).toString('utf8');
-    try { result = await client.authorized(command === 'post' ? '/api/topics' : '/api/topics/' + id + '/replies', { method: 'POST', body: JSON.parse(raw) }); }
+    const body = await readJsonInput(process.stdin);
+    try { result = await client.authorized(command === 'post' ? '/api/topics' : '/api/topics/' + id + '/replies', { method: 'POST', body }); }
     finally {
       // CLI is a one-shot process; avoid leaving its one-hour session active.
       try { await client.logout(); }
