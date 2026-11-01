@@ -51,7 +51,9 @@ export class OllamaResearcher {
           this.validationTrace.push({ stage, attempt: attempt + 1, error: error.message, output: output.slice(0, 12000) });
           this.validationTrace = this.validationTrace.slice(-8);
         }
-        correction = '\nCorrija a tentativa anterior: ' + error.message.slice(0, 220) + '. Reescreva frases curtas e completas com pontuação final; não corte palavras. Mantenha os campos e as referências válidos.';
+        correction = stage === 'plan'
+          ? '\nCorrija o planejamento anterior: ' + error.message.slice(0, 220) + '. Use kind=analysis ou kind=roundup. O campo angle deve ser uma frase em português de 20 a 180 caracteres, sem URLs, quebras de linha ou caracteres de controle; não enumere links e não remova fontes.'
+          : '\nCorrija a tentativa anterior: ' + error.message.slice(0, 220) + '. Reescreva frases curtas e completas com pontuação final; não corte palavras. Mantenha os campos e as referências válidos.';
         if (attempt + 1 === this.config.modelAttempts) throw Error(stage + ': ' + error.message);
       }
     }
@@ -75,10 +77,24 @@ export class OllamaResearcher {
     this.metrics = []; this.reviewTrace = []; this.validationTrace = []; this.deadline = this.clock() + 15 * 60000;
     requireDiversity(sources);
     const planSchema = object({ kind: { type: 'string', enum: ['analysis', 'roundup'] }, angle: text(20, 180) });
-    const plan = await this.ask('plan', planSchema, { task: 'Escolha um recorte útil que contemple TODAS as fontes fornecidas. O programa já selecionou publicadores distintos. Use analysis somente quando as evidências forem relacionadas; caso contrário, faça um panorama roundup que preserve as diferenças entre as notícias, sem inventar conexões ou confirmação independente. Não escolha nem remova IDs de fontes.', theme: topic.label, candidates: sources.map(s => ({ id: s.id, publisher: s.publisherId || s.host, title: s.title, summary: s.summary.slice(0, 450) })) }, value => {
+    let plan;
+    try { plan = await this.ask('plan', planSchema, { task: 'Escolha um recorte útil que contemple TODAS as fontes fornecidas. O programa já selecionou publicadores distintos. Use analysis somente quando as evidências forem relacionadas; caso contrário, faça um panorama roundup que preserve as diferenças entre as notícias, sem inventar conexões ou confirmação independente. Não escolha nem remova IDs de fontes.', theme: topic.label, candidates: sources.map(s => ({ id: s.id, publisher: s.publisherId || s.host, title: s.title, summary: s.summary.slice(0, 450) })) }, value => {
       if (!['analysis', 'roundup'].includes(value.kind)) throw Error('Invalid research format');
-      return { kind: value.kind, angle: prose(value.angle, 20, 180), sourceIds: sources.map(s => s.id) };
-    });
+      return { kind: value.kind, angle: prose(value.angle, 20, 180, 'plan angle'), sourceIds: sources.map(s => s.id), planningMode: 'model' };
+    }); }
+    catch (error) {
+      // The plan is only an editorial framing choice. If both model attempts return an
+      // invalid kind/angle, use a transparent, non-assertive panorama. Never swallow
+      // JSON, timeout, transport, source-diversity, or evidence-validation failures.
+      if (!/^plan: (Invalid plan angle \(|Invalid research format$)/.test(error.message)) throw error;
+      this.log('Qwen: plano inválido em duas tentativas; usando panorama editorial conservador. Fontes e revisão continuam obrigatórias.');
+      plan = {
+        kind: 'roundup',
+        angle: 'Panorama das notícias selecionadas, com evidências, diferenças e limites de cada publicação.',
+        sourceIds: sources.map(s => s.id),
+        planningMode: 'deterministic-format-fallback'
+      };
+    }
     const selected = sources;
     const cards = [];
     for (const source of selected) {

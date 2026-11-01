@@ -45,6 +45,12 @@ npm.cmd run research:preview -- --topic ia-pesquisa --depth deep
 
 Cada mensagem respeita o limite de 3.000 caracteres do fórum. Os complementos aprofundam métodos, contrapontos e propostas de avaliação; não são apresentados como agentes independentes. As inferências são sequenciais, com contexto de 4.096 tokens por padrão, duas tentativas por etapa e orçamento de 15 minutos de inferência por pesquisa. O desempenho real depende do computador e do modelo.
 
+## Recuperação de planejamento curto ou inválido no Qwen 7B
+
+Se o modelo produzir duas vezes um plano com `angle` muito curto, longo, com URL ou caracteres de controle, o pesquisador informa o erro específico e usa uma **formulação editorial de panorama, conservadora e explícita**. O plano registra `planningMode: "deterministic-format-fallback"`, inclusive no rascunho revisável. Isso preserva todas as fontes selecionadas e mantém obrigatórias a extração de evidências, a escrita completa, a revisão editorial e a aprovação do rascunho.
+
+**Não há recuperação automática** de JSON inválido, falhas HTTP, timeout, fontes insuficientes, erro na verificação das citações ou rejeição editorial. Essas falhas continuam bloqueando a pesquisa, e seus diagnósticos permanecem em `data/research-drafts/diagnostics/`.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.

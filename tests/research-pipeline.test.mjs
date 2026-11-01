@@ -25,7 +25,7 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, brokenDrafts = 0, criticRejects = 0, criticAdvice = false, idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, criticRejects = 0, criticAdvice = false, idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   let now = NOW, criticCalls = 0, writeCalls = 0, draftCalls = 0;
@@ -41,7 +41,7 @@ function fixture(t, { depth = 'balanced', invalidModel = false, brokenDrafts = 0
     const input = JSON.parse(prompt.slice(0, prompt.indexOf('\nEsquema:'))), properties = body.format.properties;
     assert.equal(body.format.type, 'object'); assert.equal(body.tools, undefined); assert.match(body.messages[0].content, /NÃO CONFIÁVEIS/);
     let value, stage;
-    if (properties.angle) { stage = 'plan'; assert.equal(properties.sourceIds, undefined); value = { kind: 'roundup', angle: 'Comparar limites e aplicações dos estudos relatados' }; }
+    if (properties.angle) { stage = 'plan'; assert.equal(properties.sourceIds, undefined); value = { kind: 'roundup', angle: badPlan === 'short' ? 'Curto' : badPlan === 'url' ? 'Confira https://example.com para todas as referências deste estudo' : 'Comparar limites e aplicações dos estudos relatados' }; }
     else if (properties.facts) { stage = 'card'; assert.equal(properties.facts.items.properties.quote, undefined); value = { summary: 'O relatório descreve uma comparação controlada com alcance limitado ao cenário avaliado.', facts: [{ statement: 'O relatório apresenta uma comparação de comportamento em condições determinadas.', evidenceId: input.collectedEvidence[0].id }], limitations: 'O resumo não estabelece generalização para outros cenários.' }; }
     else if (properties.overview) {
       stage = 'draft'; assert.equal(properties.sourceIds, undefined); assert.equal(properties.findings, undefined);
@@ -251,6 +251,33 @@ test('cancelling the known 0.5.3 enrollment failure preserves the draft without 
   assert.equal(fs.existsSync(preview.file), true); assert.equal(state.cancelledDrafts[0].id, readJSON(preview.file).id);
   await assert.rejects(f.engine.publish(preview.file, preview.hash), /cancelled/); assert.equal(f.writeCalls, 0);
   assert.equal((await f.engine.generate()).status, 'draft');
+});
+test('two invalid Qwen plan angles use an explicit conservative panorama without bypassing source checks or human preview', async t => {
+  const f = fixture(t, { badPlan: 'short' });
+  const preview = await f.engine.generate({ auto: false, depth: 'quick' });
+  assert.equal(preview.status, 'draft');
+  assert.equal(f.calls.filter(c => c.stage === 'plan').length, 2, 'Qwen receives two chances to correct its plan');
+  const draft = readJSON(preview.file);
+  assert.equal(draft.schemaVersion, 3);
+  assert.equal(draft.plan.kind, 'roundup');
+  assert.equal(draft.plan.planningMode, 'deterministic-format-fallback');
+  assert.deepEqual(draft.plan.sourceIds, ['S1', 'S2']);
+  assert.match(draft.plan.angle, /Panorama das notícias selecionadas/);
+  assert.equal(f.model.validationTrace.length, 2, 'the rejected model text remains visible in local diagnostics');
+  assert.equal(f.calls.filter(c => c.stage === 'card').length, 2);
+  assert.equal(f.calls.filter(c => c.stage === 'review').length, 1);
+  assert.equal(f.topics.length, 0);
+  assert.equal(f.writeCalls, 0, 'preview never writes to the forum');
+});
+test('URL in Qwen planning angle is rejected and the safe fallback preserves evidence review', async t => {
+  const f = fixture(t, { badPlan: 'url' });
+  const preview = await f.engine.generate({ auto: false, depth: 'quick' });
+  assert.equal(preview.status, 'draft');
+  const draft = readJSON(preview.file);
+  assert.equal(draft.plan.planningMode, 'deterministic-format-fallback');
+  assert.equal(f.calls.filter(c => c.stage === 'plan').length, 2);
+  assert.equal(f.calls.filter(c => c.stage === 'review').length, 1);
+  assert.equal(f.writeCalls, 0);
 });
 test('invalid model JSON propagates as a failure and releases the lock', async t => {
   const f = fixture(t, { invalidModel: true });
