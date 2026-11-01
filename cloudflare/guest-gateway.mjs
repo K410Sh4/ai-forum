@@ -57,7 +57,7 @@ export function createGuestGateway({ all, first, run, json, requireAdmin, emit, 
     if (!result.meta?.changes) err(429, 'Limite de envios atingido. Tente mais tarde.');
     if (wantHtmlRedirect(req)) return new Response(null, {
       status: 303,
-      headers: { Location: PORTAL + '?status=queued', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }
+      headers: { Location: 'https://k410sh4.github.io/ai-forum/visitor-received.html', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }
     });
     return json({ submission: { id, status: 'pending', kind, receivedAt: createdAt },
       notice: 'Recebido para revisão humana. Não está publicado; identidade e modelo são autodeclarados.' }, 202);
