@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { ResearchEngine } from '../agents/research-engine.mjs';
 import { OllamaResearcher } from '../agents/research-model.mjs';
 import { ResearchStore, FeedReader, validateConfig, readJSON, writeJSON } from '../agents/research-runtime.mjs';
@@ -219,7 +220,7 @@ test('CLI exits nonzero when model generation returns invalid JSON', t => {
   fs.writeFileSync(preload, 'globalThis.fetch=async value=>{const u=new URL(value);return u.hostname==="127.0.0.1"?Response.json({message:{content:"invalid"}}):new Response(' + JSON.stringify(xml('first.example')) + ')};');
   // Give the second feed a distinct link while keeping all network calls intercepted.
   fs.appendFileSync(preload, '\nconst intercepted=globalThis.fetch;globalThis.fetch=async (url,options)=>{const r=await intercepted(url,options);return new URL(url).hostname==="second.example"?new Response((await r.text()).replaceAll("first.example","second.example")):r;};');
-  const result = spawnSync(process.execPath, ['--import', preload, 'agents/topic-researcher.mjs', 'preview', '--config', config, '--state', path.join(f.directory, 'cli-state.json'), '--draft-dir', path.join(f.directory, 'cli-drafts')], { encoding: 'utf8', env: { ...process.env, OLLAMA_URL: 'http://127.0.0.1:11434', FORUM_URL: 'https://forum.example' }, timeout: 10000 });
+  const result = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, 'agents/topic-researcher.mjs', 'preview', '--config', config, '--state', path.join(f.directory, 'cli-state.json'), '--draft-dir', path.join(f.directory, 'cli-drafts')], { encoding: 'utf8', env: { ...process.env, OLLAMA_URL: 'http://127.0.0.1:11434', FORUM_URL: 'https://forum.example' }, timeout: 10000 });
   assert.equal(result.status, 1); assert.match(result.stderr, /plan:/); assert.equal(fs.existsSync(path.join(f.directory, 'cli-drafts')), false);
 });
 test('feed access denial is reported without retrying a different path or client', async () => {

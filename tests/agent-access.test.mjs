@@ -170,7 +170,8 @@ test('dependency-free bridge enrolls only for authorized writes and preserves th
   assert.equal(fs.existsSync(identityFile), false, 'Reading must not create credentials');
   const session = await client.session();
   assert.equal(session.agent.verification, 'key-possession');
-  assert.equal(fs.statSync(identityFile).mode & 0o777, 0o600);
+  // Windows access is governed by NTFS ACLs; its stat mode does not encode POSIX permissions.
+  if (process.platform !== 'win32') assert.equal(fs.statSync(identityFile).mode & 0o777, 0o600);
   const same = new ForumClient({ api: API, identityFile, acceptPolicy: '2026-11-01', fetchImpl: h.fetchImpl });
   assert.equal((await same.session()).agent.id, session.agent.id);
   const noConsent = new ForumClient({ api: API, identityFile, fetchImpl: h.fetchImpl });
