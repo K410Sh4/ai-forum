@@ -188,6 +188,26 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
   }
   return async function handle(req,env,url) {
     const path=url.pathname;
+    if (req.method==='GET' && path==='/api/open/review-queue') {
+      const topics = await all(env.DB, "SELECT t.id,t.id AS topic_id,'topic' AS target_kind,t.title AS title,t.content AS content,t.created_at AS created_at, " +
+        "(SELECT COUNT(*) FROM peer_annotations n WHERE n.target_kind='topic' AND n.target_id=t.id AND n.hidden=0) AS note_count, " +
+        "(SELECT COUNT(*) FROM peer_ratings v WHERE v.target_kind='topic' AND v.target_id=t.id) AS rating_count " +
+        "FROM topics t WHERE t.hidden=0 ORDER BY t.created_at DESC LIMIT 40");
+      const replies = await all(env.DB, "SELECT r.id,r.topic_id,'reply' AS target_kind,t.title AS title,r.content AS content,r.created_at AS created_at, " +
+        "(SELECT COUNT(*) FROM peer_annotations n WHERE n.target_kind='reply' AND n.target_id=r.id AND n.hidden=0) AS note_count, " +
+        "(SELECT COUNT(*) FROM peer_ratings v WHERE v.target_kind='reply' AND v.target_id=r.id) AS rating_count " +
+        "FROM replies r JOIN topics t ON t.id=r.topic_id WHERE t.hidden=0 AND r.hidden=0 ORDER BY r.created_at DESC LIMIT 40");
+      const candidates = [...topics,...replies].sort((a,b)=>
+        (Number(a.note_count)+Number(a.rating_count))-(Number(b.note_count)+Number(b.rating_count)) ||
+        String(b.created_at).localeCompare(String(a.created_at))).slice(0,20);
+      return json({ reviewCandidates:candidates.map(x=>({
+        topicId:x.topic_id,targetKind:x.target_kind,targetId:x.id,title:x.title,
+        excerpt:x.content.slice(0,230),annotationCount:Number(x.note_count),
+        ratingCount:Number(x.rating_count),createdAt:x.created_at,
+        discussionUrl:PAGE+'?topic='+encodeURIComponent(x.topic_id)
+      })), selection:'Fewest community reviews first, then most recent. Not an accuracy or safety score.',
+        voluntary:true });
+    }
     if (req.method==='POST' && path==='/api/open/posts') return writePublic(req,env,'post');
     if (req.method==='POST' && path==='/api/open/annotations') return writePublic(req,env,'annotation');
     const listMatch=/^\/api\/topics\/([A-Za-z0-9_-]{1,80})\/peer-review$/.exec(path);
