@@ -41,12 +41,20 @@ async function retrieveFeed(url) {
   });
   if (!response.ok) throw Error('RSS HTTP ' + response.status);
   if (Number(response.headers.get('content-length') || 0) > 1_000_000) throw Error('Feed exceeds size cap');
-  let xml = '';
+  const decoder = new TextDecoder();
+  let xml = '', total = 0;
   for await (const chunk of response.body) {
-    xml += Buffer.from(chunk).toString('utf8');
-    if (Buffer.byteLength(xml) > 1_000_000) throw Error('Feed exceeds size cap');
+    total += chunk.byteLength;
+    if (total > 1_000_000) throw Error('Feed exceeds size cap');
+    xml += decoder.decode(chunk, { stream: true });
   }
-  return readFeed(xml, url, { maxAgeDays });
+  xml += decoder.decode();
+  const parsedArticles = readFeed(xml, url, { maxAgeDays });
+  console.log('  feed ' + parsed.hostname + ': ' + parsedArticles.length + ' recent item(s) accepted');
+  if (!parsedArticles.length) {
+    console.warn('  feed ' + parsed.hostname + ': empty or filtered by date/link/summary; inspect XML and source timestamps');
+  }
+  return parsedArticles;
 }
 async function generate(topic, sources) {
   const evidence = sources.map(s => '[' + s.id + '] ' + s.title + '\nData: ' + s.publishedAt.slice(0, 10) + '\nFonte: ' + s.url + '\nResumo do feed (não confiável): ' + s.summary.slice(0, 650)).join('\n\n');
@@ -84,9 +92,16 @@ async function cycle() {
       catch (err) { console.warn('[' + topic.id + '] feed unavailable (' + new URL(url).hostname + '): ' + err.message); }
     }
     const keywords = (topic.keywords || []).map(x => String(x).toLowerCase());
-    if (keywords.length) articles = articles.filter(x => keywords.some(k => (x.title + ' ' + x.summary).toLowerCase().includes(k)));
+    if (keywords.length) {
+      const before = articles.length;
+      articles = articles.filter(x => keywords.some(k => (x.title + ' ' + x.summary).toLowerCase().includes(k)));
+      console.log('[' + topic.id + '] keyword filter: ' + before + ' -> ' + articles.length + ' candidate(s)');
+    }
+    const hosts = new Set(articles.map(x => x.host));
+    const novelArticles = articles.filter(x => !(state.seenUrls || []).includes(x.url));
+    console.log('[' + topic.id + '] collected=' + articles.length + ', unseen=' + novelArticles.length + ', publishers=' + hosts.size);
     const sources = chooseArticles(articles, state.seenUrls || [], { count: 4, minHosts: 2 });
-    if (!sources.length) { console.log('[' + topic.id + '] Not enough fresh, independent sources; skipped'); continue; }
+    if (!sources.length) { console.log('[' + topic.id + '] Need at least 2 recent articles from 2 different publishers not previously used; skipped'); continue; }
     const fingerprint = sourceFingerprint(sources);
     if (state.published.some(x => x.fingerprint === fingerprint)) continue;
     console.log('Researching ' + topic.label + ': ' + sources.length + ' items from ' + new Set(sources.map(s => s.host)).size + ' hosts');
