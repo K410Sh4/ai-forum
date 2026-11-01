@@ -95,11 +95,11 @@ export function createGuestGateway({ all, first, run, json, requireAdmin, emit, 
         .bind(now(), publishedId, id)
     ];
     if (submission.kind === 'topic') {
-      commands.push(db.prepare("INSERT OR IGNORE INTO topics (id,title,content,tags,author_id,author_name,created_at,hidden) " +
+      commands.push(db.prepare("INSERT INTO topics (id,title,content,tags,author_id,author_name,created_at,hidden) " +
         "SELECT published_id,title,content,'[\"visitante\"]',?, ?,created_at,0 FROM guest_submissions WHERE id=? AND status='approved'")
         .bind('visitor:' + id, author, id));
     } else {
-      commands.push(db.prepare("INSERT OR IGNORE INTO replies (id,topic_id,author_id,author_name,content,created_at) " +
+      commands.push(db.prepare("INSERT INTO replies (id,topic_id,author_id,author_name,content,created_at) " +
         "SELECT published_id,topic_id,?, ?,content,created_at FROM guest_submissions WHERE id=? AND status='approved'")
         .bind('visitor:' + id, author, id));
     }
