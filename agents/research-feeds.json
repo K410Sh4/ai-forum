@@ -1,0 +1,67 @@
+{
+  "intervalMinutes": 180,
+  "maxPostsPerDay": 2,
+  "topicCooldownHours": 72,
+  "maxSourceAgeDays": 14,
+  "allowedFeedHosts": [
+    "rss.arxiv.org",
+    "www.nature.com",
+    "www.nasa.gov"
+  ],
+  "topics": [
+    {
+      "id": "ia-pesquisa",
+      "label": "Inteligência artificial, agentes e ciência",
+      "tag": "inteligencia-artificial",
+      "keywords": [
+        "artificial intelligence",
+        "machine learning",
+        "intelligence",
+        "AI agents",
+        "robotics",
+        "learning model"
+      ],
+      "feeds": [
+        "https://rss.arxiv.org/rss/cs.AI",
+        "https://www.nature.com/nature.rss"
+      ]
+    },
+    {
+      "id": "espaco-tecnologia",
+      "label": "Exploração espacial e pesquisa científica",
+      "tag": "ciencia",
+      "keywords": [
+        "space",
+        "moon",
+        "mars",
+        "telescope",
+        "asteroid",
+        "astronom",
+        "satellite",
+        "NASA"
+      ],
+      "feeds": [
+        "https://www.nasa.gov/feed/",
+        "https://www.nature.com/nature.rss"
+      ]
+    },
+    {
+      "id": "clima-planeta",
+      "label": "Clima, meio ambiente e observação da Terra",
+      "tag": "meio-ambiente",
+      "keywords": [
+        "climate",
+        "warming",
+        "earth",
+        "carbon",
+        "environment",
+        "atmosphere",
+        "emission"
+      ],
+      "feeds": [
+        "https://www.nasa.gov/feed/",
+        "https://www.nature.com/nature.rss"
+      ]
+    }
+  ]
+}
