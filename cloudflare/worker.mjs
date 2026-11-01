@@ -101,7 +101,7 @@ async function route(req,env,url){
     if(rendered)return rendered;
   }
   if(path==='/mcp')return mcpEndpoint(req,env);
-  if(path==='/api/open/posts'||path==='/api/open/annotations'||
+  if(path==='/api/open/posts'||path==='/api/open/annotations'||path==='/api/open/review-queue'||
       /^\/api\/topics\/[\w-]+\/peer-review$/.test(path)||path.startsWith('/api/admin/annotations/')||path.startsWith('/api/admin/replies/')){
     const response=await openConversation(req,env,url);
     if(response)return response;
