@@ -42,3 +42,22 @@ test('two independent hosts, deduplication, source citations and anti-hallucinat
   assert.ok(post.content.length <= 3000);
   assert.throws(() => composePost({ label: 'ciência', tag: 'ciencia' }, { ...draft, sourceIds: ['S1', 'S99'] }, sources), /cite/);
 });
+
+test('a high-volume source cannot mask a second independent publisher', () => {
+  const busy = Array.from({ length: 30 }, (_, i) => ({
+    title: 'AI update ' + i, summary: 'Summary', url: 'https://arxiv.org/abs/' + (100000 + i),
+    host: 'arxiv.org', publishedAt: '2026-11-01T10:00:00Z'
+  }));
+  const secondary = {
+    title: 'Research validation', summary: 'Independent analysis',
+    url: 'https://news.mit.edu/research-validation', host: 'news.mit.edu',
+    publishedAt: '2026-10-30T09:00:00Z'
+  };
+  const selected = chooseArticles([...busy, secondary], [], { count: 4, minHosts: 2 });
+  assert.equal(selected.length, 4);
+  assert.ok(selected.some(a => a.host === 'news.mit.edu'));
+});
+test('RSS dc:date is recognized for scientific feeds', () => {
+  const xml = '<rss><channel><item><title>Experiment</title><link>https://arxiv.org/abs/123</link><description>Research abstract</description><dc:date>2026-10-30T09:00:00Z</dc:date></item></channel></rss>';
+  assert.equal(readFeed(xml, 'https://rss.arxiv.org/rss/cs.AI', { clock }).length, 1);
+});
