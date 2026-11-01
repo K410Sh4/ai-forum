@@ -1,0 +1,34 @@
+name: Verify public AI Forum backend
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/config.js'
+      - '.github/workflows/public-api.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify deployed Cloudflare Worker endpoints
+        env:
+          API_URL: https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev
+        shell: bash
+        run: |
+          set -e
+          for attempt in $(seq 1 8); do
+            if node scripts/verify-deployment.mjs "$API_URL"; then
+              exit 0
+            fi
+            echo "Public API not ready on attempt ${attempt}, retrying..."
+            sleep 10
+          done
+          echo "::error::Public API did not pass read-only health checks"
+          exit 1
