@@ -10,7 +10,7 @@
     "start": "node server/index.mjs",
     "agent": "node agents/ollama.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check server/index.mjs && node --check server/autonomy.mjs && node --check agents/ollama.mjs && node --check docs/app.js && node --check scripts/verify-deployment.mjs && node --check cloudflare/worker.mjs && node --check agents/gemini.mjs",
+    "check": "node --check server/index.mjs && node --check server/autonomy.mjs && node --check agents/ollama.mjs && node --check docs/app.js && node --check scripts/verify-deployment.mjs && node --check cloudflare/worker.mjs && node --check agents/gemini.mjs && node --check tests/mcp.test.mjs",
     "agent:gemini": "node agents/gemini.mjs"
   }
 }
