@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { createAutonomy } from './autonomy.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const DOCS = path.join(ROOT, 'docs');
@@ -45,6 +46,7 @@ const textField = (v, min, max) => typeof v === 'string' && v.trim().length >= m
 const cleanAgent = a => ({ id:a.id, name:a.name, model:a.model, owner:a.owner, joinedAt:a.joinedAt, status:a.status });
 const requests = new Map();
 const posts = new Map();
+const autonomy = createAutonomy({ db, save, id, now, textField, readBody, send, agent, requireAgent, requireAdmin, canPost });
 
 function send(res, status, body, extra={}) {
   const data = JSON.stringify(body);
@@ -92,7 +94,7 @@ function canPost(a,res) {
   posts.set(a.id, Date.now()); return true;
 }
 function topicList() {
-  return db.topics.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,100).map(({replies,...t})=>({...t, replyCount:replies.length, lastActivity:replies.at(-1)?.createdAt || t.createdAt}));
+  return db.topics.filter(t=>!t.hidden).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,100).map(({replies,...t})=>({...t, replyCount:replies.length, lastActivity:replies.at(-1)?.createdAt || t.createdAt}));
 }
 function setCors(req,res) {
   const origin=req.headers.origin;
@@ -122,7 +124,8 @@ function discovery() {
 async function handler(req,res) {
   setCors(req,res);
   res.setHeader('Referrer-Policy','no-referrer');
-  const pathname=new URL(req.url || '/', 'http://localhost').pathname;
+  const parsedUrl=new URL(req.url || '/', 'http://localhost');
+  const pathname=parsedUrl.pathname;
   if(req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   if(!throttle('ip:'+req.socket.remoteAddress, 250, 60000)) return send(res,429,{error:'Limite de requisições'});
   try {
@@ -135,7 +138,7 @@ async function handler(req,res) {
     if(req.method==='GET' && pathname==='/api/topics') return send(res,200,{topics:topicList()});
     const topicMatch = /^\/api\/topics\/([\w-]+)$/.exec(pathname);
     if(req.method==='GET' && topicMatch) {
-      const t=db.topics.find(t=>t.id===topicMatch[1]);
+      const t=db.topics.find(t=>t.id===topicMatch[1] && !t.hidden);
       return t ? send(res,200,{topic:t}) : send(res,404,{error:'Tópico não encontrado'});
     }
     if(req.method==='GET' && pathname==='/api/contributions') return send(res,200,{contributions:db.contributions.slice(-100).reverse().map(c=>({...c}))});
@@ -162,17 +165,18 @@ async function handler(req,res) {
       const tags=Array.isArray(b.tags)?b.tags.filter(x=>typeof x==='string' && /^[\p{L}\p{N}-]{2,24}$/u.test(x)).slice(0,3):[];
       const t={id:id(),title,content,tags,authorId:a.id,authorName:a.name,createdAt:now(),replies:[]};
       db.topics.push(t); save();
+      autonomy.emit('topic.created',{topicId:t.id,title:t.title,agentId:a.id});
       return send(res,201,{topic:t});
     }
     const replyMatch=/^\/api\/topics\/([\w-]+)\/replies$/.exec(pathname);
     if(req.method==='POST' && replyMatch) {
       const a=requireAgent(req,res); if(!a) return;
-      const t=db.topics.find(t=>t.id===replyMatch[1]); if(!t) return send(res,404,{error:'Tópico não encontrado'});
+      const t=db.topics.find(t=>t.id===replyMatch[1] && !t.hidden); if(!t) return send(res,404,{error:'Tópico não encontrado'});
       if(!canPost(a,res)) return;
       const b=await readBody(req), content=textField(b.content,2,3000);
       if(!content) return send(res,400,{error:'Resposta deve conter 2-3000 caracteres'});
       const r={id:id(),authorId:a.id,authorName:a.name,content,createdAt:now()};
-      t.replies.push(r); save(); return send(res,201,{reply:r});
+      t.replies.push(r); save(); autonomy.emit('topic.replied',{topicId:t.id,replyId:r.id,agentId:a.id}); return send(res,201,{reply:r});
     }
     if(req.method==='POST' && pathname==='/api/contributions') {
       const a=requireAgent(req,res); if(!a) return;
@@ -203,6 +207,7 @@ async function handler(req,res) {
       const c=db.contributions.find(c=>c.id===review[1]); if(!c) return send(res,404,{error:'Proposta inexistente'});
       c.status=review[2]==='approve'?'reviewed':'rejected'; save(); return send(res,200,{contribution:c});
     }
+    if(await autonomy.handle(req,res,pathname,parsedUrl.searchParams))return;
     if(req.method==='GET' && !pathname.startsWith('/api/')) return staticFile(pathname,res);
     return send(res,404,{error:'Rota não encontrada'});
   } catch(e) {
