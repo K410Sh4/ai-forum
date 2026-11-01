@@ -7,6 +7,7 @@ import worker from '../cloudflare/worker.mjs';
 
 const API = 'https://ai-forum.test';
 const ADMIN = 'g'.repeat(64);
+const MODERATOR = 'm'.repeat(64);
 function harness(t) {
   const sql = new DatabaseSync(':memory:');
   for (const name of fs.readdirSync(new URL('../cloudflare/migrations/', import.meta.url)).sort())
@@ -35,9 +36,9 @@ function harness(t) {
     }
   };
   t.after(() => sql.close());
-  const env = { DB, ADMIN_KEY: ADMIN };
-  async function request(path, { method = 'GET', payload, admin = false, type = 'application/json', accept = 'application/json', ip = '192.0.2.3' } = {}) {
-    const headers = { Accept: accept, 'Content-Type': type, 'CF-Connecting-IP': ip, ...(admin ? { Authorization: 'Bearer ' + ADMIN } : {}) };
+  const env = { DB, ADMIN_KEY: ADMIN, GUEST_MODERATION_KEY: MODERATOR };
+  async function request(path, { method = 'GET', payload, admin = false, moderator = false, type = 'application/json', accept = 'application/json', ip = '192.0.2.3' } = {}) {
+    const headers = { Accept: accept, 'Content-Type': type, 'CF-Connecting-IP': ip, ...(admin ? { Authorization: 'Bearer ' + ADMIN } : moderator ? { Authorization: 'Bearer ' + MODERATOR } : {}) };
     const body = payload === undefined ? undefined : type === 'application/x-www-form-urlencoded' ? new URLSearchParams(payload).toString() : JSON.stringify(payload);
     const response = await worker.fetch(new Request(API + path, { method, headers, ...(body === undefined ? {} : { body }) }), env);
     const data = response.status === 303 ? null : await response.json();
@@ -114,4 +115,16 @@ test('guest input, duplicate content and 3 submissions per hour are enforced', a
   assert.equal((await h.request('/api/guest-submissions', { method: 'POST', payload: { ...guestTopic, title: 'Segunda investigação científica' } })).status, 202);
   assert.equal((await h.request('/api/guest-submissions', { method: 'POST', payload: { ...guestTopic, title: 'Terceira investigação científica' } })).status, 202);
   assert.equal((await h.request('/api/guest-submissions', { method: 'POST', payload: { ...guestTopic, title: 'Quarta investigação científica' } })).status, 429);
+});
+
+test('dedicated moderation key can review visitor queue but cannot access general admin routes', async t => {
+  const h = harness(t);
+  const queued = await h.request('/api/guest-submissions', { method: 'POST', payload: guestTopic });
+  assert.equal(queued.status, 202);
+  const listing = await h.request('/api/admin/guest-submissions', { moderator: true });
+  assert.equal(listing.status, 200);
+  assert.equal(listing.data.submissions.length, 1);
+  assert.equal((await h.request('/api/admin/agents', { moderator: true })).status, 401);
+  const approved = await h.request('/api/admin/guest-submissions/' + queued.data.submission.id + '/approve', { method: 'POST', moderator: true });
+  assert.equal(approved.status, 200);
 });
