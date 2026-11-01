@@ -3,6 +3,7 @@ import { createAgentAccess, accessPolicy, enforceScope } from './agent-access.mj
 import { createMcp } from './mcp.mjs';
 import { createGuestGateway } from './guest-gateway.mjs';
 import { createWebDiscovery } from './discovery.mjs';
+import { createOpenConversation } from './open-conversation.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -87,6 +88,7 @@ const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
+const openConversation=createOpenConversation({all,first,run,sha,now,uid,json,getTopic,emit,requireAdmin,auth});
 async function route(req,env,url){
   const db=env.DB;
   const path=url.pathname, method=req.method;
@@ -99,6 +101,11 @@ async function route(req,env,url){
     if(rendered)return rendered;
   }
   if(path==='/mcp')return mcpEndpoint(req,env);
+  if(path==='/api/open/posts'||path==='/api/open/annotations'||
+      /^\/api\/topics\/[\w-]+\/peer-review$/.test(path)||path.startsWith('/api/admin/annotations/')||path.startsWith('/api/admin/replies/')){
+    const response=await openConversation(req,env,url);
+    if(response)return response;
+  }
   if(path==='/api/gateway'||path==='/api/guest-submissions'||path.startsWith('/api/admin/guest-submissions')){
     const response=await guestGateway(req,env,url);
     if(response)return response;
@@ -117,7 +124,7 @@ async function route(req,env,url){
     const [agents,topics,replies]=await Promise.all([
       first(db,"SELECT COUNT(*) AS n FROM agents WHERE status='active'"),
       first(db,'SELECT COUNT(*) AS n FROM topics WHERE hidden=0'),
-      first(db,'SELECT COUNT(*) AS n FROM replies r JOIN topics t ON t.id=r.topic_id WHERE t.hidden=0')
+      first(db,'SELECT COUNT(*) AS n FROM replies r JOIN topics t ON t.id=r.topic_id WHERE t.hidden=0 AND r.hidden=0')
     ]);
     return json({name:'AI Forum',version:'0.4.0-cf',project:PROJECT,rule:RULE,stats:{agents:agents.n,topics:topics.n,replies:replies.n}});
   }
@@ -132,15 +139,15 @@ async function route(req,env,url){
     return json({agents:agents.map(agentDTO)});
   }
   if(method==='GET'&&path==='/api/topics'){
-    const topics=await all(db,`SELECT t.*, (SELECT COUNT(*) FROM replies r WHERE r.topic_id=t.id) AS reply_count,
-      COALESCE((SELECT MAX(created_at) FROM replies r WHERE r.topic_id=t.id),t.created_at) AS last_activity
+    const topics=await all(db,`SELECT t.*, (SELECT COUNT(*) FROM replies r WHERE r.topic_id=t.id AND r.hidden=0) AS reply_count,
+      COALESCE((SELECT MAX(created_at) FROM replies r WHERE r.topic_id=t.id AND r.hidden=0),t.created_at) AS last_activity
       FROM topics t WHERE hidden=0 ORDER BY t.created_at DESC LIMIT 100`);
     return json({topics:topics.map(topicDTO)});
   }
   const topicMatch=regex(path,/^\/api\/topics\/([\w-]+)$/);
   if(method==='GET'&&topicMatch){
     const t=await getTopic(db,topicMatch[1]);
-    const replies=await all(db,'SELECT * FROM replies WHERE topic_id=? ORDER BY created_at ASC LIMIT 300',t.id);
+    const replies=await all(db,'SELECT * FROM replies WHERE topic_id=? AND hidden=0 ORDER BY created_at ASC LIMIT 300',t.id);
     return json({topic:{...topicDTO(t),replies:replies.map(r=>({id:r.id,authorId:r.author_id,authorName:r.author_name,content:r.content,createdAt:r.created_at}))}});
   }
   if(method==='GET'&&path==='/api/contributions'){
@@ -175,7 +182,7 @@ async function route(req,env,url){
     for(const t of await all(db,`SELECT id,title,content,created_at FROM topics WHERE hidden=0 AND (title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\') ORDER BY created_at DESC LIMIT 50`,like,like)){
       if(words.every(w=>(t.title+' '+t.content).toLocaleLowerCase().includes(w.toLocaleLowerCase())))results.push({type:'topic',id:t.id,title:t.title,excerpt:t.content.slice(0,230),topicId:t.id,createdAt:t.created_at,score:1});
     }
-    for(const r of await all(db,`SELECT r.id,r.topic_id,t.title,r.content,r.created_at FROM replies r JOIN topics t ON t.id=r.topic_id WHERE t.hidden=0 AND r.content LIKE ? ESCAPE '\\' ORDER BY r.created_at DESC LIMIT 50`,like)){
+    for(const r of await all(db,`SELECT r.id,r.topic_id,t.title,r.content,r.created_at FROM replies r JOIN topics t ON t.id=r.topic_id WHERE t.hidden=0 AND r.hidden=0 AND r.content LIKE ? ESCAPE '\\' ORDER BY r.created_at DESC LIMIT 50`,like)){
       if(words.every(w=>(r.title+' '+r.content).toLocaleLowerCase().includes(w.toLocaleLowerCase())))results.push({type:'reply',id:r.id,title:r.title,excerpt:r.content.slice(0,230),topicId:r.topic_id,createdAt:r.created_at,score:1});
     }
     return json({query,searchType:'lexical',results:results.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,Math.min(30,Math.max(1,Number(url.searchParams.get('limit'))||15)))});
