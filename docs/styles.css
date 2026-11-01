@@ -284,3 +284,47 @@ textarea.peer-input{min-height:100px;resize:vertical}
 #topicDetail>a.outline-button{display:inline-flex;margin:16px 12px 8px 0;align-items:center}
 @media(max-width:680px){.peer-panel{padding:14px}.peer-form button{width:100%;justify-self:stretch}}
 @media(prefers-reduced-motion:reduce){.peer-panel *{scroll-behavior:auto}}
+
+/* Analysis Hub V1 — uses the same dark tokens and compact cards as the rest of the forum. */
+.analysis-intro{border:1px solid var(--stroke);border-radius:12px;padding:17px 20px;background:var(--panel);margin:10px 0 18px}
+.analysis-intro p{color:#c9d7e7;font-size:13px;line-height:1.65;margin:0 0 10px}
+.analysis-intro a{color:var(--lime);text-decoration:underline;text-underline-offset:3px;font-size:12px}
+.analysis-filters{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 20px}
+.analysis-filter{min-height:38px;padding:7px 13px;border:1px solid #33445c;background:#152137;color:#bdc9db;border-radius:9px;font-size:12px;font-weight:700}
+.analysis-filter.active{border-color:#739a62;background:var(--lime-dim);color:var(--lime)}
+.analysis-list{display:grid;gap:14px}
+.analysis-card{border:1px solid var(--stroke);background:var(--card);padding:clamp(15px,2.2vw,23px);border-radius:var(--radius);display:grid;gap:10px;min-width:0}
+.analysis-card-top,.analysis-card-meta,.analysis-card-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 15px}
+.analysis-card-top{justify-content:space-between}
+.analysis-kind{color:var(--lime);background:var(--lime-dim);padding:4px 9px;border-radius:7px;font-size:11px;font-weight:700}
+.analysis-date,.analysis-subject,.analysis-card-meta{color:#aab8cf;font-size:12px}
+.analysis-card .analysis-title{margin:0;font-size:17px;line-height:1.32;overflow-wrap:anywhere}
+.analysis-subject,.analysis-summary{margin:0;line-height:1.65;overflow-wrap:anywhere}
+.analysis-summary{color:#e2e9f4;font-size:13px;white-space:pre-wrap}
+.analysis-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:3px 0}
+.analysis-fact{min-width:0;background:#0d182a;padding:12px;border:1px solid #29394e;border-radius:9px}
+.analysis-fact dt{font-size:11px;color:var(--lime);font-weight:750;margin-bottom:6px}
+.analysis-fact dd{font-size:12px;line-height:1.6;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
+.analysis-card-meta{border-top:1px solid var(--stroke);padding-top:10px}
+.analysis-card-actions{margin-top:3px}
+.analysis-card-actions button{min-height:38px}
+.analysis-permalink{font-size:12px;text-decoration:underline;text-underline-offset:3px;color:#c1cce5}
+.analysis-composer{margin-top:24px;border:1px solid #33445c;border-radius:13px;background:#101c2e;padding:17px}
+.analysis-composer>summary{color:var(--lime);font-weight:750;cursor:pointer;font-size:14px}
+.analysis-composer>summary:focus-visible{outline:2px solid var(--lime);outline-offset:4px}
+.analysis-form-intro{margin:13px 0;color:#b4c1d4;font-size:12px}
+.analysis-form{display:grid;gap:15px;margin-top:18px}
+.analysis-form label{display:grid;gap:6px;color:#c6d5e8;font-weight:650;font-size:12px}
+.analysis-form label span{font-weight:400;color:#9eb1c9}
+.analysis-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.analysis-form :is(input,textarea,select){background:#081527;border:1px solid #50617a;color:var(--text);padding:11px;width:100%;min-width:0;border-radius:9px;font:inherit;font-size:13px}
+.analysis-form textarea{resize:vertical;min-height:75px}
+.analysis-policy{display:flex!important;align-items:start;gap:10px!important;font-weight:400!important;line-height:1.55}
+.analysis-policy input{width:19px!important;height:19px;flex:0 0 19px;margin:1px 0}
+.analysis-hint{font-size:11px;color:#aab8cd;margin:0}
+.analysis-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.analysis-actions button{min-height:42px}
+.analysis-actions p{font-size:12px;margin:0;overflow-wrap:anywhere;color:#c4d4e8}
+.analysis-actions a{color:var(--lime);text-decoration:underline}
+@media(max-width:700px){.analysis-form-grid,.analysis-facts{grid-template-columns:1fr}.analysis-card-actions button,.analysis-actions button{width:100%}.analysis-filters{gap:6px}.analysis-filter{flex:1 1 auto}}
+@media(prefers-reduced-motion:reduce){.analysis-card,.analysis-filter{transition:none}}
