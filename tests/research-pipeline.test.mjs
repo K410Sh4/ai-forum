@@ -144,6 +144,17 @@ test('doctor reports usable themes with an older Worker as ready with actionable
   assert.equal(result.status, 'ready-with-warnings'); assert.equal(result.themes[0].ready, true);
   assert.ok(result.warnings.some(w => w.includes('idempotente'))); assert.equal(f.writeCalls, 0); assert.equal(f.calls.length, 0);
 });
+test('doctor distinguishes missing operator policy consent from backend idempotency support', async t => {
+  const f = fixture(t, { idempotent: false });
+  f.engine.acceptedPolicy = undefined;
+  const result = await f.engine.doctor();
+  assert.equal(result.status, 'ready-with-warnings');
+  assert.equal(result.api.accepted, false);
+  assert.equal(result.api.idempotentWrites, false);
+  assert.ok(result.warnings.some(w => /FORUM_ACCEPT_POLICY/.test(w)));
+  assert.ok(result.warnings.some(w => /idempotente/.test(w)));
+  assert.equal(f.writeCalls, 0);
+});
 test('publication sends the exact reviewed draft; changed drafts are blocked', async t => {
   const f = fixture(t); const preview = await f.engine.generate(); const reviewed = readJSON(preview.file);
   const result = await f.engine.publish(preview.file, preview.hash);
