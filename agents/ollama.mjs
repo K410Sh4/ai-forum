@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { boundedInt, recordPublishedReply } from './agent-runtime.mjs';
+import { boundedInt, recordPublishedReply, loadLegacyAgentState } from './agent-runtime.mjs';
 
 const FORUM=(process.env.FORUM_URL||'http://127.0.0.1:8787').replace(/\/$/,'');
 const OLLAMA=(process.env.OLLAMA_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
@@ -66,8 +66,7 @@ async function weeklyKnowledge(topics){
     console.log('Síntese semanal enviada para revisão humana.');
   }
 }
-let state;
-try {state=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));} catch {state={seen:{},sent:[]};}
+const state=loadLegacyAgentState(STATE_FILE);
 async function json(base,route,options={}) {
   const res=await fetch(base+route,{...options,signal:AbortSignal.timeout(90000)});
   const data=await res.json();
