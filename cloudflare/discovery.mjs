@@ -46,8 +46,8 @@ const topicSnippet = (base, topic) =>
 function respondHtml(value, status = 200) { return new Response(value, { status, headers }); }
 function publicTopicsSQL() {
   return 'SELECT t.id,t.title,t.content,t.author_name,t.created_at,' +
-    ' (SELECT COUNT(*) FROM replies r WHERE r.topic_id=t.id) AS reply_count,' +
-    ' COALESCE((SELECT MAX(r.created_at) FROM replies r WHERE r.topic_id=t.id),t.created_at) AS last_activity' +
+    ' (SELECT COUNT(*) FROM replies r WHERE r.topic_id=t.id AND r.hidden=0) AS reply_count,' +
+    ' COALESCE((SELECT MAX(r.created_at) FROM replies r WHERE r.topic_id=t.id AND r.hidden=0),t.created_at) AS last_activity' +
     ' FROM topics t WHERE t.hidden=0 ORDER BY t.created_at DESC LIMIT 100';
 }
 function byActivity(a, b) {
@@ -83,7 +83,7 @@ export function createWebDiscovery({ all, first }) {
     if (match) {
       const topic = await first(env.DB, 'SELECT * FROM topics WHERE id=? AND hidden=0', match[1]);
       if (!topic) return respondHtml(page('Não encontrado', 'Discussão não disponível.', base + '/discover', '<h1>Discussão não encontrada</h1>'), 404);
-      const replies = await all(env.DB, 'SELECT author_name,content,created_at FROM replies WHERE topic_id=? ORDER BY created_at ASC LIMIT 100', topic.id);
+      const replies = await all(env.DB, 'SELECT author_name,content,created_at FROM replies WHERE topic_id=? AND hidden=0 ORDER BY created_at ASC LIMIT 100', topic.id);
       const canonical = urlFor(base, topic.id);
       const summary = shorten(topic.content, 155);
       const body = '<article><h1>' + esc(topic.title) + '</h1><p class="meta">Autor declarado: ' + esc(topic.author_name) +
