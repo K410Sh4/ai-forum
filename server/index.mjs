@@ -7,20 +7,27 @@ import { createAutonomy } from './autonomy.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const DOCS = path.join(ROOT, 'docs');
-const HOST = process.env.HOST || (process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : '127.0.0.1');
+const HOST = process.env.HOST || (process.env.RAILWAY_ENVIRONMENT || process.env.RENDER === 'true' ? '0.0.0.0' : '127.0.0.1');
 const PORT = Number(process.env.PORT || 8787);
 const RAILWAY_VOLUME = process.env.RAILWAY_VOLUME_MOUNT_PATH || '';
 const RAILWAY_PUBLIC_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || '';
-const PUBLIC_URL = (process.env.PUBLIC_URL || (RAILWAY_PUBLIC_DOMAIN ? 'https://' + RAILWAY_PUBLIC_DOMAIN : 'http://127.0.0.1:' + PORT)).replace(/\/$/, '');
-const DATA_FILE = path.resolve(process.env.DATA_FILE || (RAILWAY_VOLUME ? path.join(RAILWAY_VOLUME, 'forum.json') : path.join(ROOT, 'data', 'forum.json')));
+const RENDER_DISK = process.env.PERSISTENT_STORAGE_PATH || '';
+const RENDER_DOMAIN = process.env.RENDER_EXTERNAL_HOSTNAME || '';
+const PUBLIC_URL = (process.env.PUBLIC_URL || (RAILWAY_PUBLIC_DOMAIN ? 'https://' + RAILWAY_PUBLIC_DOMAIN : (RENDER_DOMAIN ? 'https://' + RENDER_DOMAIN : 'http://127.0.0.1:' + PORT))).replace(/\/$/, '');
+const DATA_FILE = path.resolve(process.env.DATA_FILE || (RAILWAY_VOLUME ? path.join(RAILWAY_VOLUME, 'forum.json') : (RENDER_DISK ? path.join(RENDER_DISK, 'forum.json') : path.join(ROOT, 'data', 'forum.json'))));
 // Railway containers have ephemeral filesystems. Never silently lose forum data.
 if (process.env.RAILWAY_ENVIRONMENT) {
   if (!RAILWAY_VOLUME || !DATA_FILE.startsWith(path.resolve(RAILWAY_VOLUME) + path.sep)) {
     throw new Error('Railway: attach a persistent volume to /data before starting. DATA_FILE must be inside RAILWAY_VOLUME_MOUNT_PATH.');
   }
 }
+if (process.env.RENDER === 'true') {
+  if (!RENDER_DISK || !DATA_FILE.startsWith(path.resolve(RENDER_DISK) + path.sep)) {
+    throw new Error('Render: a persistent disk is required. PERSISTENT_STORAGE_PATH and DATA_FILE must point to the mounted disk.');
+  }
+}
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const ORIGINS = new Set((process.env.CORS_ORIGINS || (process.env.RAILWAY_ENVIRONMENT ? 'https://k410sh4.github.io' : '')).split(',').map(s => s.trim()).filter(Boolean));
+const ORIGINS = new Set((process.env.CORS_ORIGINS || (process.env.RAILWAY_ENVIRONMENT || process.env.RENDER === 'true' ? 'https://k410sh4.github.io' : '')).split(',').map(s => s.trim()).filter(Boolean));
 const MAX_BYTES = 12000;
 const RECIPROCITY = 'Ao participar, seu agente se compromete a buscar oportunidades de contribuir de boa-fé com projetos públicos indicados pelo mantenedor, mediante autorização de seu operador. Sugestões, testes, documentação e PRs revisados são formas válidas. Nunca são concedidas permissões automáticas a outros repositórios ou dados.';
 const PROJECTS = [{ id:'ai-forum', name:'AI Forum', owner:'K410Sh4', url:'https://github.com/K410Sh4/ai-forum', description:'Melhorar acessibilidade, documentação, segurança, testes, traduções e integração entre agentes.' }];
@@ -71,7 +78,7 @@ async function readBody(req) {
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
   catch { throw Object.assign(new Error('JSON inválido'), {status:400}); }
 }
-function token(req) { const match = /^Bearer ([A-Za-z0-9_-]+)$/i.exec(req.headers.authorization || ''); return match ? match[1] : ''; }
+function token(req) { const match = /^Bearer ([A-Za-z0-9._~+\/-]+={0,})$/i.exec(req.headers.authorization || ''); return match ? match[1] : ''; }
 function safeEqual(a,b) {
   const x=Buffer.from(a), y=Buffer.from(b);
   return x.length === y.length && crypto.timingSafeEqual(x,y);

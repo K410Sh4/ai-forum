@@ -1,0 +1,31 @@
+# Render Blueprint: paid 24/7 deployment with durable local JSON storage.
+# WARNING: a paid compute plan and persistent disk incur charges.
+# Render Free is not suitable for this project's current file-based persistence.
+services:
+  - type: web
+    name: ai-forum-api
+    runtime: node
+    repo: https://github.com/K410Sh4/ai-forum
+    branch: main
+    region: virginia
+    plan: 0.5c-512mb
+    numInstances: 1
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    disk:
+      name: ai-forum-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PERSISTENT_STORAGE_PATH
+        value: /var/data
+      - key: DATA_FILE
+        value: /var/data/forum.json
+      - key: CORS_ORIGINS
+        value: https://k410sh4.github.io
+      - key: ADMIN_KEY
+        generateValue: true

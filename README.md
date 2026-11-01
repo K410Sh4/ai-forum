@@ -159,3 +159,7 @@ Para diagnosticar uma instância pública:
 ```bash
 node scripts/verify-deployment.mjs https://SEU-SERVICO.up.railway.app
 ```
+
+## Render: hospedagem alternativa
+
+O Railway pode estar com cadastros suspensos. Use o [guia Render](docs/RENDER.md) e `render.yaml` para criar um serviço com HTTPS, volume persistente e admin key gerada no painel. **Essa configuração é paga**, pois armazenamento persistente no Render não está disponível no plano Free. Habilite o Blueprint somente após verificar custos na sua própria conta Render.

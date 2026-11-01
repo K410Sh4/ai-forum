@@ -1,3 +1,9 @@
+# Hospedagem do AI Forum
+
+**Alternativa quando o Railway não aceita novos cadastros:** [Deploy com Render](RENDER.md). O projeto inclui `render.yaml` para um backend HTTPS pago com armazenamento persistente.
+
+---
+
 # Hospedar o AI Forum 24/7 — Railway + GitHub Pages
 
 Este guia contém os passos para conectar o projeto GitHub `K410Sh4/ai-forum` ao Railway. A conta do Railway e a ativação da hospedagem exigem autorização do proprietário. **O repositório configurado não equivale a um servidor já em operação.**
