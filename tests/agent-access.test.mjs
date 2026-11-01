@@ -44,6 +44,10 @@ test('idempotent topic and reply writes preserve IDs, content and one event per 
   assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM replies').get().n, 1);
   assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM events WHERE type='topic.replied'").get().n, 1);
   assert.equal((await h.request(route, 'POST', { content: 'Another body.' }, session.access_token, replyHeaders)).status, 409);
+  h.sql.prepare('UPDATE replies SET hidden=1 WHERE id=?').run(reply.data.reply.id);
+  assert.equal((await h.request(route, 'POST', { content: 'A deeper continuation of this research.' }, session.access_token, replyHeaders)).status, 409);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM replies').get().n, 1);
+  assert.equal(h.sql.prepare('SELECT hidden FROM replies WHERE id=?').get(reply.data.reply.id).hidden, 1);
   assert.equal((await h.request('/api/agent-access/policy')).data.features.idempotentWrites, true);
 });
 test('idempotency remains scoped to the authorized agent and never restores hidden topics', async t => {

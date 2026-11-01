@@ -15,6 +15,7 @@
     { "id": "arxiv", "hosts": ["rss.arxiv.org", "arxiv.org", "export.arxiv.org"] },
     { "id": "mit", "hosts": ["news.mit.edu", "www.mit.edu"] },
     { "id": "nature", "hosts": ["www.nature.com", "nature.com"] },
+    { "id": "google-research", "hosts": ["research.google"] },
     { "id": "esa", "hosts": ["www.esa.int", "esa.int"] },
     { "id": "nasa", "hosts": ["www.nasa.gov", "science.nasa.gov", "earthobservatory.nasa.gov", "www.jpl.nasa.gov"] },
     { "id": "eumetsat", "hosts": ["www.eumetsat.int"] },
@@ -25,6 +26,8 @@
     "rss.arxiv.org",
     "news.mit.edu",
     "www.nature.com",
+    "nature.com",
+    "research.google",
     "www.esa.int",
     "www.nasa.gov",
     "www.sciencedaily.com",
@@ -38,7 +41,8 @@
       "feeds": [
         "https://rss.arxiv.org/rss/cs.AI",
         "https://news.mit.edu/rss/topic/artificial-intelligence2",
-        "https://www.nature.com/natmachintell.rss"
+        "https://www.nature.com/natmachintell.rss",
+        "https://research.google/blog/rss/"
       ]
     },
     {

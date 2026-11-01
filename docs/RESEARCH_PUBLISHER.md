@@ -1,6 +1,6 @@
 # Research Publisher 2 — Qwen local, evidências e publicação recuperável
 
-Parte da versão 0.5.1 do AI Forum. Usa Node.js 22+, incluindo Node 26, Ollama e o seu `qwen2.5-coder:7b`. Não instala bibliotecas, não requer uma API paga de modelo e mantém o Ollama no localhost. A internet é consultada pelo programa, através de feeds HTTPS configurados. Não é uma busca geral na web ou um leitor de todos os artigos completos.
+Parte da versão 0.5.2 do AI Forum. Usa Node.js 22+, incluindo Node 26, Ollama e o seu `qwen2.5-coder:7b`. Não instala bibliotecas, não requer uma API paga de modelo e mantém o Ollama no localhost. A internet é consultada pelo programa, através de feeds HTTPS configurados. Não é uma busca geral na web ou um leitor de todos os artigos completos.
 
 ## Começar no Windows
 
@@ -19,13 +19,15 @@ O preview imprime os caminhos do JSON/Markdown, seu SHA-256 e métricas de infer
 
 O diagnóstico exibe a versão e o caminho do Node realmente usado pelo npm. A versão 0.5.1 remove o limite superior que rejeitava Node 26; se o Node for anterior ao 22 ou faltar uma API necessária, informa exatamente o problema antes de consultar fontes ou criar identidade. Use `node --version` e `where.exe node` para conferir instalações diferentes no Windows.
 
+Na versão 0.5.2, `ready-with-warnings` significa que há temas utilizáveis, mas algum tema ficou sem dois publicadores recentes ou o Worker ainda não oferece reenvio idempotente. Os detalhes aparecem em `warnings`; esse estado permite testar o preview. O tema de IA também consulta o Google Research para reduzir a dependência de feeds vazios ou indisponíveis.
+
 ## Fluxo de pesquisa
 
-1. Consulta RSS/Atom recentes, com cache condicional, limites de bytes, diagnóstico de datas e redirecionamento apenas entre hosts de feeds permitidos.
+1. Consulta RSS/Atom recentes, com cache condicional, limites de bytes, diagnóstico de datas e redirecionamento apenas entre hosts permitidos do mesmo publicador.
 2. Agrupa subdomínios pelo publicador configurado: `www.nasa.gov` e `science.nasa.gov` pertencem à NASA. A diversidade considera a organização que fornece o feed; URLs apontadas pelo mesmo feed não criam publicadores independentes.
-3. O Qwen escolhe um recorte. Notícias sobre assuntos distintos formam um panorama, sem alegar confirmação mútua.
-4. Extrai notas de evidência de cada fonte. Os trechos de apoio precisam existir literalmente no material coletado; números nas afirmações extraídas precisam aparecer no trecho de apoio.
-5. Redige síntese, afirmações com referências, perspectivas, limitações e perguntas. O texto final também precisa citar dois publicadores.
+3. O Qwen escolhe um recorte para as fontes selecionadas pelo programa. Notícias sobre assuntos distintos formam um panorama, sem alegar confirmação mútua. O modelo não escolhe nem remove IDs de fontes.
+4. O programa divide cada resumo em trechos literais identificados. O Qwen parafraseia uma afirmação e seleciona o `evidenceId` correspondente; o programa recupera o trecho, sem exigir que o modelo copie ou traduza uma citação exata. IDs inexistentes e números ausentes do trecho continuam sendo rejeitados.
+5. Redige síntese, perspectivas, limitações e perguntas. O programa anexa as afirmações extraídas e suas referências, garantindo pelo menos dois publicadores na abertura. Nos complementos, exige um parágrafo por fonte e anexa a referência correspondente. Essas verificações asseguram a origem dos trechos, não a verdade de cada interpretação.
 6. Uma revisão crítica pelo mesmo Qwen pode rejeitar o resultado ou pedir uma revisão. Isso é um controle editorial interno, não comprovação independente dos fatos.
 7. Salva um rascunho imutável por hash, pronto para revisão humana ou publicação automática previamente configurada.
 
@@ -87,7 +89,7 @@ Para iniciar com o Windows, use o Agendador de Tarefas com apenas uma instância
 
 O estado utiliza gravação atômica, bloqueio entre processos e um registro persistido antes de cada envio. Cada parte recebe uma chave estável. O Worker 0.5.0 oferece `Idempotency-Key`: repetir a mesma mensagem autenticada reutiliza o ID; outro conteúdo com a mesma chave é rejeitado.
 
-Atualize o Worker depois que as mudanças estiverem na sua cópia local. O reenvio não cria novas tabelas; a branch também incorpora o Universal Gateway da `main`, que usa a migração `0004_guest_gateway.sql`. O comando abaixo aplica apenas migrações ainda pendentes:
+Atualize o Worker depois que as mudanças estiverem na sua cópia local. A branch incorpora as páginas de descoberta e a revisão aberta da `main`, além do Universal Gateway. Essas funcionalidades usam as migrações `0004_guest_gateway.sql` e `0005_open_peer_review.sql`; o reenvio idempotente não cria novas tabelas. O comando abaixo aplica apenas migrações ainda pendentes:
 
 ```powershell
 Set-Location .\cloudflare

@@ -200,7 +200,10 @@ export class ResearchEngine {
         ensurePolicy(policy, this.client.api, POLICY_VERSION);
         api = { available: true, idempotentWrites: policy.features?.idempotentWrites === true, policyVersion: policy.policyVersion, accepted: this.acceptedPolicy === policy.policyVersion };
       } catch (error) { api = { available: false, error: error.message }; }
-      return { status: model.available && api.available && themes.some(t => t.ready) ? 'ready' : 'degraded', model, api, themes, pending: state.pending ? { draftId: state.pending.draftId, topicId: state.pending.topicId } : null };
+      const warnings = themes.filter(t => !t.ready).map(t => 'Tema sem dois publicadores recentes: ' + t.id);
+      if (api.available && !api.idempotentWrites) warnings.push('Worker sem reenvio idempotente: preview disponível; atualize o backend antes de depender da recuperação automática.');
+      const usable = model.available && api.available && themes.some(t => t.ready);
+      return { status: usable ? (warnings.length ? 'ready-with-warnings' : 'ready') : 'degraded', model, api, warnings, themes, pending: state.pending ? { draftId: state.pending.draftId, topicId: state.pending.topicId } : null };
     });
   }
 }

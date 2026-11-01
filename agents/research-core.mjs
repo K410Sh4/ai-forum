@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export const RESEARCH_VERSION = '2.0.0';
+export const RESEARCH_VERSION = '2.1.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -87,18 +87,56 @@ export function prose(value, min, max, name = 'text') {
   if (typeof value !== 'string' || normalized(value).length < min || normalized(value).length > max || /https?:\/\//i.test(value) || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)) throw Error('Invalid ' + name + ' (length, URL or control character)');
   return normalized(value);
 }
-export function validateCard(card, source) {
+export function evidenceSpans(value) {
+  const original = normalized(value);
+  let collected = original.slice(0, 4000);
+  if (original.length > collected.length && collected.lastIndexOf(' ') > 3800) collected = collected.slice(0, collected.lastIndexOf(' '));
+  if (collected.length < 15) return [];
+  const spans = []; let start = 0;
+  while (start < collected.length) {
+    let end = Math.min(start + 240, collected.length);
+    if (end < collected.length) {
+      const prefix = collected.slice(start, end);
+      const boundary = [...prefix.matchAll(/[.!?][”"']?\s+/g)].at(-1);
+      const space = collected.lastIndexOf(' ', end);
+      if (boundary && boundary.index > 60) end = start + boundary.index + boundary[0].length;
+      else if (space > start + 100) end = space;
+      if (collected.length - end < 15) end = collected.length;
+      if (end < collected.length && /[\uD800-\uDBFF]/.test(collected[end - 1])) end--;
+    }
+    const text = collected.slice(start, end).trim();
+    if (text) spans.push({ id: 'E' + (spans.length + 1), text });
+    start = end; while (collected[start] === ' ') start++;
+  }
+  return spans;
+}
+export function validateCard(card, source, { spans = [], requireSelection = false } = {}) {
   const summary = prose(card.summary, 35, 380, 'source summary');
   if (!Array.isArray(card.facts) || !card.facts.length || card.facts.length > 3) throw Error('Source card needs 1-3 supported facts');
   const facts = card.facts.map(f => {
-    const statement = prose(f.statement, 20, 220, 'fact');
-    const quote = normalized(f.quote || '');
-    if (quote.length < 15 || quote.length > 260 || !normalized(source.evidence || source.summary).toLowerCase().includes(quote.toLowerCase())) throw Error('Evidence quote was not found in the collected source');
+    const statement = prose(f.statement, requireSelection ? 25 : 20, requireSelection ? 180 : 220, 'fact');
+    const selected = spans.find(span => span.id === f.evidenceId);
+    if (requireSelection && !selected) throw Error('Select an existing evidenceId from the supplied source spans');
+    const quote = normalized(selected ? selected.text : f.quote || '');
+    if (quote.length < 15 || quote.length > (selected ? 300 : 260) || !normalized(source.evidence || source.summary).toLowerCase().includes(quote.toLowerCase())) throw Error('Evidence quote was not found in the collected source');
     const numbers = value => (value.match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'));
     if (numbers(statement).some(n => !numbers(quote).includes(n))) throw Error('Numeric fact is absent from its evidence quote');
-    return { statement, quote };
+    return { statement, quote, ...(selected ? { evidenceId: selected.id } : {}) };
   });
   return { sourceId: source.id, summary, facts, limitations: prose(card.limitations, 15, 220, 'source limitation') };
+}
+export function openingEvidence(cards, sources) {
+  const selected = [], publishers = new Set();
+  for (const card of cards) {
+    const [source] = citedSources([card.sourceId], sources);
+    const publisher = source.publisherId || source.host;
+    if (!publishers.has(publisher)) { selected.push(card); publishers.add(publisher); }
+    if (publishers.size === 2) break;
+  }
+  for (const card of cards) { if (selected.length === 3) break; if (!selected.includes(card)) selected.push(card); }
+  const sourceIds = selected.map(card => card.sourceId);
+  requireDiversity(citedSources(sourceIds, sources, 2));
+  return { sourceIds, findings: selected.map(card => ({ text: prose(card.facts?.[0]?.statement, 25, 180, 'supported finding'), sourceIds: [card.sourceId] })) };
 }
 function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
 export function composePost(topic, draft, sources) {

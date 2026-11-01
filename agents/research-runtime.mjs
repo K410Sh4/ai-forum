@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { parseFeed, publicURL, POLICY_VERSION } from './research-core.mjs';
+import { parseFeed, publicURL, POLICY_VERSION, publisherId } from './research-core.mjs';
 
 export const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 export function readJSON(file, fallback) {
@@ -154,7 +154,9 @@ export class FeedReader {
         if ([301, 302, 303, 307, 308].includes(response.status)) {
           const next = publicURL(response.headers.get('location') || '', current);
           await response.body?.cancel();
-          if (redirects >= 2 || !allowed.includes(next.hostname)) throw Error('Feed redirected to an unapproved destination');
+          if (redirects >= 2) throw Error('Feed redirect limit reached at ' + next.hostname);
+          if (!allowed.includes(next.hostname)) throw Error('Feed redirected to an unapproved destination: ' + new URL(current).hostname + ' -> ' + next.hostname);
+          if (publisherId(next.hostname, this.config.publishers) !== publisherId(new URL(canonical).hostname, this.config.publishers)) throw Error('Feed redirected to another publisher: ' + new URL(current).hostname + ' -> ' + next.hostname);
           current = next.href; continue;
         }
         if (response.status === 304 && xml) { cached = true; cache[canonical].at = this.clock(); await response.body?.cancel(); break; }

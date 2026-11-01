@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.2 — 2026-11-01 (evidências por seleção)
+
+- O Qwen seleciona IDs de trechos existentes; o programa recupera a citação literal e preserva a validação de números, evitando falhas de cópia ou tradução de trechos.
+- Referências da abertura são montadas a partir das notas validadas, com dois publicadores distintos. Complementos exigem parágrafos por fonte, sem delegar a composição dos IDs ao modelo.
+- Tema de IA inclui o feed do Google Research. Redirecionamentos informam os hosts envolvidos e não podem trocar a identidade do publicador.
+- Diagnóstico distingue disponibilidade parcial (`ready-with-warnings`) e informa quando o Worker ainda não oferece reenvio idempotente.
+- Integração com descoberta em HTML/texto/sitemap e revisão aberta da `main`, preservando a migração `0005` e a moderação de respostas nos reenvios.
+
 ## 0.5.1 — 2026-11-01 (correção de compatibilidade)
 
 - Removido o bloqueio que rejeitava Node 26; o cliente aceita Node 22+ com as APIs necessárias presentes.

@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { ResearchEngine } from '../agents/research-engine.mjs';
 import { OllamaResearcher } from '../agents/research-model.mjs';
 import { ResearchStore, FeedReader, validateConfig, readJSON, writeJSON } from '../agents/research-runtime.mjs';
-import { readFeed, chooseArticles, validateCard, payloadHash, publicURL } from '../agents/research-core.mjs';
+import { readFeed, chooseArticles, validateCard, payloadHash, publicURL, evidenceSpans, openingEvidence, normalized } from '../agents/research-core.mjs';
 import { runtimeInfo } from '../agents/topic-researcher.mjs';
 
 const NOW = Date.parse('2026-11-01T12:00:00Z');
@@ -41,12 +41,14 @@ function fixture(t, { depth = 'balanced', invalidModel = false, criticRejects = 
     const input = JSON.parse(prompt.slice(0, prompt.indexOf('\nEsquema:'))), properties = body.format.properties;
     assert.equal(body.format.type, 'object'); assert.equal(body.tools, undefined); assert.match(body.messages[0].content, /NÃO CONFIÁVEIS/);
     let value, stage;
-    if (properties.angle) { stage = 'plan'; value = { kind: 'roundup', angle: 'Comparar limites e aplicações dos estudos relatados', sourceIds: ['S1', 'S2'] }; }
-    else if (properties.facts) { stage = 'card'; value = { summary: 'O relatório descreve uma comparação controlada com alcance limitado ao cenário avaliado.', facts: [{ statement: 'O relatório apresenta uma comparação de comportamento em condições determinadas.', quote: excerpt.slice(0, 87) }], limitations: 'O resumo não estabelece generalização para outros cenários.' }; }
-    else if (properties.findings) {
-      stage = 'draft'; value = { title: 'Comparações controladas e limites dos modelos locais', overview: 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis e propõe perguntas para avaliações adicionais.', findings: [{ text: 'O primeiro relatório descreve uma comparação em condições determinadas.', sourceIds: ['S1'] }, { text: 'O segundo relato também limita o alcance das conclusões ao cenário avaliado.', sourceIds: ['S2'] }], sourceIds: ['S1', 'S2'], uncertainties: 'Os resumos não permitem verificar a transferência dos resultados para outros ambientes.', perspectives: [{ label: 'Aplicações', argument: 'Comparações controladas podem orientar a escolha de novos experimentos.', caveat: 'Isso não demonstra desempenho geral.' }, { label: 'Limitações', argument: 'É preciso examinar os métodos antes de aplicar as conclusões a outros contextos.', caveat: 'Os resumos oferecem contexto limitado.' }], questions: ['Como testar a generalização?', 'Quais variáveis precisam ser controladas?'] };
+    if (properties.angle) { stage = 'plan'; assert.equal(properties.sourceIds, undefined); value = { kind: 'roundup', angle: 'Comparar limites e aplicações dos estudos relatados' }; }
+    else if (properties.facts) { stage = 'card'; assert.equal(properties.facts.items.properties.quote, undefined); value = { summary: 'O relatório descreve uma comparação controlada com alcance limitado ao cenário avaliado.', facts: [{ statement: 'O relatório apresenta uma comparação de comportamento em condições determinadas.', evidenceId: input.collectedEvidence[0].id }], limitations: 'O resumo não estabelece generalização para outros cenários.' }; }
+    else if (properties.overview) {
+      stage = 'draft'; assert.equal(properties.sourceIds, undefined); assert.equal(properties.findings, undefined);
+      value = { title: 'Comparações controladas e limites dos modelos locais', overview: 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis e propõe perguntas para avaliações adicionais.', uncertainties: 'Os resumos não permitem verificar a transferência dos resultados para outros ambientes.', perspectives: [{ label: 'Aplicações', argument: 'Comparações controladas podem orientar a escolha de novos experimentos.', caveat: 'Isso não demonstra desempenho geral.' }, { label: 'Limitações', argument: 'É preciso examinar os métodos antes de aplicar as conclusões a outros contextos.', caveat: 'Os resumos oferecem contexto limitado.' }], questions: ['Como testar a generalização?', 'Quais variáveis precisam ser controladas?'] };
     } else if (properties.heading) {
-      stage = 'section'; value = { heading: input.focus, paragraphs: [{ text: 'O primeiro relato descreve uma comparação sob condições determinadas. Essa descrição permite formular questões metodológicas, mas não confirma aplicação em cenários diferentes.', sourceIds: ['S1'] }, { text: 'O segundo relato também apresenta limites de alcance. Uma proposta de trabalho seria comparar os cenários, sem presumir que os dois estudos confirmam um mesmo resultado.', sourceIds: ['S2'] }], limitations: 'As descrições disponíveis não substituem a leitura dos métodos completos.' };
+      stage = 'section'; assert.equal(properties.paragraphs.type, 'object');
+      value = { heading: input.focus, paragraphs: Object.fromEntries(input.evidenceCards.map(c => [c.sourceId, 'O relato descreve uma comparação sob condições determinadas. Essa descrição permite formular questões metodológicas, mas não confirma aplicação em cenários diferentes.'])), limitations: 'As descrições disponíveis não substituem a leitura dos métodos completos.' };
     } else {
       stage = 'review'; const reject = criticCalls++ < criticRejects;
       value = { approved: !reject, issues: reject ? ['Explique melhor o alcance das evidências apresentadas.'] : [], note: 'Revisão interna baseada apenas nas evidências fornecidas.' };
@@ -100,13 +102,42 @@ test('an invented evidence quote is rejected', () => {
   assert.throws(() => validateCard({ summary: 'Uma explicação suficientemente extensa do relatório consultado.', facts: [{ statement: 'Um resultado que parece convincente mas não está demonstrado.', quote: 'An invented result absent from the source.' }], limitations: 'A informação exige confirmação.' }, { summary: excerpt }), /not found/);
   assert.throws(() => validateCard({ summary: 'Uma explicação suficientemente extensa do relatório consultado.', facts: [{ statement: 'O estudo demonstrou precisão de 99% em todos os cenários.', quote: excerpt.slice(0, 87) }], limitations: 'A informação exige confirmação.' }, { summary: excerpt }), /Numeric fact/);
 });
+test('model selects existing evidence IDs; literal text is recovered by code instead of copied or translated', () => {
+  const source = { id: 'S1', summary: excerpt }, spans = evidenceSpans(excerpt);
+  const card = { summary: 'O relatório descreve uma comparação e seu alcance limitado.', facts: [{ statement: 'O relatório descreve uma comparação de comportamento em condições controladas.', evidenceId: spans[0].id }], limitations: 'O resumo não sustenta generalização.' };
+  const verified = validateCard(card, source, { spans, requireSelection: true });
+  assert.equal(verified.facts[0].quote, spans[0].text); assert.ok(excerpt.includes(verified.facts[0].quote));
+  assert.throws(() => validateCard({ ...card, facts: [{ ...card.facts[0], evidenceId: 'E999' }] }, source, { spans, requireSelection: true }), /existing evidenceId/);
+  assert.throws(() => validateCard({ ...card, facts: [{ statement: card.facts[0].statement, quote: 'O relatório apresenta uma comparação.' }] }, source, { spans, requireSelection: true }), /existing evidenceId/);
+  assert.throws(() => validateCard({ ...card, facts: [{ statement: 'O estudo demonstrou precisão de 99% em todos os cenários.', evidenceId: spans[0].id }] }, source, { spans, requireSelection: true }), /Numeric fact/);
+});
+test('evidence spans remain literal and preserve short leading qualifications and long tokens', () => {
+  const original = 'No. ' + 'This result applies only to a restricted setting. '.repeat(12) + 'x'.repeat(250);
+  const spans = evidenceSpans(original), corpus = normalized(original);
+  assert.ok(spans[0].text.startsWith('No.')); assert.ok(spans.every(s => s.text.length >= 15 && s.text.length <= 300 && corpus.includes(s.text)));
+  assert.equal(spans.map(s => s.id).length, new Set(spans.map(s => s.id)).size);
+});
+test('opening citations retain distinct publishers even if the first notes are from the same publisher', () => {
+  const sources = [{ id: 'S1', publisherId: 'first' }, { id: 'S2', publisherId: 'first' }, { id: 'S3', publisherId: 'second' }];
+  const cards = sources.map(s => ({ sourceId: s.id, facts: [{ statement: 'O relatório descreve resultados com alcance metodológico limitado.' }] }));
+  const result = openingEvidence(cards, sources);
+  assert.ok(result.sourceIds.includes('S3')); assert.equal(new Set(result.sourceIds).size, result.sourceIds.length);
+});
 test('preview completes plan, extraction, writing and review without public writes', async t => {
   const f = fixture(t); const result = await f.engine.generate();
   assert.equal(result.status, 'draft'); assert.equal(f.topics.length, 0); assert.equal(f.writeCalls, 0);
   assert.deepEqual(f.calls.map(c => c.stage), ['plan', 'card', 'card', 'draft', 'review']);
   const draft = readJSON(result.file);
   assert.equal(draft.hash, payloadHash(draft)); assert.match(draft.post.content, /Pesquisa [a-f0-9]{24}/);
+  assert.match(draft.post.content, /\[S1\]/); assert.match(draft.post.content, /\[S2\]/);
+  assert.deepEqual(draft.plan.sourceIds, ['S1', 'S2']);
+  assert.equal(draft.cards[0].facts[0].quote, evidenceSpans(excerpt)[0].text);
   assert.equal(fs.existsSync(result.markdown), true);
+});
+test('doctor reports usable themes with an older Worker as ready with actionable warnings', async t => {
+  const f = fixture(t, { idempotent: false }); const result = await f.engine.doctor();
+  assert.equal(result.status, 'ready-with-warnings'); assert.equal(result.themes[0].ready, true);
+  assert.ok(result.warnings.some(w => w.includes('idempotente'))); assert.equal(f.writeCalls, 0); assert.equal(f.calls.length, 0);
 });
 test('publication sends the exact reviewed draft; changed drafts are blocked', async t => {
   const f = fixture(t); const preview = await f.engine.generate(); const reviewed = readJSON(preview.file);
@@ -238,6 +269,10 @@ test('feed access denial is reported without retrying a different path or client
   let calls = 0;
   const feeds = new FeedReader(validateConfig(configValue()), { fetchImpl: async () => { calls++; return new Response('', { status: 403 }); } });
   await assert.rejects(feeds.read('https://first.example/feed', {}), /HTTP 403/); assert.equal(calls, 1);
+});
+test('an approved-host redirect cannot impersonate a different publisher', async () => {
+  const feeds = new FeedReader(validateConfig(configValue()), { fetchImpl: async () => new Response(null, { status: 302, headers: { location: 'https://second.example/feed' } }) });
+  await assert.rejects(feeds.read('https://first.example/feed', {}), /another publisher/);
 });
 test('Windows launcher forwards help without opening a model or publishing', { skip: process.platform !== 'win32' }, () => {
   const result = spawnSync('cmd.exe', ['/d', '/c', 'Pesquisar-Forum.cmd --help'], { encoding: 'utf8' });
