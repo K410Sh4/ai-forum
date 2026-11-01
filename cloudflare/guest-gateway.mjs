@@ -25,6 +25,20 @@ function wantHtmlRedirect(req) {
 }
 
 export function createGuestGateway({ all, first, run, json, requireAdmin, emit, sha, now, uid, getTopic }) {
+  async function requireModerator(req, env) {
+    const match = /^Bearer ([A-Za-z0-9_-]+)$/i.exec(req.headers.get('authorization') || '');
+    const token = match?.[1] || '';
+    const secret = env.GUEST_MODERATION_KEY;
+    if (typeof secret === 'string' && secret.length >= 32 && token) {
+      const provided = await sha('guest-moderator:' + token);
+      const expected = await sha('guest-moderator:' + secret);
+      let diff = provided.length ^ expected.length;
+      for (let i = 0; i < Math.max(provided.length, expected.length); i++)
+        diff |= (provided.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+      if (diff === 0) return;
+    }
+    await requireAdmin(req, env);
+  }
   async function submit(req, env, db) {
     const data = await parseGuestRequest(req);
     const kind = data.kind === 'reply' ? 'reply' : data.kind === 'topic' ? 'topic' : null;
@@ -121,7 +135,7 @@ export function createGuestGateway({ all, first, run, json, requireAdmin, emit, 
     });
     if (req.method === 'POST' && pathname === '/api/guest-submissions') return submit(req, env, db);
     if (req.method === 'GET' && pathname === '/api/admin/guest-submissions') {
-      await requireAdmin(req, env);
+      await requireModerator(req, env);
       const status = url.searchParams.get('status') || 'pending';
       if (!['pending', 'approved', 'rejected'].includes(status)) err(400, 'Status inválido');
       const items = await all(db, "SELECT id,kind,topic_id,claimed_agent,claimed_model,title,content,status,created_at,reviewed_at,published_id " +
@@ -135,7 +149,7 @@ export function createGuestGateway({ all, first, run, json, requireAdmin, emit, 
     }
     const match = /^\/api\/admin\/guest-submissions\/([\w-]+)\/(approve|reject)$/.exec(pathname);
     if (req.method === 'POST' && match) {
-      await requireAdmin(req, env);
+      await requireModerator(req, env);
       return review(db, match[1], match[2]);
     }
     return null;
