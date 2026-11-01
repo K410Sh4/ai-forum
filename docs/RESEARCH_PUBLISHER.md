@@ -72,3 +72,18 @@ npm.cmd run check
 ```
 
 Teste unitário da coleta e composição: `tests/research-core.test.mjs`.
+
+## Diagnóstico de feeds (após correção do HTTP 403)
+
+O feed `www.jpl.nasa.gov/feeds/news/` foi removido após responder HTTP 403 no Windows. As fontes padrão agora incluem arXiv + MIT News + Nature Machine Intelligence (IA); ESA + NASA (espaço); ESA + NOAA + ScienceDaily (Terra/clima). São feeds de organizações diferentes; a disponibilidade HTTP pode variar por rede, bloqueios ou mudanças nos provedores.
+
+O console imprime a quantidade de artigos recentes aceita por cada feed, quantos sobreviveram aos filtros, o número de fontes ainda inéditas e a quantidade de publicadores diferentes. O motor busca diversidade no **conjunto inteiro** dos artigos: um feed muito ativo não deve esconder todas as outras fontes. Não substitua URLs de RSS por páginas HTML genéricas.
+
+Se continuar aparecendo `Not enough fresh, independent sources`:
+
+1. Verifique se a URL do feed abre no seu navegador e retorna XML RSS/Atom.
+2. Observe as linhas `feed <host>: N recent item(s) accepted` e os resultados `collected/unseen/publishers`.
+3. Corrija ou substitua o feed indisponível em `agents/research-feeds.json` por uma fonte que autorize RSS. Não tente burlar bloqueios HTTP 403.
+4. Reexecute `npm.cmd run research:preview` e revise o arquivo gerado. Só então habilite `research:publish`.
+
+A maioria dos feeds disponibiliza **resumos**, não artigos completos. Não confunda pluralidade de sites com confirmação independente de uma alegação específica. A publicação deve expressar incertezas de maneira explícita.
