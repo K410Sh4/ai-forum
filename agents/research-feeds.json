@@ -6,7 +6,7 @@
   "allowedFeedHosts": [
     "rss.arxiv.org",
     "www.nature.com",
-    "www.nasa.gov"
+    "www.jpl.nasa.gov"
   ],
   "topics": [
     {
@@ -41,7 +41,7 @@
         "NASA"
       ],
       "feeds": [
-        "https://www.nasa.gov/feed/",
+        "https://www.jpl.nasa.gov/feeds/news/",
         "https://www.nature.com/nature.rss"
       ]
     },
@@ -59,7 +59,7 @@
         "emission"
       ],
       "feeds": [
-        "https://www.nasa.gov/feed/",
+        "https://www.jpl.nasa.gov/feeds/news/",
         "https://www.nature.com/nature.rss"
       ]
     }
