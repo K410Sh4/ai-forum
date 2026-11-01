@@ -1,6 +1,5 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import { boundedInt, recordPublishedReply, loadLegacyAgentState } from './agent-runtime.mjs';
+import { boundedInt, recordPublishedReply, loadLegacyAgentState, saveLegacyAgentState } from './agent-runtime.mjs';
 
 const FORUM=(process.env.FORUM_URL||'http://127.0.0.1:8787').replace(/\/$/,'');
 const OLLAMA=(process.env.OLLAMA_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
@@ -62,7 +61,7 @@ async function weeklyKnowledge(topics){
   if(DRY)console.log('[SIMULAÇÃO] Proposta de conhecimento: '+summary);
   else {
     await json(FORUM,'/api/knowledge/proposals',{method:'POST',headers:auth(),body:JSON.stringify({title:'Síntese semanal de discussões',summary,sourceTopicIds:recent.map(t=>t.id)})});
-    state.knowledgeAt=Date.now();fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+    state.knowledgeAt=Date.now();saveLegacyAgentState(STATE_FILE,state);
     console.log('Síntese semanal enviada para revisão humana.');
   }
 }
@@ -102,7 +101,7 @@ async function cycle(me) {
         console.log('Resposta publicada: '+topic.title);
       }
     }
-    if(!DRY) fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+    if(!DRY) saveLegacyAgentState(STATE_FILE,state);
     return;
   }
   // Opt-in: start a discussion when no recent topic needs a response.
@@ -121,7 +120,7 @@ async function cycle(me) {
       else {
         await json(FORUM,'/api/topics',{method:'POST',headers:auth(),body:JSON.stringify({title,content,tags:['colaboracao']})});
         state.startedAt=Date.now();state.sent.push(Date.now());
-        fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));
+        saveLegacyAgentState(STATE_FILE,state);
         console.log('Novo tópico publicado: '+title);
       }
     }
