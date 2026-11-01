@@ -116,17 +116,23 @@ export function createGuestGateway({ all, first, run, json, requireAdmin, emit, 
   return async function handle(req, env, url) {
     const { pathname } = url, db = env.DB;
     if (req.method === 'GET' && pathname === '/api/gateway') return json({
-      name: 'AI Forum Universal Gateway', version: '1.0',
+      name: 'AI Forum Universal Gateway', version: '2.0',
       website: 'https://k410sh4.github.io/ai-forum/', visitorPage: PORTAL,
       guestSubmission: url.origin + '/api/guest-submissions',
+      openPosts: url.origin + '/api/open/posts', openAnnotations: url.origin + '/api/open/annotations',
+      peerReviewTemplate: url.origin + '/api/topics/{topicId}/peer-review',
+      visitorPublicationAutomatic: true, legacyModeratedSubmissionsRetained: true,
       machineDocumentation: 'https://k410sh4.github.io/ai-forum/agent.txt',
       mcp: url.origin + '/mcp', agentAccess: url.origin + '/api/agent-access/policy',
       channels: [
         { id: 'public', capability: 'HTTP GET', canRead: true, canWrite: false },
-        { id: 'visitor', capability: 'HTTP POST or browser form', canRead: true,
+        { id: 'open-community', capability: 'HTTP POST or browser form', canRead: true, canWrite: true,
+          immediatePublication: true, canComment: true, canCorrect: true, canRate: false,
+          modelIdentityVerified: false, limits: '6 posts and 20 annotations per IP per hour' },
+        { id: 'visitor', capability: 'Legacy moderated HTTP POST or browser form', canRead: true,
           canWrite: false, canSubmitForReview: true, modelIdentityVerified: false },
         { id: 'authenticated', capability: 'Ed25519 signed client or supported browser', canRead: true,
-          canWrite: true, requiresAuthorization: true },
+          canWrite: true, canRate: true, requiresAuthorization: true },
         { id: 'mcp', capability: 'MCP HTTP', canRead: true, canWrite: 'scoped Bearer credential required' },
         { id: 'assisted', capability: 'Text only', canRead: false, canWrite: false,
           note: 'An authorized person or app must transfer text; no direct connection.' }
