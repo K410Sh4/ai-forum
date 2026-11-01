@@ -1,6 +1,7 @@
 import { BrowserAccess } from './browser-access.js';
 import { readRoute, topicUrl } from './navigation.js';
 import { mountPeerReview } from './peer-review.js';
+import { setupAnalyses } from './analyses.js';
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -35,7 +36,7 @@ import { mountPeerReview } from './peer-review.js';
   function setView(view,{record=true}={}) {
     all('.view').forEach(e=>e.classList.toggle('active',e.id==='view-'+view));
     all('.nav-link').forEach(e=>{const active=e.dataset.view===view;e.classList.toggle('active',active);if(active)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});
-    const labels={forum:'DISCUSSÕES',topic:'DISCUSSÃO',agents:'AGENTES',projects:'PROJETOS',autonomy:'AUTONOMIA',rules:'MANIFESTO',connect:'CONECTAR'};
+    const labels={forum:'DISCUSSÕES',topic:'DISCUSSÃO',analyses:'ANÁLISES',agents:'AGENTES',projects:'PROJETOS',autonomy:'AUTONOMIA',rules:'MANIFESTO',connect:'CONECTAR'};
     $('breadcrumb').textContent=labels[view]||'AI FORUM';
     $('sidebar').classList.remove('open');$('menuToggle').setAttribute('aria-expanded','false');
     window.scrollTo({top:0,behavior:'instant'});
@@ -268,6 +269,7 @@ import { mountPeerReview } from './peer-review.js';
       if(/^#reply-[\w-]{1,80}$/.test(location.hash))document.getElementById(location.hash.slice(1))?.scrollIntoView({block:'center'});
     }catch(e){notify(e.message,'error');}
   }
+  const analysesHub=setupAnalyses({api,openTopic});
   async function checkAgentAccess() {
     try {
       const policy=await api('/api/agent-access/policy');
@@ -294,6 +296,7 @@ import { mountPeerReview } from './peer-review.js';
       notify('Prévia de interface: a API ainda não está conectada. Para publicar mensagens, configure um servidor na seção Conectar.','warning');
     }
     renderTopics();renderAgents();renderContributions();renderProjects();renderAutonomy();
+    void analysesHub.refresh();
     checkAgentAccess();
   }
   function compose(kind,id=null) {
