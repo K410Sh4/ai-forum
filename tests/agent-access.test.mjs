@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { Readable, Writable } from 'node:stream';
 import worker from '../cloudflare/worker.mjs';
-import { ForumClient, stdioBridge } from '../agents/forum-client.mjs';
+import { ForumClient, stdioBridge, readJsonInput } from '../agents/forum-client.mjs';
 import { main as researchMain } from '../agents/topic-researcher.mjs';
 
 const API = 'https://forum.test';
@@ -288,4 +289,137 @@ test('machine sessions can join, create, claim and submit a project task through
   assert.equal(submission.requiresHumanReview, true);
   assert.equal(submission.status, 'submitted');
   assert.equal((await h.request('/api/admin/projects/ai-forum/tasks/' + task.id + '/review', 'POST', { decision: 'approve' }, session.access_token)).status, 401);
+});
+
+
+test('CLI refuses missing IDs rather than sending /api/topics/undefined or consuming stdin/enrollment', () => {
+  for (const command of ['topic','reply']) {
+    const result=spawnSync(process.execPath,['agents/forum-client.mjs',command],{encoding:'utf8'});
+    assert.equal(result.status,1,command);
+    assert.match(result.stderr,/require a valid ID/);
+    assert.doesNotMatch(result.stderr,/non-JSON response|network/i);
+  }
+  assert.equal(spawnSync(process.execPath,['agents/forum-client.mjs','nonesuch'],{encoding:'utf8'}).status,1);
+  assert.equal(spawnSync(process.execPath,['agents/forum-client.mjs','help'],{encoding:'utf8'}).status,0);
+});
+
+test('HTML error bodies preserve the HTTP status and JSON error messages have bounded control-free text', async()=>{
+  const c=new ForumClient({api:API,fetchImpl:async()=>new Response('<h1>fail</h1>',{status:401,headers:{'Content-Type':'text/html'}})});
+  await assert.rejects(c.request('/api/topics'),error=>error.status===401 && /401/.test(error.message));
+  c.fetch=async()=>new Response('<html>rate limit</html>',{status:429});
+  await assert.rejects(c.request('/api/topics'),error=>error.status===429 && /429/.test(error.message));
+  c.fetch=async()=>Response.json({error:'\u001b[31m'+('BAD'.repeat(120))},{status:403});
+  await assert.rejects(c.request('/api/topics'),error=>error.status===403 && !error.message.includes('\u001b') && error.message.length<=220);
+});
+
+test('HTML 401 from an authenticated write triggers one new enrollment without losing idempotency', async t=>{
+  const h=harness(t);let refused=false;
+  const fetchImpl=async(url,options)=>{
+    if(new URL(url).pathname==='/api/topics' && options.method==='POST' && !refused) {
+      refused=true;return new Response('<html>Unauthorized</html>',{status:401});
+    }
+    return h.fetchImpl(url,options);
+  };
+  const client=localClient(t,h,{fetchImpl});
+  const result=await client.authorized('/api/topics',{method:'POST',
+    body:{title:'Test after HTML 401',content:'Retried with the same idempotent operation and valid session.'},
+    idempotencyKey:'research:html-401-client:0'});
+  assert.equal(refused,true);
+  assert.equal(typeof result.topic.id,'string');
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n,1);
+});
+
+test('simultaneous session calls use a single challenge and reusable identity', async t=>{
+  const h=harness(t),client=localClient(t,h);
+  const sessions=await Promise.all(Array.from({length:12},()=>client.session()));
+  assert.ok(sessions.every(value=>value.token===sessions[0].token));
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM agent_auth_challenges').get().n,1);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM agent_sessions').get().n,1);
+  assert.equal(client.pendingEnrollment,null);
+});
+
+test('receipt and challenge expiry must be finite numeric values, and challenge scopes cannot be changed',async t=>{
+  for(const issue of ['expiresAt','scopes','expires_in']) {
+    const h=harness(t);
+    let exchanges=0;
+    const fetchImpl=async(url,options)=>{
+      const pathname=new URL(url).pathname;
+      const response=await h.fetchImpl(url,options);
+      if(pathname==='/api/agent-auth/challenge' && issue!=='expires_in' && response.ok){
+        const data=await response.json();
+        const claims=JSON.parse(data.challenge);
+        if(issue==='expiresAt') claims.expiresAt=new Date().toISOString();
+        else claims.scopes=['identity:read'];
+        data.challenge=JSON.stringify(claims);
+        return Response.json(data,{status:201});
+      }
+      if(pathname==='/api/agent-auth/token'){
+        exchanges++;
+        if(issue==='expires_in' && response.ok){
+          const data=await response.json();delete data.expires_in;
+          return Response.json(data,{status:201});
+        }
+      }
+      return response;
+    };
+    const client=localClient(t,h,{fetchImpl});
+    await assert.rejects(client.session(),error=>{
+      assert.match(error.message,issue==='expiresAt'?/invalid expiry/:issue==='scopes'?/scopes differ/:/Invalid authorization receipt/);
+      return true;
+    });
+    if(issue==='expires_in')assert.equal(exchanges,1);
+    else assert.equal(exchanges,0,'bad challenge must never be signed or exchanged');
+    assert.equal(client.pendingEnrollment,null);
+  }
+});
+
+test('profile comparison is key-order independent but preserves trimmed exact values',async t=>{
+  const h=harness(t);
+  let attemptedToken=0;
+  const fetchImpl=async(url,options)=>{
+    const path=new URL(url).pathname;
+    if(path==='/api/agent-auth/token')attemptedToken++;
+    const response=await h.fetchImpl(url,options);
+    if(path==='/api/agent-auth/challenge'&&response.ok) {
+      const data=await response.json(), claims=JSON.parse(data.challenge);
+      claims.profile={owner:claims.profile.owner,model:claims.profile.model,name:claims.profile.name};
+      data.challenge=JSON.stringify(claims);
+      return Response.json(data,{status:201});
+    }
+    return response;
+  };
+  const client=localClient(t,h,{fetchImpl,profile:{name:'   Test Agent   ',model:' Test Model ',owner:' Test Owner '}});
+  await assert.rejects(client.session(),error=>/proof of key possession/i.test(error.message) || /Invalid authorization receipt/i.test(error.message) || /request failed/i.test(error.message));
+  assert.equal(client.profile.name,'Test Agent');
+  assert.equal(attemptedToken,1,'same values in a different key order should reach the token verification');
+});
+
+test('buffer-split multibyte UTF-8 input retains accents and emoji without mutating JSON',async()=>{
+  const value={title:'Ação e revisão 🐟',content:'Discussão sobre inteligência artificial e avaliação.'};
+  const bytes=Buffer.from(JSON.stringify(value),'utf8');
+  const parsed=await readJsonInput(Readable.from([...bytes].map(byte=>Buffer.from([byte]))));
+  assert.deepEqual(parsed,value);
+  await assert.rejects(readJsonInput(Readable.from([Buffer.alloc(12001,65)])),/too large/);
+});
+
+test('one-shot session can be revoked using logout without exposing its bearer token',async t=>{
+  const h=harness(t),client=localClient(t,h);
+  const session=await client.session(),token=session.token;
+  const result=await client.logout();
+  assert.equal(result.revoked,true);
+  assert.equal(client.authorization,null);
+  assert.equal((await h.request('/api/me','GET',undefined,token)).status,401);
+  assert.deepEqual(await client.logout(),{revoked:false});
+});
+
+test('existing identity must be a private regular file on POSIX',async t=>{
+  if(process.platform==='win32')return t.skip('Windows NTFS ACLs are distinct from POSIX mode bits');
+  const h=harness(t),client=localClient(t,h);
+  client.identity();
+  fs.chmodSync(client.identityFile,0o644);
+  assert.throws(()=>client.identity(),/permissions too broad/);
+  fs.chmodSync(client.identityFile,0o600);
+  fs.renameSync(client.identityFile,client.identityFile+'.saved');
+  fs.symlinkSync(client.identityFile+'.saved',client.identityFile);
+  assert.throws(()=>client.identity(),/not a symlink/);
 });
