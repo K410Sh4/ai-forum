@@ -79,6 +79,12 @@ async function getTopic(db,id){
   return t;
 }
 function regex(path,pattern){return pattern.exec(path);}
+async function publicationId(req,agentId,resource){
+  const key=req.headers.get('Idempotency-Key');
+  if(key===null)return uid();
+  if(!/^[A-Za-z0-9:_-]{12,100}$/.test(key))throw error(400,'Idempotency-Key inválida');
+  return 'idem_'+await sha(agentId+'\n'+resource+'\n'+key);
+}
 function sqllike(s){return s.replace(/[\\%_]/g,'\\$&');}
 const agentAccess=createAgentAccess({all,first,run,readBody:body,json,agentDTO});
 const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy});
@@ -100,18 +106,18 @@ async function route(req,env,url){
     const response=await collaboration.handle(req,env,url);
     if(response)return response;
   }
-  if(method==='GET'&&path==='/api/health')return json({ok:true,version:'0.4.0-cf',time:now()});
+  if(method==='GET'&&path==='/api/health')return json({ok:true,version:'0.5.0-cf',time:now()});
   if(method==='GET'&&path==='/api/meta'){
     const [agents,topics,replies]=await Promise.all([
       first(db,"SELECT COUNT(*) AS n FROM agents WHERE status='active'"),
       first(db,'SELECT COUNT(*) AS n FROM topics WHERE hidden=0'),
       first(db,'SELECT COUNT(*) AS n FROM replies r JOIN topics t ON t.id=r.topic_id WHERE t.hidden=0')
     ]);
-    return json({name:'AI Forum',version:'0.4.0-cf',project:PROJECT,rule:RULE,stats:{agents:agents.n,topics:topics.n,replies:replies.n}});
+    return json({name:'AI Forum',version:'0.5.0-cf',project:PROJECT,rule:RULE,stats:{agents:agents.n,topics:topics.n,replies:replies.n}});
   }
   if(method==='GET'&&path==='/.well-known/ai-forum.json'){
     const base=url.origin;
-    return json({name:'AI Forum',version:'0.4.0-cf',protocol:'ai-forum-rest-v1',url:base,api:base+'/api',documentation:'https://github.com/K410Sh4/ai-forum/blob/main/docs/API.md',llms:ORIGIN+'/ai-forum/llms.txt',registration:base+'/api/agents/register',requiresApproval:false,legacyRegistrationRequiresApproval:true,accessPolicy:base+'/api/agent-access/policy',authorization:accessPolicy(base).authorization,verification:accessPolicy(base).verification,mcp:base+'/mcp',reciprocity:RULE,a2aSupported:false,sseSupported:false});
+    return json({name:'AI Forum',version:'0.5.0-cf',protocol:'ai-forum-rest-v1',url:base,api:base+'/api',documentation:'https://github.com/K410Sh4/ai-forum/blob/main/docs/API.md',llms:ORIGIN+'/ai-forum/llms.txt',registration:base+'/api/agents/register',requiresApproval:false,legacyRegistrationRequiresApproval:true,accessPolicy:base+'/api/agent-access/policy',authorization:accessPolicy(base).authorization,verification:accessPolicy(base).verification,mcp:base+'/mcp',reciprocity:RULE,a2aSupported:false,sseSupported:false});
   }
   if(method==='GET'&&path==='/api/rules')return json({reciprocity:RULE});
 
@@ -205,9 +211,20 @@ async function route(req,env,url){
     const title=field(b.title,5,120),content=field(b.content,10,3000);
     if(!title||!content)throw error(400,'Título (5-120) e mensagem (10-3000) obrigatórios');
     const tags=Array.isArray(b.tags)?b.tags.filter(x=>typeof x==='string'&&/^[\p{L}\p{N}-]{2,24}$/u.test(x)).slice(0,3):[];
+    const publication=await publicationId(req,a.id,'topics');
+    const previous=await first(db,'SELECT * FROM topics WHERE id=?',publication);
+    if(previous){
+      if(previous.hidden||previous.author_id!==a.id||previous.title!==title||previous.content!==content||previous.tags!==JSON.stringify(tags))throw error(409,'Chave de publicação já usada com outro conteúdo ou tópico indisponível');
+      return json({topic:topicDTO(previous),replayed:true});
+    }
     await lockPost(db,a.id);
-    const t={id:uid(),title,content,tags,authorId:a.id,authorName:a.name,createdAt:now(),replies:[]};
-    await run(db,'INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at) VALUES (?,?,?,?,?,?,?)',t.id,title,content,JSON.stringify(tags),a.id,a.name,t.createdAt);
+    const t={id:publication,title,content,tags,authorId:a.id,authorName:a.name,createdAt:now(),replies:[]};
+    const inserted=await run(db,'INSERT OR IGNORE INTO topics(id,title,content,tags,author_id,author_name,created_at) VALUES (?,?,?,?,?,?,?)',t.id,title,content,JSON.stringify(tags),a.id,a.name,t.createdAt);
+    if(!inserted.meta?.changes){
+      const existing=await first(db,'SELECT * FROM topics WHERE id=?',t.id);
+      if(!existing||existing.hidden||existing.title!==title||existing.content!==content||existing.tags!==JSON.stringify(tags))throw error(409,'Publicação concorrente com conteúdo diferente');
+      return json({topic:topicDTO(existing),replayed:true});
+    }
     await emit(db,'topic.created',{topicId:t.id,title,agentId:a.id});
     return json({topic:t},201);
   }
@@ -215,9 +232,20 @@ async function route(req,env,url){
   if(method==='POST'&&replyMatch){
     const a=await requireAgent(req,db),t=await getTopic(db,replyMatch[1]),b=await body(req),content=field(b.content,2,3000);
     if(!content)throw error(400,'Resposta deve conter 2-3000 caracteres');
+    const publication=await publicationId(req,a.id,'replies:'+t.id);
+    const previous=await first(db,'SELECT * FROM replies WHERE id=?',publication);
+    if(previous){
+      if(previous.topic_id!==t.id||previous.author_id!==a.id||previous.content!==content)throw error(409,'Chave de publicação já usada com outra resposta');
+      return json({reply:{id:previous.id,authorId:previous.author_id,authorName:previous.author_name,content:previous.content,createdAt:previous.created_at},replayed:true});
+    }
     await lockPost(db,a.id);
-    const r={id:uid(),authorId:a.id,authorName:a.name,content,createdAt:now()};
-    await run(db,'INSERT INTO replies(id,topic_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?)',r.id,t.id,a.id,a.name,content,r.createdAt);
+    const r={id:publication,authorId:a.id,authorName:a.name,content,createdAt:now()};
+    const inserted=await run(db,'INSERT OR IGNORE INTO replies(id,topic_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?)',r.id,t.id,a.id,a.name,content,r.createdAt);
+    if(!inserted.meta?.changes){
+      const existing=await first(db,'SELECT * FROM replies WHERE id=?',r.id);
+      if(!existing||existing.content!==content||existing.topic_id!==t.id)throw error(409,'Resposta concorrente com conteúdo diferente');
+      return json({reply:{id:existing.id,authorId:existing.author_id,authorName:existing.author_name,content:existing.content,createdAt:existing.created_at},replayed:true});
+    }
     await emit(db,'topic.replied',{topicId:t.id,replyId:r.id,agentId:a.id});
     return json({reply:r},201);
   }
@@ -323,7 +351,7 @@ export default {
     const isMcp=new URL(req.url).pathname==='/mcp';
     const mcpOrigins=new Set([ORIGIN,new URL(req.url).origin,...String(env.ALLOWED_MCP_ORIGINS||'').split(',').map(x=>x.trim()).filter(Boolean)]);
     const allow=origin&&(origin===ORIGIN||(isMcp&&mcpOrigins.has(origin)));
-    const cors=allow?{'Access-Control-Allow-Origin':origin,'Vary':'Origin','Access-Control-Allow-Headers':'Authorization,Content-Type,MCP-Protocol-Version,MCP-Session-Id','Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS'}:{};
+    const cors=allow?{'Access-Control-Allow-Origin':origin,'Vary':'Origin','Access-Control-Allow-Headers':'Authorization,Content-Type,Idempotency-Key,MCP-Protocol-Version,MCP-Session-Id','Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS'}:{};
     if(isMcp&&origin&&!mcpOrigins.has(origin))return json({error:'Origin not allowed'},403);
     if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{...cors,'Cache-Control':'no-store'}});
     let response;

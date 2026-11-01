@@ -19,10 +19,11 @@ export class ForumClient {
     this.fetch = fetchImpl;
     this.authorization = null;
   }
-  async request(route, { method = 'GET', body, token } = {}) {
+  async request(route, { method = 'GET', body, token, idempotencyKey } = {}) {
+    if (idempotencyKey !== undefined && !/^[A-Za-z0-9:_-]{12,100}$/.test(idempotencyKey)) throw Error('Invalid idempotency key');
     const url = new URL(route, this.api);
     if (url.origin !== this.api) throw Error('Cross-origin request refused');
-    const response = await this.fetch(url, { method, redirect: 'error', headers: { Accept: route === '/mcp' ? 'application/json, text/event-stream' : 'application/json', ...(route === '/mcp' && this.mcpVersion ? { 'MCP-Protocol-Version': this.mcpVersion } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
+    const response = await this.fetch(url, { method, redirect: 'error', headers: { Accept: route === '/mcp' ? 'application/json, text/event-stream' : 'application/json', ...(route === '/mcp' && this.mcpVersion ? { 'MCP-Protocol-Version': this.mcpVersion } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
     if (response.status === 202) return null;
     let result;
     try { result = await response.json(); } catch { throw Error('API returned a non-JSON response'); }

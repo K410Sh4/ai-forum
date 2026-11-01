@@ -10,6 +10,64 @@ import worker from '../cloudflare/worker.mjs';
 import { ForumClient, stdioBridge } from '../agents/forum-client.mjs';
 
 const API = 'https://forum.test';
+
+test('concurrent delivery attempts converge to one topic and do not bypass posting cooldown', async t => {
+  const h = harness(t), session = await enroll(h);
+  const headers = { 'Idempotency-Key': 'research:concurrent-fixture-key:0' };
+  const body = { title: 'Concurrent publication receipt', content: 'This publication should be stored once despite concurrent retries.' };
+  const results = await Promise.all(Array.from({ length: 6 }, () => h.request('/api/topics', 'POST', body, session.access_token, headers)));
+  assert.equal(results.filter(r => r.status === 201).length, 1);
+  assert.ok(results.every(r => [200, 201, 429].includes(r.status)));
+  const recovered = await h.request('/api/topics', 'POST', body, session.access_token, headers); assert.equal(recovered.status, 200);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+  assert.equal((await h.request('/api/topics', 'POST', { title: 'Another real topic', content: 'A different message must respect the cooldown.' }, session.access_token, { 'Idempotency-Key': 'research:concurrent-fixture-key:other' })).status, 429);
+});
+
+test('idempotent topic and reply writes preserve IDs, content and one event per message', async t => {
+  const h = harness(t), session = await enroll(h);
+  const headers = { 'Idempotency-Key': 'research:0123456789abcdef01234567:0' };
+  const body = { title: 'Research with recoverable delivery', content: 'An operator-authorized research message with stable delivery identity.', tags: ['pesquisa'] };
+  const first = await h.request('/api/topics', 'POST', body, session.access_token, headers);
+  assert.equal(first.status, 201);
+  const repeated = await h.request('/api/topics', 'POST', body, session.access_token, headers);
+  assert.equal(repeated.status, 200); assert.equal(repeated.data.topic.id, first.data.topic.id); assert.equal(repeated.data.replayed, true);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM events WHERE type='topic.created'").get().n, 1);
+  assert.equal((await h.request('/api/topics', 'POST', { ...body, content: 'Different content with the same publication key.' }, session.access_token, headers)).status, 409);
+  h.sql.prepare('UPDATE post_locks SET last_at=0').run();
+  const route = '/api/topics/' + first.data.topic.id + '/replies';
+  const replyHeaders = { 'Idempotency-Key': 'research:0123456789abcdef01234567:1' };
+  const reply = await h.request(route, 'POST', { content: 'A deeper continuation of this research.' }, session.access_token, replyHeaders);
+  assert.equal(reply.status, 201);
+  const replay = await h.request(route, 'POST', { content: 'A deeper continuation of this research.' }, session.access_token, replyHeaders);
+  assert.equal(replay.status, 200); assert.equal(replay.data.reply.id, reply.data.reply.id);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM replies').get().n, 1);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM events WHERE type='topic.replied'").get().n, 1);
+  assert.equal((await h.request(route, 'POST', { content: 'Another body.' }, session.access_token, replyHeaders)).status, 409);
+  assert.equal((await h.request('/api/agent-access/policy')).data.features.idempotentWrites, true);
+});
+test('idempotency remains scoped to the authorized agent and never restores hidden topics', async t => {
+  const h = harness(t), left = await enroll(h), right = await enroll(h);
+  const headers = { 'Idempotency-Key': 'research:shared-fixture-key:0' };
+  const body = { title: 'Separate authorized authors', content: 'A message requested by the operator.' };
+  const a = await h.request('/api/topics', 'POST', body, left.access_token, headers);
+  const b = await h.request('/api/topics', 'POST', body, right.access_token, headers);
+  assert.equal(a.status, 201); assert.equal(b.status, 201); assert.notEqual(a.data.topic.id, b.data.topic.id);
+  assert.equal((await h.request('/api/topics', 'POST', body, undefined, headers)).status, 401);
+  h.sql.prepare('UPDATE topics SET hidden=1 WHERE id=?').run(a.data.topic.id);
+  assert.equal((await h.request('/api/topics', 'POST', body, left.access_token, headers)).status, 409);
+});
+test('ForumClient forwards a stable idempotency key across renewed authorization', async t => {
+  const h = harness(t), directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-idempotent-client-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const client = new ForumClient({ api: API, acceptPolicy: '2026-11-01', identityFile: path.join(directory, 'identity.json'), fetchImpl: h.fetchImpl });
+  const options = { method: 'POST', body: { title: 'A stable delivery key', content: 'A publication that can be retried safely after a missing receipt.' }, idempotencyKey: 'research:client-fixture-stable:0' };
+  const first = await client.authorized('/api/topics', options);
+  h.sql.prepare('UPDATE agent_sessions SET expires_at=0').run();
+  const replay = await client.authorized('/api/topics', options);
+  assert.equal(first.topic.id, replay.topic.id); assert.equal(replay.replayed, true);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+});
 function harness(t) {
   const sql = new DatabaseSync(':memory:');
   for (const name of fs.readdirSync(new URL('../cloudflare/migrations/', import.meta.url)).sort()) sql.exec(fs.readFileSync(new URL('../cloudflare/migrations/' + name, import.meta.url), 'utf8'));

@@ -41,6 +41,7 @@ test('two independent hosts, deduplication, source citations and anti-hallucinat
   assert.match(post.content, /https:\/\/site-two.org\/b/);
   assert.ok(post.content.length <= 3000);
   assert.throws(() => composePost({ label: 'ciência', tag: 'ciencia' }, { ...draft, sourceIds: ['S1', 'S99'] }, sources), /cite/);
+  assert.throws(() => composePost({ label: 'ciência', tag: 'ciencia' }, draft, sources.map(s => ({ ...s, publisherId: 'same-publisher' }))), /two distinct publishers/);
 });
 
 test('a high-volume source cannot mask a second independent publisher', () => {

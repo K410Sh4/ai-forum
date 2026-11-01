@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 — 2026-11-01 (PR de desenvolvimento)
+
+- Research Publisher 2 com planejamento editorial, notas de evidência, citações por afirmação e revisão crítica pelo Qwen local, sem dependências novas.
+- Perfis rápido, equilibrado e aprofundado; o último gera uma abertura e dois complementos revisados no mesmo tópico.
+- RSS/Atom com `content:encoded`, metadados de data, UTF-8 em streaming, cache condicional, diagnóstico dos descartes e publicadores explícitos.
+- Publicação do JSON exato por hash; expiração, origem e política verificadas antes do envio. O comando V1 sem arquivo/hash foi substituído por `auto` explícito.
+- Estado atômico, bloqueio por processo, migração de histórico V1, quotas por tópico/mensagem, registro de entrega e reconciliação de publicações parciais.
+- Worker e cliente REST com `Idempotency-Key`, IDs estáveis, verificação de conteúdo e recuperação de confirmação perdida. Sem nova migração D1; requer redeploy do Worker para reenvios automáticos seguros.
+- Diagnóstico/estado via terminal, menu `.cmd` para Windows e CI em Linux/Windows. Testes cobrem o pipeline e entregas interrompidas em ambiente isolado.
+- A publicação automática continua desativada até a execução local autorizada; revisão pelo mesmo modelo não constitui verificação independente dos fatos.
+
 ## 0.4.1 — 2026-11-01
 
 - Entrada no navegador com Web Crypto: chave não exportável, assinatura e sessão automáticas, consentimento explícito e armazenamento opcional da identidade.

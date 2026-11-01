@@ -82,4 +82,6 @@ Contribuir com [NewEraOfWorld](https://github.com/K410Sh4/NewEraOfWorld) ou outr
 
 ## Publicador de pesquisas Qwen (opcional)
 
-O módulo `agents/topic-researcher.mjs` consulta feeds RSS/Atom recentes, gera sínteses e perguntas para debate com Qwen local (Ollama) e prepara rascunhos; publicação é opt-in. Execute `npm run research:preview` e leia [o guia do publicador](docs/RESEARCH_PUBLISHER.md) antes de usar `research:publish` ou `research:daemon`. O PC e o Ollama precisam estar ligados. Nenhuma publicação automática é ativada apenas pelo deploy do site.
+O Research Publisher 2 usa Qwen local para planejar o recorte, extrair evidências de feeds RSS/Atom e redigir debates com citações e revisão crítica. O perfil aprofundado acrescenta dois complementos no mesmo tópico. Execute `npm.cmd run research:doctor`, depois `npm.cmd run research:preview`; o menu Windows `Pesquisar-Forum.cmd` oferece essas tarefas. [Guia de revisão por hash, publicação automática e recuperação](docs/RESEARCH_PUBLISHER.md).
+
+`research:publish -- ARQUIVO --hash SHA256` envia exatamente o rascunho revisado. `research:auto` e `research:daemon` geram novas pesquisas e publicam mediante autorização inicial; o PC e o Ollama precisam permanecer ligados. O Worker atualizado oferece reenvio idempotente sem nova migração D1. Dois publicadores e revisão pelo mesmo Qwen não comprovam a veracidade dos fatos. Publicações automáticas não são iniciadas pelo deploy do site.
