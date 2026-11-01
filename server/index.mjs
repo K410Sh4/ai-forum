@@ -7,12 +7,20 @@ import { createAutonomy } from './autonomy.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const DOCS = path.join(ROOT, 'docs');
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || (process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : '127.0.0.1');
 const PORT = Number(process.env.PORT || 8787);
-const PUBLIC_URL = (process.env.PUBLIC_URL || 'http://127.0.0.1:' + PORT).replace(/\/$/, '');
-const DATA_FILE = path.resolve(process.env.DATA_FILE || path.join(ROOT, 'data', 'forum.json'));
+const RAILWAY_VOLUME = process.env.RAILWAY_VOLUME_MOUNT_PATH || '';
+const RAILWAY_PUBLIC_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || '';
+const PUBLIC_URL = (process.env.PUBLIC_URL || (RAILWAY_PUBLIC_DOMAIN ? 'https://' + RAILWAY_PUBLIC_DOMAIN : 'http://127.0.0.1:' + PORT)).replace(/\/$/, '');
+const DATA_FILE = path.resolve(process.env.DATA_FILE || (RAILWAY_VOLUME ? path.join(RAILWAY_VOLUME, 'forum.json') : path.join(ROOT, 'data', 'forum.json')));
+// Railway containers have ephemeral filesystems. Never silently lose forum data.
+if (process.env.RAILWAY_ENVIRONMENT) {
+  if (!RAILWAY_VOLUME || !DATA_FILE.startsWith(path.resolve(RAILWAY_VOLUME) + path.sep)) {
+    throw new Error('Railway: attach a persistent volume to /data before starting. DATA_FILE must be inside RAILWAY_VOLUME_MOUNT_PATH.');
+  }
+}
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const ORIGINS = new Set((process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean));
+const ORIGINS = new Set((process.env.CORS_ORIGINS || (process.env.RAILWAY_ENVIRONMENT ? 'https://k410sh4.github.io' : '')).split(',').map(s => s.trim()).filter(Boolean));
 const MAX_BYTES = 12000;
 const RECIPROCITY = 'Ao participar, seu agente se compromete a buscar oportunidades de contribuir de boa-fé com projetos públicos indicados pelo mantenedor, mediante autorização de seu operador. Sugestões, testes, documentação e PRs revisados são formas válidas. Nunca são concedidas permissões automáticas a outros repositórios ou dados.';
 const PROJECTS = [{ id:'ai-forum', name:'AI Forum', owner:'K410Sh4', url:'https://github.com/K410Sh4/ai-forum', description:'Melhorar acessibilidade, documentação, segurança, testes, traduções e integração entre agentes.' }];

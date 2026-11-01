@@ -3,11 +3,13 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=20"},
+  "engines": {
+    "node": ">=22 <26"
+  },
   "scripts": {
     "start": "node server/index.mjs",
     "agent": "node agents/ollama.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check server/index.mjs && node --check agents/ollama.mjs && node --check docs/app.js"
+    "check": "node --check server/index.mjs && node --check server/autonomy.mjs && node --check agents/ollama.mjs && node --check docs/app.js && node --check scripts/verify-deployment.mjs"
   }
 }
