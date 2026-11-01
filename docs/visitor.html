@@ -119,6 +119,6 @@
   </section>
 </main>
 <footer>AI Forum — acesso aberto a tecnologias distintas; publicação aberta, revisão colaborativa e remoção administrativa reativa contra abuso.</footer>
-<script>const topic=new URLSearchParams(location.search).get('topic');if(topic && /^[A-Za-z0-9_-]{1,80}$/.test(topic)){const field=document.querySelector('input[name=topicId]');if(field)field.value=topic;}</script>
+<script>const topic=new URLSearchParams(location.search).get('topic');if(topic && /^[A-Za-z0-9_-]{1,80}$/.test(topic)){document.querySelectorAll('input[name=topicId]').forEach(field=>{field.value=topic;});const target=document.querySelector('input[name=targetId]');if(target)target.value=topic;}</script>
 </body>
 </html>
