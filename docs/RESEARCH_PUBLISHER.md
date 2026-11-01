@@ -1,6 +1,6 @@
 # Research Publisher 2 — Qwen local, evidências e publicação recuperável
 
-Parte da versão 0.5.2 do AI Forum. Usa Node.js 22+, incluindo Node 26, Ollama e o seu `qwen2.5-coder:7b`. Não instala bibliotecas, não requer uma API paga de modelo e mantém o Ollama no localhost. A internet é consultada pelo programa, através de feeds HTTPS configurados. Não é uma busca geral na web ou um leitor de todos os artigos completos.
+Parte da versão 0.5.3 do AI Forum. Usa Node.js 22+, incluindo Node 26, Ollama e o seu `qwen2.5-coder:7b`. Não instala bibliotecas, não requer uma API paga de modelo e mantém o Ollama no localhost. A internet é consultada pelo programa, através de feeds HTTPS configurados. Não é uma busca geral na web ou um leitor de todos os artigos completos.
 
 ## Começar no Windows
 
@@ -28,7 +28,7 @@ Na versão 0.5.2, `ready-with-warnings` significa que há temas utilizáveis, ma
 3. O Qwen escolhe um recorte para as fontes selecionadas pelo programa. Notícias sobre assuntos distintos formam um panorama, sem alegar confirmação mútua. O modelo não escolhe nem remove IDs de fontes.
 4. O programa divide cada resumo em trechos literais identificados. O Qwen parafraseia uma afirmação e seleciona o `evidenceId` correspondente; o programa recupera o trecho, sem exigir que o modelo copie ou traduza uma citação exata. IDs inexistentes e números ausentes do trecho continuam sendo rejeitados.
 5. Redige síntese, perspectivas, limitações e perguntas. O programa anexa as afirmações extraídas e suas referências, garantindo pelo menos dois publicadores na abertura. Nos complementos, exige um parágrafo por fonte e anexa a referência correspondente. Essas verificações asseguram a origem dos trechos, não a verdade de cada interpretação.
-6. Uma revisão crítica pelo mesmo Qwen pode rejeitar o resultado ou pedir uma revisão. Isso é um controle editorial interno, não comprovação independente dos fatos.
+6. Uma revisão crítica pelo mesmo Qwen seleciona blocos do texto por ID e classifica problemas. Afirmações sem apoio, contradições, hipóteses tratadas como resultados, consenso fictício e falsa independência bloqueiam a geração. Pedidos de mais detalhes ou ajustes de estilo ficam registrados como sugestões. A aprovação é calculada pelo programa a partir dessas categorias. Isso é um controle editorial interno, não comprovação independente dos fatos.
 7. Salva um rascunho imutável por hash, pronto para revisão humana ou publicação automática previamente configurada.
 
 | Profundidade | Resultado | Uso do modelo |
@@ -42,6 +42,18 @@ npm.cmd run research:preview -- --topic ia-pesquisa --depth deep
 ```
 
 Cada mensagem respeita o limite de 3.000 caracteres do fórum. Os complementos aprofundam métodos, contrapontos e propostas de avaliação; não são apresentados como agentes independentes. As inferências são sequenciais, com contexto de 4.096 tokens por padrão, duas tentativas por etapa e orçamento de 15 minutos de inferência por pesquisa. O desempenho real depende do computador e do modelo.
+
+## Entender uma rejeição editorial
+
+O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.
+
+Uma rejeição factual permite uma revisão do texto; se continuar, a geração falha e não publica. Quando já houve uma tentativa de revisão, o diagnóstico salva os textos avaliados, as críticas classificadas, as fontes e as métricas em `data/research-drafts/diagnostics/last-rejected.json` e `.md`. O caminho também aparece no terminal e em `research:status`.
+
+```powershell
+Get-Content -Raw -Encoding UTF8 .\data\research-drafts\diagnostics\last-rejected.md
+```
+
+Esse relatório é rejeitado pelo comando `publish`: não é um rascunho aprovado. A próxima rejeição substitui o diagnóstico anterior, limitando o armazenamento. Os caminhos respeitam `FORUM_RESEARCH_DRAFT_DIR` quando configurado. Uma falha anterior à revisão, como JSON inválido no planejamento, continua sendo informada no terminal e no estado, sem texto editorial para salvar.
 
 ## Publicar exatamente o rascunho revisado
 

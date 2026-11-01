@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export const RESEARCH_VERSION = '2.1.0';
+export const RESEARCH_VERSION = '2.2.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -137,6 +137,25 @@ export function openingEvidence(cards, sources) {
   const sourceIds = selected.map(card => card.sourceId);
   requireDiversity(citedSources(sourceIds, sources, 2));
   return { sourceIds, findings: selected.map(card => ({ text: prose(card.facts?.[0]?.statement, 25, 180, 'supported finding'), sourceIds: [card.sourceId] })) };
+}
+export const REVIEW_KINDS = ['unsupported-claim', 'contradiction', 'hypothesis-as-fact', 'false-consensus', 'false-independence', 'missing-detail', 'style'];
+export function reviewMaterial(message) {
+  if (typeof message?.content !== 'string') throw Error('Review requires a rendered message');
+  const body = message.content.split(/\n\n(?:FONTES CONSULTADAS|Fontes:)\n/)[0];
+  return [message.title, ...body.split(/\n\n+/)].filter(value => typeof value === 'string' && value.trim()).map((value, index) => ({ id: 'C' + (index + 1), text: value.trim() }));
+}
+export function validateReview(value, material) {
+  if (!Array.isArray(value?.findings) || value.findings.length > 3) throw Error('Review needs at most three classified findings');
+  const findings = value.findings.map(finding => {
+    if (!REVIEW_KINDS.includes(finding?.kind)) throw Error('Unknown review finding kind');
+    const selected = material.find(part => part.id === finding.claimId);
+    if (!selected) throw Error('Review finding must select an existing claimId from the evaluated text');
+    return { kind: finding.kind, claimId: selected.id, quote: selected.text, reason: prose(finding.reason, 15, 180, 'review reason') };
+  });
+  const advisory = finding => ['missing-detail', 'style'].includes(finding.kind);
+  const issues = findings.filter(finding => !advisory(finding)).map(finding => finding.kind + ' [' + finding.claimId + '] «' + normalized(finding.quote).slice(0, 200) + '»: ' + finding.reason);
+  const suggestions = findings.filter(advisory).map(finding => '[' + finding.claimId + '] ' + finding.reason);
+  return { approved: issues.length === 0, issues, suggestions, findings, note: prose(value.note, 10, 180, 'review note') };
 }
 function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
 export function composePost(topic, draft, sources) {

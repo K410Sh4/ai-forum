@@ -25,7 +25,7 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, criticRejects = 0, idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, criticRejects = 0, criticAdvice = false, idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   let now = NOW, criticCalls = 0, writeCalls = 0;
@@ -51,7 +51,8 @@ function fixture(t, { depth = 'balanced', invalidModel = false, criticRejects = 
       value = { heading: input.focus, paragraphs: Object.fromEntries(input.evidenceCards.map(c => [c.sourceId, 'O relato descreve uma comparação sob condições determinadas. Essa descrição permite formular questões metodológicas, mas não confirma aplicação em cenários diferentes.'])), limitations: 'As descrições disponíveis não substituem a leitura dos métodos completos.' };
     } else {
       stage = 'review'; const reject = criticCalls++ < criticRejects;
-      value = { approved: !reject, issues: reject ? ['Explique melhor o alcance das evidências apresentadas.'] : [], note: 'Revisão interna baseada apenas nas evidências fornecidas.' };
+      assert.equal(properties.approved, undefined);
+      value = { findings: reject ? [{ kind: 'unsupported-claim', claimId: input.material[0].id, reason: 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.' }] : criticAdvice ? [{ kind: 'missing-detail', claimId: input.material[0].id, reason: 'O resumo não apresenta os nomes dos pesquisadores nem métodos completos.' }] : [], note: 'Revisão interna baseada apenas nas evidências fornecidas.' };
     }
     calls.push({ stage, input });
     return Response.json({ message: { content: invalidModel ? '{invalid' : JSON.stringify(value) }, done: true, done_reason: 'stop', prompt_eval_count: 200, eval_count: 150, eval_duration: 1e9 });
@@ -193,9 +194,19 @@ test('cancellation preserves uncertain delivery history and permanently blocks r
 });
 test('editorial rejection gets one revision, then fails closed', async t => {
   const f = fixture(t, { criticRejects: 10 });
-  await assert.rejects(f.engine.generate(), /Editorial review rejected/);
+  await assert.rejects(f.engine.generate({ auto: true }), /Editorial review rejected/);
   assert.equal(f.calls.filter(c => c.stage === 'draft').length, 2); assert.equal(f.topics.length, 0);
-  assert.equal(f.store.read().runs.at(-1).status, 'failed');
+  assert.equal(f.store.read().runs.at(-1).status, 'failed'); assert.equal(f.writeCalls, 0);
+  const reportFile = f.store.read().runs.at(-1).diagnosticFile, report = readJSON(reportFile);
+  assert.equal(report.status, 'rejected'); assert.equal(report.attempts.length, 2); assert.equal(report.attempts[0].review.approved, false);
+  assert.ok(fs.existsSync(reportFile.replace(/\.json$/, '.md')));
+  await assert.rejects(f.engine.publish(reportFile, 'a'.repeat(64)), /hash|format/i); assert.equal(f.writeCalls, 0);
+});
+test('missing details in a short feed produce advice without an unnecessary writer retry', async t => {
+  const f = fixture(t, { criticAdvice: true }); const preview = await f.engine.generate();
+  const draft = readJSON(preview.file), review = draft.review.checks[0];
+  assert.equal(review.approved, true); assert.equal(review.issues.length, 0); assert.match(review.suggestions[0], /nomes dos pesquisadores/);
+  assert.equal(f.calls.filter(c => c.stage === 'draft').length, 1); assert.equal(f.writeCalls, 0);
 });
 test('invalid model JSON propagates as a failure and releases the lock', async t => {
   const f = fixture(t, { invalidModel: true });

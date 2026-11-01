@@ -52,6 +52,14 @@ export class ResearchEngine {
   recordMessage(state, message) {
     if (!state.messages.some(m => m.id === message.id)) state.messages.push({ id: message.id, at: Date.parse(message.createdAt) || this.clock() });
   }
+  saveRejection(topic, sources, depth, error) {
+    const file = path.join(this.draftDir, 'diagnostics', 'last-rejected.json');
+    const report = { reportVersion: 1, status: 'rejected', createdAt: new Date(this.clock()).toISOString(), api: this.client.api, model: this.model.model, theme: topic.id, depth, error: error.message, sources, attempts: this.model.reviewTrace, metrics: this.model.metrics };
+    writeJSON(file, report);
+    const attempts = report.attempts.map((entry, index) => '## Tentativa ' + (index + 1) + '\n\n' + (entry.message.title ? '### ' + entry.message.title + '\n\n' : '') + entry.message.content + '\n\nRevisão:\n\n```json\n' + JSON.stringify(entry.review || { error: entry.error }, null, 2) + '\n```');
+    fs.writeFileSync(file.replace(/\.json$/, '.md'), '# Pesquisa rejeitada — ' + topic.label + '\n\nRegistro local de diagnóstico; este texto não foi publicado. A próxima rejeição substitui este relatório.\n\nMotivo: ' + error.message + '\n\n' + attempts.join('\n\n---\n\n') + '\n', { mode: 0o600 });
+    return file;
+  }
   async generate({ auto = false, topicId, depth = this.config.depth } = {}) {
     if (!['quick', 'balanced', 'deep'].includes(depth)) throw Error('Unknown research depth');
     return this.locked(async state => {
@@ -91,6 +99,12 @@ export class ResearchEngine {
           // Publication failures must retain their pending journal and stop this cycle.
           if (state.pending) throw error;
           generationError = error; run.error = error.message; run.metrics = this.model.metrics; this.log('Pesquisa rejeitada: ' + error.message);
+          if (this.model.reviewTrace?.length) {
+            try {
+              run.diagnosticFile = this.saveRejection(topic, sources, depth, error);
+              this.log('Diagnóstico da rejeição: ' + run.diagnosticFile.replace(/\.json$/, '.md'));
+            } catch (reportError) { this.log('Não foi possível salvar o diagnóstico: ' + reportError.message); }
+          }
         }
       }
       run.status = generationError ? 'failed' : 'no-new-sources';

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3 — 2026-11-01 (revisão proporcional às fontes)
+
+- Revisor classifica achados vinculados a blocos existentes do texto; a aprovação é derivada pelo programa, sem depender de um veredito booleano isolado do modelo.
+- Falta de detalhes e sugestões de estilo ficam como orientações. Afirmações sem apoio, contradições, hipótese como fato, consenso fictício e falsa independência continuam bloqueando a geração.
+- Rubrica explicita o alcance dos resumos RSS e distingue omitir um método não fornecido de inventar esse método.
+- Última rejeição editorial salva textos, críticas, fontes e métricas em um diagnóstico local substituível, que não pode ser publicado como rascunho aprovado.
+
 ## 0.5.2 — 2026-11-01 (evidências por seleção)
 
 - O Qwen seleciona IDs de trechos existentes; o programa recupera a citação literal e preserva a validação de números, evitando falhas de cópia ou tradução de trechos.
