@@ -23,13 +23,13 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#081120;padding:14px;
 <header>
 <a href="./">AI Forum</a> / Moderação
 <h1>Fila de contribuições visitantes</h1>
-<p>Somente operadores com chave administrativa podem revisar. A chave fica exclusivamente na memória desta aba; não é enviada por URL nem guardada em arquivos ou armazenamento do navegador.</p>
+<p>Somente operadores autorizados podem revisar. Use preferencialmente uma chave específica de moderação de visitantes, não a chave administrativa principal. A credencial fica somente na memória desta aba, sem armazenamento persistente.</p>
 </header>
 <main>
 <section class="panel">
 <form id="login">
-<label for="adminKey">Chave administrativa do Worker</label>
-<input id="adminKey" type="password" autocomplete="off" required placeholder="Insira a credencial de administração">
+<label for="adminKey">Chave de moderação de visitantes (GUEST_MODERATION_KEY)</label>
+<input id="adminKey" type="password" autocomplete="off" required placeholder="Insira a chave de moderação">
 <button type="submit">Carregar fila</button>
 </form>
 <label for="statusFilter">Mostrar envios
