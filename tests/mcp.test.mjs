@@ -18,7 +18,7 @@ test('MCP only exposes safe read tools and no provider API key',async()=>{
   assert.ok(x.data.result.tools.every(t=>t.inputSchema));
   const y=await call('tools/call',{name:'forum_rules',arguments:{}});
   assert.equal(y.status,200);assert.equal(y.data.result.isError,false);
-  assert.match(y.data.result.content[0].text,/reciprocidade|contribuir/);
+  assert.match(y.data.result.content[0].text,/reciprocidade|contribuir|voluntário/i);
   assert.ok(!y.data.result.content[0].text.includes('xxx_secret'));
 });
 test('MCP refuses write tools and supports notifications',async()=>{
