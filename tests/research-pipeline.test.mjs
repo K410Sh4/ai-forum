@@ -195,12 +195,30 @@ test('pre-0.7.1 draft with valid hash and same-model review cannot skip new evid
   assert.equal(f.writeCalls, 0);
 });
 
+test('explicit operator approval is required for a valid machine-reviewed draft', async t => {
+  const f = fixture(t);
+  const preview = await f.engine.generate();
+  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Human approval missing/);
+  assert.equal(f.writeCalls, 0);
+  await assert.rejects(f.engine.approve(preview.file, preview.hash), /operator confirmation/);
+  const receipt = await f.engine.approve(preview.file, preview.hash, { confirmed: true });
+  assert.equal(receipt.status, 'human-approved');
+  assert.equal(receipt.hash, preview.hash);
+  assert.equal(f.store.read().approvals[0].hash, preview.hash);
+});
+
+test('unattended generation refuses all writes before contacting the model', async t => {
+  const f = fixture(t);
+  await assert.rejects(f.engine.generate({ auto: true }), /Unattended research publishing is disabled/);
+  assert.equal(f.writeCalls, 0); assert.equal(f.calls.length, 0);
+});
+
 test('publication sends the exact reviewed draft; changed drafts are blocked', async t => {
   const f = fixture(t); const preview = await f.engine.generate(); const reviewed = readJSON(preview.file);
-  const result = await f.engine.publish(preview.file, preview.hash);
+  const result = await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash);
   assert.equal(result.status, 'published'); assert.equal(f.topics[0].title, reviewed.post.title); assert.equal(f.topics[0].content, reviewed.post.content);
   assert.equal(f.calls.filter(c => c.stage === 'draft').length, 1, 'publishing must not invoke the model');
-  const repeated = await f.engine.publish(preview.file, preview.hash); assert.equal(repeated.status, 'already-published'); assert.equal(f.writeCalls, 1);
+  const repeated = await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash); assert.equal(repeated.status, 'already-published'); assert.equal(f.writeCalls, 1);
   reviewed.post.content += ' Unreviewed change'; writeJSON(preview.file, reviewed);
   await assert.rejects(f.engine.publish(preview.file, preview.hash), /hash/);
 });
@@ -214,42 +232,42 @@ test('expired drafts and drafts for another API never cause a public write', asy
 test('deep mode publishes a single thread with two reviewed continuations and rate spacing', async t => {
   const f = fixture(t, { depth: 'deep' }); const preview = await f.engine.generate();
   assert.equal(preview.messages, 3);
-  await f.engine.publish(preview.file, preview.hash);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash);
   assert.equal(f.topics.length, 1); assert.equal(f.replies.length, 2); assert.deepEqual(f.waits, [21000, 21000]);
   assert.equal(f.store.read().messages.length, 3); assert.equal(f.store.read().pending, null);
 });
 test('lost topic receipt is retried with the same key and does not create a duplicate', async t => {
   const f = fixture(t, { loseReceiptAt: 1 }); const preview = await f.engine.generate();
-  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
   assert.equal(f.store.read().pending.messages[0].status, 'sending'); assert.equal(f.topics.length, 1);
-  await f.engine.publish(preview.file, preview.hash);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash);
   assert.equal(f.topics.length, 1); assert.equal(f.store.read().published.length, 1); assert.equal(f.store.read().pending, null);
 });
 test('older Workers block ambiguous retries and reconcile from a public receipt', async t => {
   const f = fixture(t, { loseReceiptAt: 1, idempotent: false }); const preview = await f.engine.generate();
-  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
   await assert.rejects(f.engine.publish(preview.file, preview.hash), /uncertain/);
   assert.equal(f.writeCalls, 1);
   const result = await f.engine.reconcile(); assert.equal(result.status, 'reconciled'); assert.equal(f.store.read().published.length, 1);
 });
 test('reconciliation resumes only missing deep replies after a lost receipt', async t => {
   const f = fixture(t, { depth: 'deep', loseReceiptAt: 2 }); const preview = await f.engine.generate();
-  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
   assert.equal(f.topics.length, 1); assert.equal(f.replies.length, 1);
   assert.equal((await f.engine.reconcile()).status, 'partial');
-  await f.engine.publish(preview.file, preview.hash);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash);
   assert.equal(f.topics.length, 1); assert.equal(f.replies.length, 2); assert.equal(f.store.read().messages.length, 3);
 });
 test('cancellation preserves uncertain delivery history and permanently blocks resending that draft', async t => {
   const f = fixture(t, { loseReceiptAt: 1 }); const preview = await f.engine.generate();
-  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await assert.rejects(f.engine.publish(preview.file, preview.hash), /Connection lost/);
   const result = await f.engine.cancel(preview.file, preview.hash);
   assert.equal(result.status, 'cancelled'); assert.equal(f.store.read().pending, null); assert.equal(f.store.read().published[0].status, 'cancelled');
   await assert.rejects(f.engine.publish(preview.file, preview.hash), /cancelled/); assert.equal(f.topics.length, 1); assert.equal(f.writeCalls, 1);
 });
 test('editorial rejection gets one revision, then fails closed', async t => {
   const f = fixture(t, { criticRejects: 10 });
-  await assert.rejects(f.engine.generate({ auto: true }), /Editorial review rejected/);
+  await assert.rejects(f.engine.generate({ auto: false }), /Editorial review rejected/);
   assert.equal(f.calls.filter(c => c.stage === 'draft').length, 2); assert.equal(f.topics.length, 0);
   assert.equal(f.store.read().runs.at(-1).status, 'failed'); assert.equal(f.writeCalls, 0);
   const reportFile = f.store.read().runs.at(-1).diagnosticFile, report = readJSON(reportFile);
@@ -325,7 +343,7 @@ test('short overviews containing links do not qualify for recovery even in previ
 
 test('persistent short overview still fails closed and cannot generate or publish a draft', async t => {
   const f = fixture(t, { shortOverviews: 10 });
-  await assert.rejects(f.engine.generate({ auto: true }), /draft: Invalid overview/);
+  await assert.rejects(f.engine.generate({ auto: false }), /draft: Invalid overview/);
   assert.equal(f.calls.filter(c => c.stage === 'review').length, 0);
   assert.equal(f.writeCalls, 0);
 });
@@ -345,7 +363,7 @@ test('cut prose is rewritten before review, instead of accepting JSON validity a
 });
 test('persistently cut text stops auto publishing and saves the invalid fields for diagnosis', async t => {
   const f = fixture(t, { brokenDrafts: 10 });
-  await assert.rejects(f.engine.generate({ auto: true }), /Unexpected characters/);
+  await assert.rejects(f.engine.generate({ auto: false }), /Unexpected characters/);
   assert.equal(f.calls.filter(call => call.stage === 'review').length, 0); assert.equal(f.writeCalls, 0);
   const report = readJSON(f.store.read().runs.at(-1).diagnosticFile);
   assert.equal(report.validationErrors.length, 2); assert.match(report.validationErrors[0].output, /進/);
@@ -361,15 +379,15 @@ test('authentication failure before a publishing request is safe to retry even w
   const f = fixture(t, { idempotent: false }); const preview = await f.engine.generate();
   const send = f.engine.client.authorized;
   f.engine.client.authorized = async () => { throw Object.assign(Error('Challenge did not validate'), { delivery: 'not-sent' }); };
-  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Challenge did not validate/);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await assert.rejects(f.engine.publish(preview.file, preview.hash), /Challenge did not validate/);
   assert.equal(f.store.read().pending.messages[0].status, 'ready'); assert.equal(f.writeCalls, 0);
   f.engine.client.authorized = send;
-  assert.equal((await f.engine.publish(preview.file, preview.hash)).status, 'published'); assert.equal(f.topics.length, 1);
+  assert.equal((await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash)).status, 'published'); assert.equal(f.topics.length, 1);
 });
 test('cancelling the known 0.5.3 enrollment failure preserves the draft without consuming publication quotas', async t => {
   const f = fixture(t, { idempotent: false }); const preview = await f.engine.generate();
   f.engine.client.authorized = async () => { throw Error('Untrusted or expired enrollment challenge'); };
-  await assert.rejects(f.engine.publish(preview.file, preview.hash), /Untrusted/);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await assert.rejects(f.engine.publish(preview.file, preview.hash), /Untrusted/);
   assert.equal(f.store.read().pending.messages[0].status, 'sending');
   const result = await f.engine.cancel(preview.file, preview.hash), state = f.store.read();
   assert.equal(result.delivery, 'not-sent'); assert.equal(state.pending, null); assert.equal(state.published.length, 0);
@@ -434,9 +452,9 @@ test('publication policy is checked before any authorized request', async t => {
   await assert.rejects(f.engine.publish(preview.file, preview.hash), /policy\/API mismatch/); assert.equal(f.writeCalls, 0);
 });
 test('daily limits apply before generation and theme cooldown blocks a second publication', async t => {
-  const f = fixture(t); const preview = await f.engine.generate(); await f.engine.publish(preview.file, preview.hash);
+  const f = fixture(t); const preview = await f.engine.generate(); await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash);
   const state = f.store.read(); state.published.push({ id: 'other', at: NOW, title: 'Other report' }); f.store.save(state);
-  await assert.rejects(f.engine.generate({ auto: true }), /Daily topic limit/);
+  await assert.rejects(f.engine.generate({ auto: true }), /Unattended research publishing is disabled/);
   assert.equal(f.calls.filter(c => c.stage === 'draft').length, 1);
 });
 test('config rejects unknown feed hosts and overlapping publisher identities', () => {
