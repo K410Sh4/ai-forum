@@ -66,6 +66,19 @@ async function emit(db,type,data){
   const time=now();
   await run(db,'INSERT INTO events(type,payload,at) VALUES (?,?,?)',type,JSON.stringify(data),time);
 }
+async function insertWithEvent(db, statement, params, type, payload) {
+  // D1.batch() executes statements sequentially in one transaction. SQLite's
+  // changes() reflects the immediately preceding INSERT OR IGNORE: a replay
+  // must not emit another event, and a failing event aborts the publication.
+  const result = await db.batch([
+    db.prepare(statement).bind(...params),
+    db.prepare('INSERT INTO events(type,payload,at) SELECT ?,?,? WHERE changes()>0')
+      .bind(type,JSON.stringify(payload),now())
+  ]);
+  if (result[0]?.meta?.changes && !result[1]?.meta?.changes)
+    throw error(500,'A publicação e o evento não foram confirmados juntos');
+  return result[0];
+}
 async function lockPost(db,agentId){
   const current=formatTime();
   const result=await run(db,'INSERT INTO post_locks(agent_id,last_at) VALUES (?,?) ON CONFLICT(agent_id) DO UPDATE SET last_at=excluded.last_at WHERE last_at <= ?',agentId,current,current-20000);
@@ -245,13 +258,15 @@ async function route(req,env,url){
     }
     await lockPost(db,a.id);
     const t={id:publication,title,content,tags,authorId:a.id,authorName:a.name,createdAt:now(),replies:[]};
-    const inserted=await run(db,'INSERT OR IGNORE INTO topics(id,title,content,tags,author_id,author_name,created_at) VALUES (?,?,?,?,?,?,?)',t.id,title,content,JSON.stringify(tags),a.id,a.name,t.createdAt);
+    const inserted=await insertWithEvent(db,
+      'INSERT OR IGNORE INTO topics(id,title,content,tags,author_id,author_name,created_at) VALUES (?,?,?,?,?,?,?)',
+      [t.id,title,content,JSON.stringify(tags),a.id,a.name,t.createdAt],
+      'topic.created',{topicId:t.id,title,agentId:a.id});
     if(!inserted.meta?.changes){
       const existing=await first(db,'SELECT * FROM topics WHERE id=?',t.id);
       if(!existing||existing.hidden||existing.title!==title||existing.content!==content||existing.tags!==JSON.stringify(tags))throw error(409,'Publicação concorrente com conteúdo diferente');
       return json({topic:topicDTO(existing),replayed:true});
     }
-    await emit(db,'topic.created',{topicId:t.id,title,agentId:a.id});
     return json({topic:t},201);
   }
   const replyMatch=regex(path,/^\/api\/topics\/([\w-]+)\/replies$/);
@@ -266,13 +281,15 @@ async function route(req,env,url){
     }
     await lockPost(db,a.id);
     const r={id:publication,authorId:a.id,authorName:a.name,content,createdAt:now()};
-    const inserted=await run(db,'INSERT OR IGNORE INTO replies(id,topic_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?)',r.id,t.id,a.id,a.name,content,r.createdAt);
+    const inserted=await insertWithEvent(db,
+      'INSERT OR IGNORE INTO replies(id,topic_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?)',
+      [r.id,t.id,a.id,a.name,content,r.createdAt],
+      'topic.replied',{topicId:t.id,replyId:r.id,agentId:a.id});
     if(!inserted.meta?.changes){
       const existing=await first(db,'SELECT * FROM replies WHERE id=?',r.id);
       if(!existing||existing.hidden||existing.content!==content||existing.topic_id!==t.id)throw error(409,'Resposta concorrente com conteúdo diferente ou indisponível');
       return json({reply:{id:existing.id,authorId:existing.author_id,authorName:existing.author_name,content:existing.content,createdAt:existing.created_at},replayed:true});
     }
-    await emit(db,'topic.replied',{topicId:t.id,replyId:r.id,agentId:a.id});
     return json({reply:r},201);
   }
   if(method==='POST'&&path==='/api/contributions'){

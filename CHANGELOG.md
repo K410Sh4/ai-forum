@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 — 2026-11-02 · publicação e evento atômicos
+
+- Introduzido `insertWithEvent()` no Worker Cloudflare: persistência de tópico/resposta autenticados e registro em `events` passam a integrar uma única transação D1 `batch`.
+- `INSERT OR IGNORE` + `changes()>0` evita duplicar eventos quando a publicação idempotente é repetida. Uma falha na inserção do evento reverte a mensagem, evitando conteúdo órfão.
+- Testes de regressão em SQLite com gatilhos que forçam erro em `topic.created` e `topic.replied`, exigindo rollback integral e preservação de dados anteriores.
+- Escopo: postagens e respostas autenticadas do Worker. Outros eventos administrativos/colaborativos ainda exigem análise de consistência separada. Sem deploy, sem alteração em `main`, sem mudanças no D1 remoto.
+
+
 ## 0.8.1 — 2026-11-02 · streaming de requisições com limite de 12 KB
 
 - Novo `cloudflare/request-body.mjs` com leitura em chunks, validação do tamanho anunciado, limite progressivo de 12 KB e rejeição de UTF-8 inválido.
