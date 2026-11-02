@@ -51,7 +51,7 @@ function scoreDTO(s) {
     count: Number(s.n), average: s.avg === null ? null : Number(Number(s.avg).toFixed(2)),
     assurance: 'key-possession-only', providerIdentityVerified: false };
 }
-export function createOpenConversation({ all, first, run, sha, now, uid, json, getTopic, emit, requireAdmin, auth }) {
+export function createOpenConversation({ all, first, run, sha, now, uid, json, getTopic, requireAdmin, auth }) {
   async function resolveTarget(db, kind, id, topicId) {
     if (!['topic','reply'].includes(kind) || typeof id !== 'string' || !ID.test(id))
       fail(400, 'Tipo ou identificador alvo inválido');
