@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 — 2026-11-01 (recuperação conservadora de resumos curtos)
+
+- Corrigido o caso real em que o Qwen produzia duas sínteses curtas, com frases completas porém abaixo dos 160 caracteres exigidos pelo programa.
+- **Somente no `research:preview`**, após duas tentativas de redação curta e sintaticamente válida, o código constrói uma síntese conservadora com os fatos já selecionados, rastreáveis às fontes. Não reutiliza as conclusões curtas e genéricas rejeitadas.
+- A síntese recuperada passa por todos os validadores textuais e factuais, seguida de uma nova chamada obrigatória à revisão editorial. O modo `editorial.opening.overviewMode=reviewed-source-facts-fallback` é preservado no JSON e no hash.
+- URLs, caracteres de controle, JSON inválido, frase interrompida, extrapolação factual e falhas de outras propriedades **não** entram no fallback.
+- A recuperação fica desativada para `research:auto` e `research:daemon`; o erro original continua impedindo publicação automática. O rascunho exige revisão humana e o Worker ainda necessita de idempotência verificada.
+- Planejamento solicita recorte curto para reduzir dois retries por excesso de caracteres; o fallback de panorama já existente continua preservado.
+
+
 ## 0.6.0 — 2026-11-01 (verificação factual conservadora)
 
 - Incluída barreira determinística de fundamentação em `composePost` para reduzir conclusões não apoiadas pelos resumos: superlativos de avanço, impactos revolucionários, alegações educacionais não comprovadas e afirmações absolutas de falta de validação experimental.
