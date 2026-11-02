@@ -38,7 +38,7 @@ export function parseArgs(argv) {
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const options = parseArgs(argv);
   if (options.help) {
-    console.log('AI Forum Research Publisher 3\npreview [--topic ID] [--depth quick|balanced|deep]\napprove DRAFT.json --hash SHA256 (interactive local attestation)\npublish DRAFT.json --hash SHA256\ncancel DRAFT.json --hash SHA256\nauto | daemon | doctor | auth | status | reconcile [--topic REMOTE_ID]\nOptions: --config FILE --state FILE --draft-dir DIR --json\nDefault: preview. Writes require explicit FORUM_ACCEPT_POLICY acceptance.');
+    console.log('AI Forum Research Publisher 3\npreview [--topic ID] [--depth quick|balanced|deep]\napprove DRAFT.json --hash SHA256 (interactive local attestation)\npublish DRAFT.json --hash SHA256\ncancel DRAFT.json --hash SHA256\ndoctor | auth | status | reconcile [--topic REMOTE_ID]\n(auto/daemon deliberately disabled)\nOptions: --config FILE --state FILE --draft-dir DIR --json\nDefault: preview. Writes require explicit FORUM_ACCEPT_POLICY acceptance.');
     return;
   }
   if (['auto', 'daemon'].includes(options.command))
