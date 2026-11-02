@@ -119,6 +119,50 @@ export function evidenceSpans(value) {
   }
   return spans;
 }
+// These guards catch *known* unsupported leaps, not every possible
+// hallucination. The reviewer still needs source-level human verification.
+const foldPT = value => normalized(value).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+const anchoredDomains = [
+  { label: 'educational', claim: /\b(?:educacional|educacao|escolar|ensino|pedagogic[ao])\b/u, evidence: /\b(?:educat\w*|school\w*|teach\w*|pedagog\w*|classroom\w*|student\w*|ensino|educacao|escolar)\b/u },
+  { label: 'medical', claim: /\b(?:medic[ao]|saude|hospitalar|clinico|clinica)\b/u, evidence: /\b(?:medic\w*|health\w*|hospital\w*|clinical|clinico|clinica|saude)\b/u }
+];
+export function validateSourceClaimGrounding(statement, quote) {
+  const claim = foldPT(statement), evidence = foldPT(quote);
+  for (const domain of anchoredDomains) {
+    if (domain.claim.test(claim) && !domain.evidence.test(evidence)) {
+      throw Error('Factual grounding: ' + domain.label + ' claim lacks a matching term in the selected evidence quote');
+    }
+  }
+}
+// Negative claims about the *absence* of empirical validation are not
+// established merely because an RSS excerpt does not mention a result.
+const highRiskClaims = [
+  { pattern: /\b(?:avanc\w*|contribui\w*|impact\w*)\s+significativ\w*\b/u, reason: 'unsubstantiated significance' },
+  { pattern: /\b(?:revolucion\w*|transformador\w*|transformar\s+(?:radicalmente|completamente))\b/u, reason: 'speculative impact' },
+  { pattern: /\binovacao\s+educacional\b/u, reason: 'educational leap' },
+  { pattern: /\b(?:eficacia|desempenho|aplicacao|modelo)\b.{0,120}\b(?:ainda\s+(?:precisa|necessita)\s+(?:ser\s+)?validad\w*|nao\s+(?:foi|esta|esta\s+sendo)\s+validad\w*)\b/u, reason: 'unqualified lack-of-validation claim' },
+  { pattern: /\b(?:nao\s+(?:foi|esta)\s+validad\w*|ainda\s+nao\s+foi\s+(?:testad|avaliad)\w*)\b/u, reason: 'unqualified lack-of-validation claim' }
+];
+export function validateEditorialGrounding(opening) {
+  const fields = [
+    ['overview', opening.overview],
+    ['uncertainties', opening.uncertainties],
+    ...(Array.isArray(opening.perspectives) ? opening.perspectives.flatMap((p, index) => [
+      ['perspectives[' + index + '].argument', p.argument],
+      ['perspectives[' + index + '].caveat', p.caveat]
+    ]) : [])
+  ];
+  for (const [field, value] of fields) {
+    if (typeof value !== 'string') continue; // composePost validates structure
+    const text = foldPT(value);
+    for (const risk of highRiskClaims) {
+      if (risk.pattern.test(text)) throw Error('Factual grounding: ' + risk.reason + ' in ' + field + '; rewrite with precise, source-limited statements');
+    }
+    if (/\balunis\b/u.test(text)) throw Error('Factual grounding: invalid Portuguese inflection in ' + field);
+  }
+  return { passed: true, independent: false, scope: 'known unsupported inferences and evidence-domain anchors', humanVerificationRequired: true };
+}
+
 export function validateCard(card, source, { spans = [], requireSelection = false } = {}) {
   let summary, summaryMode = 'model';
   try { summary = sentence(card.summary, 35, 380, 'source summary'); }
@@ -137,6 +181,7 @@ export function validateCard(card, source, { spans = [], requireSelection = fals
     if (quote.length < 15 || quote.length > (selected ? 300 : 260) || !normalized(source.evidence || source.summary).toLowerCase().includes(quote.toLowerCase())) throw Error('Evidence quote was not found in the collected source');
     const numbers = value => (value.match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'));
     if (numbers(statement).some(n => !numbers(quote).includes(n))) throw Error('Numeric fact is absent from its evidence quote');
+    validateSourceClaimGrounding(statement, quote);
     return { statement, quote, ...(selected ? { evidenceId: selected.id } : {}) };
   });
   const limitations = sentence(card.limitations, 15, 220, 'source limitation');
@@ -238,6 +283,7 @@ export function validateReview(value, material) {
 }
 function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
 export function composePost(topic, draft, sources) {
+  validateEditorialGrounding(draft);
   const title = prose(draft.title, 12, 115, 'title');
   const overview = sentence(draft.overview, 160, 550, 'overview');
   const uncertainty = sentence(draft.uncertainties, 20, 260, 'uncertainties');
