@@ -165,8 +165,10 @@ const highRiskClaims = [
 ];
 export function validateEditorialGrounding(opening) {
   const fields = [
+    ['title', opening.title],
     ['overview', opening.overview],
     ['uncertainties', opening.uncertainties],
+    ...(Array.isArray(opening.questions) ? opening.questions.map((q, index) => ['questions[' + index + ']', q]) : []),
     ...(Array.isArray(opening.perspectives) ? opening.perspectives.flatMap((p, index) => [
       ['perspectives[' + index + '].argument', p.argument],
       ['perspectives[' + index + '].caveat', p.caveat]
@@ -178,6 +180,12 @@ export function validateEditorialGrounding(opening) {
     for (const risk of highRiskClaims) {
       if (risk.pattern.test(text)) throw Error('Factual grounding: ' + risk.reason + ' in ' + field + '; rewrite with precise, source-limited statements');
     }
+    // Reject generic English AI terminology in model-authored PT-BR prose.
+    // Preserve proper names such as CLR-Bench, Nature Machine Intelligence,
+    // OpenAI and fixed literal quotations; only these common mixed phrases
+    // are checked. A draft must be regenerated rather than silently edited.
+    if (/\b(?:ai providers|(?:sistemas?|modelos?|provedores?|fornecedores?)\s+(?:de\s+)?ai)\b/u.test(text))
+      throw Error('Editorial Portuguese: mixed AI terminology in ' + field + '; use Portuguese terms such as provedores de IA or modelos de IA');
     if (/\balunis\b/u.test(text)) throw Error('Factual grounding: invalid Portuguese inflection in ' + field);
     if (/\b(?:a|uma|o)\s+benefica\b/u.test(text)) throw Error('Factual grounding: malformed use of benéfica in ' + field);
   }
@@ -315,6 +323,22 @@ export function validateReview(value, material) {
     return { kind: finding.kind, claimId: selected.id, quote: selected.text, reason };
   });
   const advisory = finding => ['missing-detail', 'style'].includes(finding.kind);
+  // The local Qwen sometimes returns the exact same missing-detail criticism
+  // for EVERY unrelated block (real 2026-11-02 draft: C1..C8). Such a
+  // report is not a meaningful independent assessment and must not approve
+  // a draft. A repeated blocking finding already rejects publication and is
+  // left intact; legitimate distinct advice remains nonblocking.
+  if (findings.length >= 4 && findings.every(advisory)) {
+    const counts = new Map();
+    for (const finding of findings) {
+      const key = finding.kind + ':' + normalized(finding.reason).toLowerCase()
+        .normalize('NFD').replace(/\p{M}/gu, '').replace(/[\s.!?;,]+/g, ' ').trim();
+      if (!counts.has(key)) counts.set(key, new Set());
+      counts.get(key).add(finding.claimId);
+    }
+    if ([...counts.values()].some(ids => ids.size >= 4))
+      throw Error('Repetitive advisory review across unrelated claims; review each claimId independently');
+  }
   const issues = findings.filter(finding => !advisory(finding)).map(finding => finding.kind + ' [' + finding.claimId + '] «' + normalized(finding.quote).slice(0, 200) + '»: ' + finding.reason);
   const suggestions = findings.filter(advisory).map(finding => '[' + finding.claimId + '] ' + finding.reason);
   const reclassified = findings.filter(finding => finding.classification).map(finding => ({
