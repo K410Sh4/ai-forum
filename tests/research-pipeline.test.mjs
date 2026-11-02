@@ -57,7 +57,7 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
     } else {
       stage = 'review'; const reject = criticCalls++ < criticRejects;
       assert.equal(properties.approved, undefined);
-      const questionTarget = input.material.find(part => part.text.startsWith('PERGUNTAS ABERTAS\\n'));
+      const questionTarget = input.material.find(part => part.text.startsWith('PERGUNTAS ABERTAS\n'));
       value = { findings: reject ? [
         { kind: 'unsupported-claim', claimId: criticOnlyQuestions ? questionTarget?.id : input.material[0].id, reason: criticReason },
         ...(criticMixedBlockers ? [{ kind: 'unsupported-claim', claimId: input.material[0].id, reason: criticReason }] : [])
