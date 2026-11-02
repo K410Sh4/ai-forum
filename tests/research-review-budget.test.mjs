@@ -27,7 +27,7 @@ test('critic refuses findings beyond the explicit review budget', () => {
   assert.throws(() => validateReview({
     findings: Array.from({ length: MAX_REVIEW_FINDINGS + 1 }, (_, i) => finding(i + 1)),
     note: 'Excesso de achados.'
-  }, material), /classified-finding limit/);
+  }, material), /classified findings/);
 });
 
 test('critic rejects a finding attached to an unknown claimId', () => {
