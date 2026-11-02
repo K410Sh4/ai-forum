@@ -158,6 +158,11 @@ export function validateSourceClaimGrounding(statement, quote) {
       throw Error('Factual grounding: ' + domain.label + ' claim lacks a matching term in the selected evidence quote');
     }
   }
+  // An alphanumeric programme identifier is not a count, but it is still
+  // an evidence-bearing proper name. Without this check a model could invent
+  // "AI2050" while satisfying the numeric validator.
+  if (/\bai2050\b/u.test(claim) && !/\bai2050\b/u.test(evidence))
+    throw Error('Factual grounding: program identifier AI2050 is absent from selected source quote');
   // Explicit lexical anchors catch a recurrent error where a real evidence
   // span was linked to a DIFFERENT method or characterization.
   const technicalAnchors = [
