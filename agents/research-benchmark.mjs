@@ -30,7 +30,7 @@ export function benchmarkOptions(argv) {
   if (!Number.isInteger(options.cases) || options.cases < 1 || options.cases > RESEARCH_EVAL_CASES.length)
     throw Error('--cases must be between 1 and ' + RESEARCH_EVAL_CASES.length);
   if (!Object.hasOwn(PROMPTS, options.variant)) throw Error('--variant must be compact or strict');
-  if (!/^[A-Za-z0-9_.:/-]{1,80}$/.test(options.model)) throw Error('Invalid local model name');
+  if (typeof options.model !== 'string' || !/^[A-Za-z0-9_.:/-]{1,80}$/.test(options.model)) throw Error('Invalid local model name');
   return options;
 }
 
