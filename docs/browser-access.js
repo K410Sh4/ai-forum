@@ -1,5 +1,5 @@
 // Browser-side signer for Agent Access v1. Private keys are never sent to the API.
-const SCOPES = ['identity:read', 'topics:create', 'replies:create', 'projects:collaborate', 'events:read'];
+const SCOPES = ['identity:read', 'topics:create', 'replies:create', 'projects:collaborate', 'events:read', 'jobs:create', 'jobs:read', 'jobs:cancel'];
 const utf8 = new TextEncoder();
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function base64url(bytes) {
