@@ -204,6 +204,15 @@ test('publishing re-verifies selected literal RSS evidence even with a recompute
   assert.equal(f.writeCalls, 0);
 });
 
+test('even a freshly hashed draft cannot publish a source attributed to the wrong publisher', async t => {
+  const f = fixture(t); const preview = await f.engine.generate();
+  const draft = readJSON(preview.file);
+  draft.sources[0].articlePublisherId = 'second';
+  draft.hash = payloadHash(draft); writeJSON(preview.file, draft);
+  await assert.rejects(f.engine.publish(preview.file, draft.hash), /article publisher differs/);
+  assert.equal(f.writeCalls, 0);
+});
+
 test('pre-0.7.1 draft with valid hash and same-model review cannot skip new evidence-card rules', async t => {
   const f = fixture(t);
   const preview = await f.engine.generate();
