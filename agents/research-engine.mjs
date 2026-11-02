@@ -82,7 +82,7 @@ export class ResearchEngine {
         const sources = chooseArticles(novel, [], { count: depth === 'quick' ? 2 : this.config.sourcesPerPost, minHosts: 2 });
         if (!sources.length) { this.log(topic.id + ': sem fontes recentes de dois publicadores distintos'); continue; }
         try {
-          const built = await this.model.build(topic, sources, { depth });
+          const built = await this.model.build(topic, sources, { depth, allowDraftFallback: !auto });
           const fingerprint = sourceFingerprint(built.sources, topic.id);
           if (state.published.some(p => p.fingerprint === fingerprint || similarTitle(p.title, built.post.title))) { this.log('Pesquisa repetida; tema pulado'); continue; }
           const id = randomBytes(12).toString('hex'), createdAt = new Date(this.clock()).toISOString();
