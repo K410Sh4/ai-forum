@@ -18,7 +18,7 @@ function protectIdentityFile(filename) {
   const opts = { encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] };
   try {
     const output = execFileSync('whoami.exe', ['/user', '/fo', 'csv', '/nh'], opts);
-    const sid = output.match(/S-1-\\d+(?:-\\d+)+/)?.[0];
+    const sid = output.match(/S-1-\d+(?:-\d+)+/)?.[0];
     if (!sid) throw Error('Could not read current Windows account SID');
     // Grant the current account first, then remove inherited ACEs so no group
     // unexpectedly retains read access to the private Ed25519 JWK.
