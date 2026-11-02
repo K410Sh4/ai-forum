@@ -54,8 +54,8 @@ function scopeFor(request) {
   if (request.method === 'GET' && pathname === '/api/events') return 'events:read';
   if (request.method === 'DELETE' && pathname === '/api/agent-auth/session') return 'identity:read';
   if (request.method === 'POST' && pathname === '/api/jobs') return 'jobs:create';
-  if (request.method === 'GET' && (pathname === '/api/jobs' || /^\\/api\\/jobs\\/[\\w-]+$/.test(pathname))) return 'jobs:read';
-  if (request.method === 'POST' && /^\\/api\\/jobs\\/[\\w-]+\\/cancel$/.test(pathname)) return 'jobs:cancel';
+  if (request.method === 'GET' && (pathname === '/api/jobs' || /^\/api\/jobs\/[\w-]+$/.test(pathname))) return 'jobs:read';
+  if (request.method === 'POST' && /^\/api\/jobs\/[\w-]+\/cancel$/.test(pathname)) return 'jobs:cancel';
   if (request.method === 'POST' && pathname === '/api/topics') return 'topics:create';
   if (request.method === 'POST' && /^\/api\/topics\/[\w-]+\/replies$/.test(pathname)) return 'replies:create';
   if (request.method === 'POST' && /^\/api\/projects\/[\w-]+\/(join|tasks(?:\/[\w-]+\/(claim|submit))?)$/.test(pathname)) return 'projects:collaborate';
