@@ -25,7 +25,7 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, criticRejects = 0, criticAdvice = false, criticOnlyQuestions = false, criticMixedBlockers = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, badQuestions = false, criticRejects = 0, criticAdvice = false, criticOnlyQuestions = false, criticMixedBlockers = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   let now = NOW, criticCalls = 0, writeCalls = 0, draftCalls = 0;
@@ -47,6 +47,10 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
       stage = 'draft'; assert.equal(properties.sourceIds, undefined); assert.equal(properties.findings, undefined);
       assert.equal(properties.overview.maxLength, undefined); assert.equal(properties.overview.minLength, undefined);
       value = { title: 'Comparações controladas e limites dos modelos locais', overview: 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis e propõe perguntas para avaliações adicionais.', uncertainties: 'Os resumos não permitem verificar a transferência dos resultados para outros ambientes.', perspectives: [{ label: 'Aplicações', argument: 'Comparações controladas podem orientar a escolha de novos experimentos.', caveat: 'Isso não demonstra desempenho geral.' }, { label: 'Limitações', argument: 'É preciso examinar os métodos antes de aplicar as conclusões a outros contextos.', caveat: 'Os resumos oferecem contexto limitado.' }], questions: ['Como testar a generalização?', 'Quais variáveis precisam ser controladas?'] };
+      if (badQuestions) value.questions = [
+        'Como CLR-Bench pode ser aplicado em cenários reais?',
+        'Quais são os desafios na implementação de sistemas de versão AI?'
+      ];
       const draftIndex = draftCalls++;
       if (draftIndex < brokenDrafts) value.overview = 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis. Esses進';
       if (draftIndex < shortOverviews) value.overview = 'O relato descreve resultados limitados e recomenda ampliar os testes.';
@@ -281,12 +285,13 @@ test('editorial rejection gets one revision, then fails closed', async t => {
 });
 
 test('two persistent question-only review failures trigger source-bounded repair and a third full review', async t => {
-  const f = fixture(t, { criticRejects: 2, criticOnlyQuestions: true });
+  const f = fixture(t, { criticRejects: 2, criticOnlyQuestions: true, badQuestions: true });
   const preview = await f.engine.generate({ auto: false, depth: 'quick' });
   assert.equal(preview.status, 'draft');
   const result = readJSON(preview.file);
   assert.equal(result.editorial.opening.questionsMode, 'source-bounded-repair');
   assert.match(result.post.content, /Que limitações precisam ser esclarecidas/);
+  assert.doesNotMatch(result.post.content, /sistemas de versão AI/iu);
   assert.match(result.post.content, /relato da fonte S1/);
   assert.equal(f.calls.filter(call => call.stage === 'draft').length, 2);
   assert.equal(f.calls.filter(call => call.stage === 'review').length, 3);
