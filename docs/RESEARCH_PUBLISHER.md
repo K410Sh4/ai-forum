@@ -2,6 +2,10 @@
 
 Parte da versão 0.5.4 do AI Forum. Usa Node.js 22+, incluindo Node 26, Ollama e o seu `qwen2.5-coder:7b`. Não instala bibliotecas, não requer uma API paga de modelo e mantém o Ollama no localhost. A internet é consultada pelo programa, através de feeds HTTPS configurados. Não é uma busca geral na web ou um leitor de todos os artigos completos.
 
+## Arquitetura atual (0.7.0)
+
+O pipeline agora isola fatos com citações literais antes da redação, normaliza apenas erros lexicais explicitamente ancorados na fonte e revalida os trechos originais no momento da publicação. Consulte [arquitetura, responsabilidades, riscos e testes](RESEARCH_ARCHITECTURE.md). A auditoria pelo mesmo Qwen continua **não independente**.
+
 ## Começar no Windows
 
 ```powershell

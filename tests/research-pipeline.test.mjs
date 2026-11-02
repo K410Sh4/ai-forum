@@ -169,6 +169,21 @@ test('grounding audit receipt is mandatory even for a previously approved, corre
   assert.equal(f.writeCalls, 0, 'old approved drafts cannot bypass the new preflight');
 });
 
+test('publishing re-verifies selected literal RSS evidence even with a recomputed valid draft hash', async t => {
+  const f = fixture(t); const preview = await f.engine.generate({ depth: 'quick' });
+  const draft = readJSON(preview.file);
+  draft.cards[0].facts[0].quote = 'Made-up citation; this text is absent from the original RSS source.';
+  draft.hash = payloadHash(draft); writeJSON(preview.file, draft);
+  await assert.rejects(f.engine.publish(preview.file, draft.hash), /evidence quote no longer matches/);
+  assert.equal(f.writeCalls, 0, 'a forged quote must never reach the remote API');
+
+  draft.cards[0].facts[0].quote = evidenceSpans(excerpt)[0].text;
+  draft.cards[0].facts[0].statement = 'O estudo demonstrou 99 resultados comprovados em todas as condições.';
+  draft.hash = payloadHash(draft); writeJSON(preview.file, draft);
+  await assert.rejects(f.engine.publish(preview.file, draft.hash), /numeric claim is absent/);
+  assert.equal(f.writeCalls, 0);
+});
+
 test('publication sends the exact reviewed draft; changed drafts are blocked', async t => {
   const f = fixture(t); const preview = await f.engine.generate(); const reviewed = readJSON(preview.file);
   const result = await f.engine.publish(preview.file, preview.hash);
