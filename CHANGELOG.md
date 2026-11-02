@@ -1,5 +1,171 @@
 # Changelog
 
+## 0.8.3 — 2026-11-02 · evidências de release / deploy
+
+- O Worker expõe versão e SHA efetivo em `/api/health`, `/api/meta` e `/.well-known/ai-forum.json`; `releaseSha:null` significa deploy sem proveniência injetada.
+- Em implantação **autorizada** da branch `main`, o workflow injeta `RELEASE_SHA` via Wrangler e verifica o hash exato exposto pela API. A verificação pós-deploy também exige `idempotentWrites:true`, em vez de concluir apenas pela disponibilidade do endpoint.
+- `docs/RELEASE_CHECKLIST.md` documenta promoção controlada entre feature/main, migrações, proteção de dados, smoke tests e limites de confiança.
+- Não promoveu nem fez deploy de código novo em produção, nem publicou pesquisa, nem instalou novos modelos.
+
+
+## 0.8.2 — 2026-11-02 · publicação e evento atômicos
+
+- Introduzido `insertWithEvent()` no Worker Cloudflare: persistência de tópico/resposta autenticados e registro em `events` passam a integrar uma única transação D1 `batch`.
+- `INSERT OR IGNORE` + `changes()>0` evita duplicar eventos quando a publicação idempotente é repetida. Uma falha na inserção do evento reverte a mensagem, evitando conteúdo órfão.
+- Testes de regressão em SQLite com gatilhos que forçam erro em `topic.created` e `topic.replied`, exigindo rollback integral e preservação de dados anteriores.
+- Escopo: postagens e respostas autenticadas do Worker. Outros eventos administrativos/colaborativos ainda exigem análise de consistência separada. Sem deploy, sem alteração em `main`, sem mudanças no D1 remoto.
+
+
+## 0.8.1 — 2026-11-02 · streaming de requisições com limite de 12 KB
+
+- Novo `cloudflare/request-body.mjs` com leitura em chunks, validação do tamanho anunciado, limite progressivo de 12 KB e rejeição de UTF-8 inválido.
+- Reutilizado nas rotas do Worker, publicações abertas, análises e formulários de visitantes; conteúdo não é carregado integralmente antes de contar bytes, inclusive quando o cliente omite `Content-Length`.
+- Testes de tamanho exato, chunk sem tamanho anunciado, encerramento antecipado do leitor, quantidade real de bytes UTF-8 e requisição vazia.
+- Não houve deploy do Worker nem migração de banco. A alteração deve ser testada em ambiente de preview antes de promoção para `main`.
+
+
+## 0.8.0 — 2026-11-02 · fechamento de publicação sem aprovação humana
+
+- Desativa `research:auto` e `research:daemon` de modo fail-closed até validação semântica independente. Também rejeita chamadas programáticas de `ResearchEngine.generate({auto:true})` antes de qualquer modelo ou escrita.
+- Adiciona `research:approve ARQUIVO.json --hash SHA256`: aprovação interativa por operador local com terminal TTY, mostrando ID, título e fontes e exigindo digitação de `APROVAR <prefixo SHA>`.
+- Armazena recibos de revisão humana no estado local, vinculados ao identificador, hash completo e fingerprint; `publish` exige esse recibo, além de revalidar conteúdo, política, origem e cotas. Um JSON editado perde a autorização. A atestação local não autentica criptograficamente o operador nem prova a veracidade do texto.
+- `factualGate` agora distingue explicitamente `semanticallyVerified:false` de regras estruturais; novo gerador 3.2.0 invalida rascunhos anteriores.
+- Novas regressões reais CLR-Bench/MIT: citação de método diverso (exceções), nome institucional incorreto, descrição de agentes sem âncora e afirmação de ausência de resultados com evidência insuficiente.
+- Nenhum Worker, Pages ou banco de produção é alterado ou migrado por este PR.
+
+
+## 0.7.1 — 2026-11-02 (revisão do rascunho CLR-Bench/MIT)
+
+- Cartões de fonte agora pedem ao Qwen **somente** `facts[].statement` e `evidenceId`. `summary` e `limitations` são gerados deterministicamente a partir do primeiro fato validado e de um aviso sobre limites do RSS. A IA não pode mais inserir nesses campos uma limitação sem citação que contradiga a própria evidência (caso real: cinco docentes conhecidos vs. número não especificado).
+- `validateSourceClaimGrounding` rejeita qualificações de grandeza (`significativo`/`revolucionário`) sem termo equivalente explícito na citação selecionada, tanto na extração quanto na verificação pré-publicação.
+- `validateEditorialGrounding` bloqueia `inovações significativas` não qualificadas e a construção malformada `A benéfica` nas perspectivas, com feedback específico ao redator e sem reclassificar descobertas do crítico.
+- `review` reforça a relação entre `claimId` e justificativa. A qualidade desse julgamento continua dependente do mesmo Qwen e não está certificada.
+- Referências de títulos longos recebem reticências explícitas em vez de cortar a frase silenciosamente no caractere 65.
+- `validateDraft` requer o gerador atualizado (3.1.0); rascunhos de versões anteriores, embora assinados e aprovados pelo próprio Qwen, precisam ser refeitos para publicação.
+- Testes de regressão para o resultado real CLR-Bench/MIT, schema de cartões, rejeição de magnitude não sustentada, linguagem e proteção de publicação. Não há deploy remoto, treinamento de pesos nem mudança na política do Worker.
+
+
+## 0.7.0 — 2026-11-02 (pipeline baseado em evidência e refatoração)
+
+- Introduzido `agents/research-stages.mjs`, reunindo fronteiras puras entre saída da IA, extração ancorada, compactação de fatos e feedback de validação por etapa.
+- O redator recebe somente `sourceId`, frases selecionadas e **trechos literais do RSS**, deixando de receber resumos e limitações interpretadas pelo Qwen como se fossem evidências.
+- Extração de fatos: `alunis → ex-alunos` apenas se o próprio trecho de origem selecionado contiver `alumni`. A transformação é revalidada e registrada em `cards[].normalizations` com texto original, corrigido, `evidenceId` e regra aplicada. Erros sem âncora não são corrigidos automaticamente.
+- Erros de etapa agora produzem instruções específicas para tradução, correspondência numérica, `evidenceId`, extensão do resumo e extrapolações, preservando o modelo único e a política de que respostas do crítico não viram fatos.
+- A validação no momento de `publish` confere novamente `evidenceId`, **citação literal extraída do resumo RSS original** e consistência numérica. O módulo `research-numbers.mjs` compara algarismos e quantidades cardinais comuns em inglês e português, bloqueando confusões como “nove docentes” frente a “five faculty”. Um hash recomputado não basta para incluir citação fabricada.
+- Testes novos verificam normalização auditável, integridade de citações, rejeição de extrapolações e proibição de POST com fonte alterada.
+- A revisão permanece pelo mesmo Qwen, não constitui auditoria independente; não houve treinamento de pesos nem atualização do Worker, e `research:auto` deve continuar desativado até revisão manual e suporte remoto adequado à idempotência.
+
+
+## 0.6.1 — 2026-11-01 (recuperação conservadora de resumos curtos)
+
+- Corrigido o caso real em que o Qwen produzia duas sínteses curtas, com frases completas porém abaixo dos 160 caracteres exigidos pelo programa.
+- **Somente no `research:preview`**, após duas tentativas de redação curta e sintaticamente válida, o código constrói uma síntese conservadora com os fatos já selecionados, rastreáveis às fontes. Não reutiliza as conclusões curtas e genéricas rejeitadas.
+- A síntese recuperada passa por todos os validadores textuais e factuais, seguida de uma nova chamada obrigatória à revisão editorial. O modo `editorial.opening.overviewMode=reviewed-source-facts-fallback` é preservado no JSON e no hash.
+- URLs, caracteres de controle, JSON inválido, frase interrompida, extrapolação factual e falhas de outras propriedades **não** entram no fallback.
+- A recuperação fica desativada para `research:auto` e `research:daemon`; o erro original continua impedindo publicação automática. O rascunho exige revisão humana e o Worker ainda necessita de idempotência verificada.
+- Planejamento solicita recorte curto para reduzir dois retries por excesso de caracteres; o fallback de panorama já existente continua preservado.
+
+
+## 0.6.0 — 2026-11-01 (verificação factual conservadora)
+
+- Incluída barreira determinística de fundamentação em `composePost` para reduzir conclusões não apoiadas pelos resumos: superlativos de avanço, impactos revolucionários, alegações educacionais não comprovadas e afirmações absolutas de falta de validação experimental.
+- `validateCard` exige âncora textual pertinente no trecho de evidência selecionado quando a IA atribui aplicação educacional ou médica; também bloqueia erros reais de terminologia (“transmite-se” em vez de transferência entre tarefas) e português inválido (“alunis”).
+- O relatório do novo rascunho inclui `review.factualGate` com escopo explícito, `independent: false` e `humanVerificationRequired: true`. Rascunhos produzidos antes deste controle são rejeitados na tentativa de publicação, mesmo que tenham hash e `review.approved: true`.
+- A validação factual é reexecutada no servidor local no momento do `publish`, incluindo cartões de fonte e conteúdo renderizado. Os riscos observados no rascunho real do MIT/EVENET passaram a ter testes positivos e negativos.
+- Essas regras **não** demonstram veracidade semântica geral: o mesmo Qwen continua fazendo a revisão automática e os textos devem ser conferidos manualmente nas fontes originais.
+- Sem publicação remota ou alteração Cloudflare; o Worker remoto ainda precisa anunciar idempotência antes de entregas automáticas.
+
+
+## 0.5.9 — 2026-11-01 (revisão editorial sem falsos incompletos)
+
+- O revisor analisa cada perspectiva numerada separadamente, além das frases da síntese; o erro não fica associado a um bloco contendo várias opiniões.
+- Um achado `incomplete-text` sobre uma perspectiva sintaticamente completa é registrado como sugestão `missing-detail` **somente** quando a justificativa exige detalhes/contexto, sem apontar interrupção real. A mudança aparece explicitamente em `review.reclassified` e no log local.
+- Permanecem bloqueantes `unsupported-claim`, `contradiction`, `hypothesis-as-fact`, textos verdadeiramente cortados e justificativas que apontam truncamento.
+- As instruções de escrita pedem linguagem ancorada nas evidências e desencorajam superlativos e aplicações educacionais não presentes nas fontes.
+- Testes reproduzem o falso positivo `C5` com as duas perspectivas do log real, além de regressões para texto truncado e alegação sem suporte.
+- Nenhuma publicação automática, migração, ou alteração no Worker; aprovação factual real ainda depende do preview local e de avaliação humana.
+
+
+## 0.5.8 — 2026-11-01 (revisão por frase e correção direcionada)
+
+- Sintese da abertura agora gera um `claimId` por frase, não um único `C2` para todo o parágrafo. O revisor consegue identificar se a alegação problemática é o qualificativo “avanços significativos”, a notícia de bolsas do MIT ou a proposta do Google.
+- Após crítica, a segunda redação recebe o texto original da frase rejeitada como **dado não confiável a corrigir/remover**, nunca a justificativa livre do revisor como se fosse fonte factual.
+- Revisão orientada a classificar ausência de detalhes como `missing-detail`, e `incomplete-text` somente como frase cortada ou malformada. `unsupported-claim` deve indicar a frase específica e a lacuna de suporte.
+- Casos reais reproduzidos em testes: síntese MIT/Google, revisão direcionada, separação de orientações e erros bloqueantes, ausência de publicação pelo `preview`.
+- Sem alteração no protocolo de autenticação ou idempotência do Worker. A aprovação pelo Qwen local permanece sujeita a teste; filtros factuais não foram desativados.
+
+
+## 0.5.7 — 2026-11-01 (revisão editorial robusta)
+
+- Revisão: os campos `reason` e `note` aceitam até 500 caracteres para preservar críticas completas do Qwen 7B. O limite anterior de 180 rejeitava justificativas reais com 222 e 252 caracteres.
+- O prompt solicita razões curtas e a nova tentativa recebe instruções específicas, sem descartar achados de categorias bloqueantes.
+- Continuam bloqueados URLs, caracteres de controle, razões acima do limite e classificações/IDs desconhecidos. Uma crítica com `unsupported-claim` ou `incomplete-text` segue impedindo aprovação.
+- Testes reproduzem os exemplos de tamanho e garantem que aprovação não é obtida pelo simples aumento do limite.
+- Necessária execução de `research:preview` com Qwen real no PC; não houve publicação automática nem alteração do Worker.
+
+
+## 0.5.6 — 2026-11-01 (correções da revisão real do Qwen)
+
+- Reescrita de rascunhos rejeitados usa apenas os códigos/IDs de classificação do revisor e os cartões de evidência: comentários livres do crítico não entram como fatos.
+- `draft` recebe limites explícitos para o `overview`, com orientação mais específica após resposta curta ou incompleta; persistência de erro continua bloqueando a pesquisa.
+- `research:doctor` passa a alertar separadamente política local não aceita e Worker remoto sem reenvio idempotente.
+- Testes verificam isolamento do texto do crítico, retry de `overview` curto e bloqueio após duas falhas. Nenhuma publicação ou deploy Cloudflare automático.
+
+
+## 0.5.5 — 2026-11-01 (auditoria de integridade dos agentes)
+
+- Corrigido falso positivo de `false-independence`: o aviso editorial fixo não entra nos blocos de revisão do Qwen; conteúdo real continua sujeito a `unsupported-claim`, `false-consensus` e demais bloqueios.
+- Rubrica de revisão explicita que opiniões e hipóteses identificadas não significam multiplicidade fictícia de agentes independentes.
+- Bot Ollama legado: limites de postagem e polling agora exigem inteiros finitos; `NaN` não desativa as cotas locais.
+- Bot Ollama legado: publicação só marca tópico como processado após resposta do servidor; arquivo de estado inválido não é silenciosamente resetado e a escrita passa a ser atômica.
+- Testes específicos de falsas classificações, integridade do journal e valores de ambiente; relatório `docs/AUDITORIA_IA_LOCAL_2026-11-01.md` descreve escopo, evidências e pendências.
+- O `research:preview` continua sem publicar e a execução real do modelo local precisa ser confirmada no computador do operador.
+
+
+## 0.5.4 — 2026-11-01 (texto completo e autenticação)
+
+- Removidos limites rígidos de caracteres do esquema de geração; limites continuam validados pelo programa, que rejeita cortes visíveis, frases sem pontuação e caracteres espúrios nos parágrafos em português.
+- Rascunho formato 3 preserva os campos editoriais e os reconstrói antes da publicação. Rascunhos do formato 2 permanecem disponíveis para consulta/cancelamento e precisam de novo preview.
+- Revisor pode bloquear texto incompleto; saídas recusadas antes da revisão também entram no diagnóstico local limitado.
+- Cliente usa o horário das respostas de autenticação da mesma API e tempo monotônico para a sessão, mantendo a validação do desafio e informando separadamente falhas de protocolo, audiência, política, ID e expiração.
+- Novo `research:auth` testa a mesma identidade do publicador sem gerar ou publicar texto e sem exibir token ou chave privada.
+- Falha de autenticação anterior ao envio não gera uma entrega incerta. Cancelar a falha conhecida da 0.5.3 preserva o histórico sem consumir quotas ou inutilizar fontes; entregas realmente incertas mantêm a proteção contra duplicação.
+- Integração com o Analysis Hub da `main`, preservando sua API, interface e migração `0006`.
+
+## 0.5.3 — 2026-11-01 (revisão proporcional às fontes)
+
+- Revisor classifica achados vinculados a blocos existentes do texto; a aprovação é derivada pelo programa, sem depender de um veredito booleano isolado do modelo.
+- Falta de detalhes e sugestões de estilo ficam como orientações. Afirmações sem apoio, contradições, hipótese como fato, consenso fictício e falsa independência continuam bloqueando a geração.
+- Rubrica explicita o alcance dos resumos RSS e distingue omitir um método não fornecido de inventar esse método.
+- Última rejeição editorial salva textos, críticas, fontes e métricas em um diagnóstico local substituível, que não pode ser publicado como rascunho aprovado.
+
+## 0.5.2 — 2026-11-01 (evidências por seleção)
+
+- O Qwen seleciona IDs de trechos existentes; o programa recupera a citação literal e preserva a validação de números, evitando falhas de cópia ou tradução de trechos.
+- Referências da abertura são montadas a partir das notas validadas, com dois publicadores distintos. Complementos exigem parágrafos por fonte, sem delegar a composição dos IDs ao modelo.
+- Tema de IA inclui o feed do Google Research. Redirecionamentos informam os hosts envolvidos e não podem trocar a identidade do publicador.
+- Diagnóstico distingue disponibilidade parcial (`ready-with-warnings`) e informa quando o Worker ainda não oferece reenvio idempotente.
+- Integração com descoberta em HTML/texto/sitemap e revisão aberta da `main`, preservando a migração `0005` e a moderação de respostas nos reenvios.
+
+## 0.5.1 — 2026-11-01 (correção de compatibilidade)
+
+- Removido o bloqueio que rejeitava Node 26; o cliente aceita Node 22+ com as APIs necessárias presentes.
+- Diagnóstico passa a mostrar versão, executável do Node e recursos ausentes, inclusive quando a versão é incompatível.
+- CI ampliada para Node 22, 24 e 26 em Linux e Windows.
+- Respostas JSON do Worker anunciam UTF-8 explicitamente para clientes como Windows PowerShell interpretarem os acentos corretamente. A alteração de header exige redeploy do Worker.
+
+## 0.5.0 — 2026-11-01 (PR de desenvolvimento)
+
+- Integração com o Universal Gateway V1 e a correção transacional de aprovação de visitantes da `main`, preservando a fila moderada e sua migração `0004`.
+- Research Publisher 2 com planejamento editorial, notas de evidência, citações por afirmação e revisão crítica pelo Qwen local, sem dependências novas.
+- Perfis rápido, equilibrado e aprofundado; o último gera uma abertura e dois complementos revisados no mesmo tópico.
+- RSS/Atom com `content:encoded`, metadados de data, UTF-8 em streaming, cache condicional, diagnóstico dos descartes e publicadores explícitos.
+- Publicação do JSON exato por hash; expiração, origem e política verificadas antes do envio. O comando V1 sem arquivo/hash foi substituído por `auto` explícito.
+- Estado atômico, bloqueio por processo, migração de histórico V1, quotas por tópico/mensagem, registro de entrega e reconciliação de publicações parciais.
+- Worker e cliente REST com `Idempotency-Key`, IDs estáveis, verificação de conteúdo e recuperação de confirmação perdida. Sem nova migração D1; requer redeploy do Worker para reenvios automáticos seguros.
+- Diagnóstico/estado via terminal, menu `.cmd` para Windows e CI em Linux/Windows. Testes cobrem o pipeline e entregas interrompidas em ambiente isolado.
+- A publicação automática continua desativada até a execução local autorizada; revisão pelo mesmo modelo não constitui verificação independente dos fatos.
+
 ## 0.4.1 — 2026-11-01
 
 - Entrada no navegador com Web Crypto: chave não exportável, assinatura e sessão automáticas, consentimento explícito e armazenamento opcional da identidade.

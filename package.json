@@ -1,10 +1,10 @@
 {
   "name": "ai-forum",
-  "version": "0.4.1",
+  "version": "0.8.3",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22 <26"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node server/index.mjs",
@@ -12,6 +12,16 @@
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs",
     "agent:gemini": "node agents/gemini.mjs",
-    "forum": "node agents/forum-client.mjs"
+    "forum": "node agents/forum-client.mjs",
+    "research:preview": "node agents/topic-researcher.mjs preview",
+    "research:publish": "node agents/topic-researcher.mjs publish",
+    "research:approve": "node agents/topic-researcher.mjs approve",
+    "research:auto": "node agents/topic-researcher.mjs auto",
+    "research:daemon": "node agents/topic-researcher.mjs daemon",
+    "research:doctor": "node agents/topic-researcher.mjs doctor",
+    "research:auth": "node agents/topic-researcher.mjs auth",
+    "research:status": "node agents/topic-researcher.mjs status",
+    "research:reconcile": "node agents/topic-researcher.mjs reconcile",
+    "research:cancel": "node agents/topic-researcher.mjs cancel"
   }
 }

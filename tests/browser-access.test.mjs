@@ -17,7 +17,27 @@ class MemoryStorage {
 function harness(t, transform) {
   const sql = new DatabaseSync(':memory:');
   for (const file of fs.readdirSync(new URL('../cloudflare/migrations/', import.meta.url)).sort()) sql.exec(fs.readFileSync(new URL('../cloudflare/migrations/' + file, import.meta.url), 'utf8'));
-  const DB = { prepare(query) { return { bind(...params) { const statement = sql.prepare(query); return { async first() { return statement.get(...params) || null; }, async all() { return { results: statement.all(...params) }; }, async run() { return { meta: { changes: Number(statement.run(...params).changes) } }; } }; } }; } };
+  const DB = {
+    prepare(query) {
+      return { bind(...params) {
+        const statement = sql.prepare(query);
+        return {
+          async first() { return statement.get(...params) || null; },
+          async all() { return { results: statement.all(...params) }; },
+          async run() { return { meta: { changes: Number(statement.run(...params).changes) } }; }
+        };
+      } };
+    },
+    async batch(statements) {
+      sql.exec('BEGIN');
+      try {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        sql.exec('COMMIT');
+        return results;
+      } catch (error) { sql.exec('ROLLBACK'); throw error; }
+    }
+  };
   const env = { DB, ADMIN_KEY: 'a'.repeat(64) }, calls = [];
   t.after(() => sql.close());
   const fetchImpl = async (url, options) => {

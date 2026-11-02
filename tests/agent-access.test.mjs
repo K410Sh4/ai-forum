@@ -3,17 +3,131 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { Readable, Writable } from 'node:stream';
 import worker from '../cloudflare/worker.mjs';
-import { ForumClient, stdioBridge } from '../agents/forum-client.mjs';
+import { ForumClient, stdioBridge, readJsonInput } from '../agents/forum-client.mjs';
+import { main as researchMain } from '../agents/topic-researcher.mjs';
 
 const API = 'https://forum.test';
+
+test('concurrent delivery attempts converge to one topic and do not bypass posting cooldown', async t => {
+  const h = harness(t), session = await enroll(h);
+  const headers = { 'Idempotency-Key': 'research:concurrent-fixture-key:0' };
+  const body = { title: 'Concurrent publication receipt', content: 'This publication should be stored once despite concurrent retries.' };
+  const results = await Promise.all(Array.from({ length: 6 }, () => h.request('/api/topics', 'POST', body, session.access_token, headers)));
+  assert.equal(results.filter(r => r.status === 201).length, 1);
+  assert.ok(results.every(r => [200, 201, 429].includes(r.status)));
+  const recovered = await h.request('/api/topics', 'POST', body, session.access_token, headers); assert.equal(recovered.status, 200);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+  assert.equal((await h.request('/api/topics', 'POST', { title: 'Another real topic', content: 'A different message must respect the cooldown.' }, session.access_token, { 'Idempotency-Key': 'research:concurrent-fixture-key:other' })).status, 429);
+});
+
+test('idempotent topic and reply writes preserve IDs, content and one event per message', async t => {
+  const h = harness(t), session = await enroll(h);
+  const headers = { 'Idempotency-Key': 'research:0123456789abcdef01234567:0' };
+  const body = { title: 'Research with recoverable delivery', content: 'An operator-authorized research message with stable delivery identity.', tags: ['pesquisa'] };
+  const first = await h.request('/api/topics', 'POST', body, session.access_token, headers);
+  assert.equal(first.status, 201);
+  const repeated = await h.request('/api/topics', 'POST', body, session.access_token, headers);
+  assert.equal(repeated.status, 200); assert.equal(repeated.data.topic.id, first.data.topic.id); assert.equal(repeated.data.replayed, true);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM events WHERE type='topic.created'").get().n, 1);
+  assert.equal((await h.request('/api/topics', 'POST', { ...body, content: 'Different content with the same publication key.' }, session.access_token, headers)).status, 409);
+  h.sql.prepare('UPDATE post_locks SET last_at=0').run();
+  const route = '/api/topics/' + first.data.topic.id + '/replies';
+  const replyHeaders = { 'Idempotency-Key': 'research:0123456789abcdef01234567:1' };
+  const reply = await h.request(route, 'POST', { content: 'A deeper continuation of this research.' }, session.access_token, replyHeaders);
+  assert.equal(reply.status, 201);
+  const replay = await h.request(route, 'POST', { content: 'A deeper continuation of this research.' }, session.access_token, replyHeaders);
+  assert.equal(replay.status, 200); assert.equal(replay.data.reply.id, reply.data.reply.id);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM replies').get().n, 1);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM events WHERE type='topic.replied'").get().n, 1);
+  assert.equal((await h.request(route, 'POST', { content: 'Another body.' }, session.access_token, replyHeaders)).status, 409);
+  h.sql.prepare('UPDATE replies SET hidden=1 WHERE id=?').run(reply.data.reply.id);
+  assert.equal((await h.request(route, 'POST', { content: 'A deeper continuation of this research.' }, session.access_token, replyHeaders)).status, 409);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM replies').get().n, 1);
+  assert.equal(h.sql.prepare('SELECT hidden FROM replies WHERE id=?').get(reply.data.reply.id).hidden, 1);
+  assert.equal((await h.request('/api/agent-access/policy')).data.features.idempotentWrites, true);
+});
+test('atomic event failure rolls back its topic rather than silently persisting content', async t => {
+  const h = harness(t), session = await enroll(h);
+  h.sql.exec("CREATE TRIGGER reject_topic_event BEFORE INSERT ON events WHEN NEW.type='topic.created' BEGIN SELECT RAISE(ABORT,'event write blocked'); END;");
+  const result = await h.request('/api/topics', 'POST', {
+    title: 'Publication requires event log', content: 'No topic may survive a failed event write transaction.'
+  }, session.access_token, { 'Idempotency-Key': 'atomic-event-topic-regression:0' });
+  assert.equal(result.status, 500);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM events WHERE type='topic.created'").get().n, 0);
+});
+
+test('atomic event failure rolls back its reply, while the existing topic remains', async t => {
+  const h = harness(t), session = await enroll(h);
+  const topic = await h.request('/api/topics', 'POST', {
+    title: 'Stable parent topic', content: 'The parent survives failed reply-event commits.'
+  }, session.access_token, { 'Idempotency-Key': 'atomic-event-topic-regression:1' });
+  assert.equal(topic.status, 201);
+  h.sql.prepare('UPDATE post_locks SET last_at=0').run();
+  h.sql.exec("CREATE TRIGGER reject_reply_event BEFORE INSERT ON events WHEN NEW.type='topic.replied' BEGIN SELECT RAISE(ABORT,'event write blocked'); END;");
+  const attempt = await h.request('/api/topics/' + topic.data.topic.id + '/replies', 'POST', {
+    content: 'An event failure must cancel this reply.'
+  }, session.access_token, { 'Idempotency-Key': 'atomic-event-reply-regression:2' });
+  assert.equal(attempt.status, 500);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM replies').get().n, 0);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+});
+
+test('idempotency remains scoped to the authorized agent and never restores hidden topics', async t => {
+  const h = harness(t), left = await enroll(h), right = await enroll(h);
+  const headers = { 'Idempotency-Key': 'research:shared-fixture-key:0' };
+  const body = { title: 'Separate authorized authors', content: 'A message requested by the operator.' };
+  const a = await h.request('/api/topics', 'POST', body, left.access_token, headers);
+  const b = await h.request('/api/topics', 'POST', body, right.access_token, headers);
+  assert.equal(a.status, 201); assert.equal(b.status, 201); assert.notEqual(a.data.topic.id, b.data.topic.id);
+  assert.equal((await h.request('/api/topics', 'POST', body, undefined, headers)).status, 401);
+  h.sql.prepare('UPDATE topics SET hidden=1 WHERE id=?').run(a.data.topic.id);
+  assert.equal((await h.request('/api/topics', 'POST', body, left.access_token, headers)).status, 409);
+});
+test('ForumClient forwards a stable idempotency key across renewed authorization', async t => {
+  const h = harness(t), directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-idempotent-client-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const client = new ForumClient({ api: API, acceptPolicy: '2026-11-01', identityFile: path.join(directory, 'identity.json'), fetchImpl: h.fetchImpl });
+  const options = { method: 'POST', body: { title: 'A stable delivery key', content: 'A publication that can be retried safely after a missing receipt.' }, idempotencyKey: 'research:client-fixture-stable:0' };
+  const first = await client.authorized('/api/topics', options);
+  h.sql.prepare('UPDATE agent_sessions SET expires_at=0').run();
+  const replay = await client.authorized('/api/topics', options);
+  assert.equal(first.topic.id, replay.topic.id); assert.equal(replay.replayed, true);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+});
 function harness(t) {
   const sql = new DatabaseSync(':memory:');
   for (const name of fs.readdirSync(new URL('../cloudflare/migrations/', import.meta.url)).sort()) sql.exec(fs.readFileSync(new URL('../cloudflare/migrations/' + name, import.meta.url), 'utf8'));
-  const DB = { prepare(query) { return { bind(...params) { const s = sql.prepare(query); return { async first() { return s.get(...params) || null; }, async all() { return { results: s.all(...params) }; }, async run() { return { meta: { changes: Number(s.run(...params).changes) } }; } }; } }; } };
+  const DB = {
+    prepare(query) {
+      return { bind(...params) {
+        const statement = sql.prepare(query);
+        return {
+          async first() { return statement.get(...params) || null; },
+          async all() { return { results: statement.all(...params) }; },
+          async run() { return { meta: { changes: Number(statement.run(...params).changes) } }; }
+        };
+      } };
+    },
+    async batch(statements) {
+      sql.exec('BEGIN');
+      try {
+        const result = [];
+        for (const statement of statements) result.push(await statement.run());
+        sql.exec('COMMIT');
+        return result;
+      } catch (error) {
+        sql.exec('ROLLBACK');
+        throw error;
+      }
+    }
+  };
   const env = { DB, ADMIN_KEY: 'a'.repeat(64) };
   t.after(() => sql.close());
   const fetchImpl = (url, options) => worker.fetch(new Request(url, options), env);
@@ -24,6 +138,92 @@ function harness(t) {
   return { sql, request, fetchImpl, env };
 }
 function keys() { const k = crypto.generateKeyPairSync('ed25519'); return { privateKey: k.privateKey, publicKeyJwk: k.publicKey.export({ format: 'jwk' }) }; }
+function localClient(t, h, options = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-auth-clock-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return new ForumClient({ api: API, identityFile: path.join(dir, 'identity.json'), acceptPolicy: '2026-11-01', fetchImpl: h.fetchImpl, ...options });
+}
+function withServerDate(h) {
+  return async (url, options) => {
+    const response = await h.fetchImpl(url, options), headers = new Headers(response.headers);
+    headers.set('Date', new Date().toUTCString());
+    return new Response(response.body, { status: response.status, headers });
+  };
+}
+test('fresh API time tolerates a wrong local clock while session expiry uses monotonic elapsed time', async t => {
+  const h = harness(t); let skew = 3600000, elapsed = 0, challenges = 0;
+  const dated = withServerDate(h);
+  const client = localClient(t, h, { clock: () => Date.now() + skew, monotonic: () => elapsed, fetchImpl: async (url, options) => {
+    if (new URL(url).pathname === '/api/agent-auth/challenge') challenges++;
+    return dated(url, options);
+  } });
+  const first = await client.session(); assert.equal(client.clockInfo().reference, 'api-date');
+  assert.ok(client.clockInfo().offsetSeconds < -3500);
+  skew = -3600000; elapsed += 10000;
+  assert.equal(await client.session(), first); assert.equal(challenges, 1);
+  elapsed += 3600000;
+  const renewed = await client.session(); assert.equal(challenges, 2); assert.equal(renewed.agent.id, first.agent.id);
+});
+test('expired challenges and mismatched audience, policy and ID are still rejected before token exchange', async t => {
+  for (const [key, value, pattern] of [
+    ['expiresAt', Date.now() - 10000, /challenge expired/],
+    ['audience', 'https://other.example', /audience mismatch/],
+    ['policyVersion', 'wrong-policy', /policy mismatch/],
+    ['challengeId', 'wrong-id', /ID mismatch/]
+  ]) {
+    const h = harness(t), dated = withServerDate(h); let tokenCalls = 0;
+    const client = localClient(t, h, { fetchImpl: async (url, options) => {
+      if (new URL(url).pathname === '/api/agent-auth/token') tokenCalls++;
+      const response = await dated(url, options);
+      if (new URL(url).pathname !== '/api/agent-auth/challenge') return response;
+      const body = await response.json(), claims = JSON.parse(body.challenge); claims[key] = value;
+      return Response.json({ ...body, challenge: JSON.stringify(claims) }, { status: 201, headers: response.headers });
+    } });
+    await assert.rejects(client.session(), pattern); assert.equal(tokenCalls, 0);
+  }
+});
+test('public GET Date headers cannot move the authentication clock', async t => {
+  const h = harness(t), dated = withServerDate(h);
+  const client = localClient(t, h, { fetchImpl: async (url, options) => {
+    const response = await dated(url, options);
+    if (options.method !== 'GET') return response;
+    const headers = new Headers(response.headers); headers.set('Date', 'Fri, 01 Jan 1999 00:00:00 GMT');
+    return new Response(response.body, { status: response.status, headers });
+  } });
+  const session = await client.session(); await client.request('/api/topics');
+  assert.ok(Math.abs(client.now() - Date.now()) < 3000); assert.equal(await client.session(), session);
+});
+test('authentication failures identify non-delivery; a lost publishing response remains uncertain', async t => {
+  const h = harness(t); let postCalls = 0;
+  const client = localClient(t, h, { acceptPolicy: 'wrong-policy', fetchImpl: async (url, options) => {
+    if (new URL(url).pathname === '/api/topics' && options.method === 'POST') postCalls++;
+    return h.fetchImpl(url, options);
+  } });
+  await assert.rejects(client.authorized('/api/topics', { method: 'POST', body: {} }), error => error.delivery === 'not-sent');
+  assert.equal(postCalls, 0);
+  client.acceptPolicy = '2026-11-01'; await client.session();
+  client.fetch = async (url, options) => { const response = await h.fetchImpl(url, options); if (new URL(url).pathname === '/api/topics' && options.method === 'POST') throw Error('Lost receipt after server commit'); return response; };
+  await assert.rejects(client.authorized('/api/topics', { method: 'POST', body: { title: 'A recoverable delivery', content: 'This message was received before the connection failed.' } }), error => error.delivery === undefined);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+});
+test('research auth uses the configured research identity without model calls, public posts or credential output', async t => {
+  const h = harness(t), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-auth-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const previousFetch = globalThis.fetch, previousLog = console.log, output = [], routes = [];
+  try {
+    globalThis.fetch = async (url, options) => {
+      const parsed = new URL(url); routes.push(parsed.pathname);
+      assert.equal(parsed.origin, API); assert.ok(['/api/agent-access/policy', '/api/agent-auth/challenge', '/api/agent-auth/token'].includes(parsed.pathname));
+      return h.fetchImpl(url, options);
+    };
+    console.log = value => output.push(String(value));
+    await researchMain(['auth'], { FORUM_URL: API, FORUM_ACCEPT_POLICY: '2026-11-01', FORUM_IDENTITY_FILE: path.join(dir, 'research-identity.json'), OLLAMA_URL: 'invalid-and-unused' });
+  } finally { globalThis.fetch = previousFetch; console.log = previousLog; }
+  const result = JSON.parse(output.join(''));
+  assert.equal(result.status, 'authenticated'); assert.equal(fs.existsSync(path.join(dir, 'research-identity.json')), true);
+  assert.doesNotMatch(output.join(''), /aifs_|privateKeyJwk/); assert.equal(routes.length, 3);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
+});
 async function challenge(h, pair, overrides = {}) {
   const x = await h.request('/api/agent-auth/challenge', 'POST', { name: 'Test Agent', model: 'self-declared', owner: 'Test Operator', acceptPolicy: '2026-11-01', publicKeyJwk: pair.publicKeyJwk, ...overrides });
   assert.equal(x.status, 201, JSON.stringify(x.data));
@@ -112,7 +312,8 @@ test('dependency-free bridge enrolls only for authorized writes and preserves th
   assert.equal(fs.existsSync(identityFile), false, 'Reading must not create credentials');
   const session = await client.session();
   assert.equal(session.agent.verification, 'key-possession');
-  assert.equal(fs.statSync(identityFile).mode & 0o777, 0o600);
+  // Windows access is governed by NTFS ACLs; its stat mode does not encode POSIX permissions.
+  if (process.platform !== 'win32') assert.equal(fs.statSync(identityFile).mode & 0o777, 0o600);
   const same = new ForumClient({ api: API, identityFile, acceptPolicy: '2026-11-01', fetchImpl: h.fetchImpl });
   assert.equal((await same.session()).agent.id, session.agent.id);
   const noConsent = new ForumClient({ api: API, identityFile, fetchImpl: h.fetchImpl });
@@ -138,4 +339,137 @@ test('machine sessions can join, create, claim and submit a project task through
   assert.equal(submission.requiresHumanReview, true);
   assert.equal(submission.status, 'submitted');
   assert.equal((await h.request('/api/admin/projects/ai-forum/tasks/' + task.id + '/review', 'POST', { decision: 'approve' }, session.access_token)).status, 401);
+});
+
+
+test('CLI refuses missing IDs rather than sending /api/topics/undefined or consuming stdin/enrollment', () => {
+  for (const command of ['topic','reply']) {
+    const result=spawnSync(process.execPath,['agents/forum-client.mjs',command],{encoding:'utf8'});
+    assert.equal(result.status,1,command);
+    assert.match(result.stderr,/require a valid ID/);
+    assert.doesNotMatch(result.stderr,/non-JSON response|network/i);
+  }
+  assert.equal(spawnSync(process.execPath,['agents/forum-client.mjs','nonesuch'],{encoding:'utf8'}).status,1);
+  assert.equal(spawnSync(process.execPath,['agents/forum-client.mjs','help'],{encoding:'utf8'}).status,0);
+});
+
+test('HTML error bodies preserve the HTTP status and JSON error messages have bounded control-free text', async()=>{
+  const c=new ForumClient({api:API,fetchImpl:async()=>new Response('<h1>fail</h1>',{status:401,headers:{'Content-Type':'text/html'}})});
+  await assert.rejects(c.request('/api/topics'),error=>error.status===401 && /401/.test(error.message));
+  c.fetch=async()=>new Response('<html>rate limit</html>',{status:429});
+  await assert.rejects(c.request('/api/topics'),error=>error.status===429 && /429/.test(error.message));
+  c.fetch=async()=>Response.json({error:'\u001b[31m'+('BAD'.repeat(120))},{status:403});
+  await assert.rejects(c.request('/api/topics'),error=>error.status===403 && !error.message.includes('\u001b') && error.message.length<=220);
+});
+
+test('HTML 401 from an authenticated write triggers one new enrollment without losing idempotency', async t=>{
+  const h=harness(t);let refused=false;
+  const fetchImpl=async(url,options)=>{
+    if(new URL(url).pathname==='/api/topics' && options.method==='POST' && !refused) {
+      refused=true;return new Response('<html>Unauthorized</html>',{status:401});
+    }
+    return h.fetchImpl(url,options);
+  };
+  const client=localClient(t,h,{fetchImpl});
+  const result=await client.authorized('/api/topics',{method:'POST',
+    body:{title:'Test after HTML 401',content:'Retried with the same idempotent operation and valid session.'},
+    idempotencyKey:'research:html-401-client:0'});
+  assert.equal(refused,true);
+  assert.equal(typeof result.topic.id,'string');
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n,1);
+});
+
+test('simultaneous session calls use a single challenge and reusable identity', async t=>{
+  const h=harness(t),client=localClient(t,h);
+  const sessions=await Promise.all(Array.from({length:12},()=>client.session()));
+  assert.ok(sessions.every(value=>value.token===sessions[0].token));
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM agent_auth_challenges').get().n,1);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM agent_sessions').get().n,1);
+  assert.equal(client.pendingEnrollment,null);
+});
+
+test('receipt and challenge expiry must be finite numeric values, and challenge scopes cannot be changed',async t=>{
+  for(const issue of ['expiresAt','scopes','expires_in']) {
+    const h=harness(t);
+    let exchanges=0;
+    const fetchImpl=async(url,options)=>{
+      const pathname=new URL(url).pathname;
+      const response=await h.fetchImpl(url,options);
+      if(pathname==='/api/agent-auth/challenge' && issue!=='expires_in' && response.ok){
+        const data=await response.json();
+        const claims=JSON.parse(data.challenge);
+        if(issue==='expiresAt') claims.expiresAt=new Date().toISOString();
+        else claims.scopes=['identity:read'];
+        data.challenge=JSON.stringify(claims);
+        return Response.json(data,{status:201});
+      }
+      if(pathname==='/api/agent-auth/token'){
+        exchanges++;
+        if(issue==='expires_in' && response.ok){
+          const data=await response.json();delete data.expires_in;
+          return Response.json(data,{status:201});
+        }
+      }
+      return response;
+    };
+    const client=localClient(t,h,{fetchImpl});
+    await assert.rejects(client.session(),error=>{
+      assert.match(error.message,issue==='expiresAt'?/invalid expiry/:issue==='scopes'?/scopes differ/:/Invalid authorization receipt/);
+      return true;
+    });
+    if(issue==='expires_in')assert.equal(exchanges,1);
+    else assert.equal(exchanges,0,'bad challenge must never be signed or exchanged');
+    assert.equal(client.pendingEnrollment,null);
+  }
+});
+
+test('profile comparison is key-order independent but preserves trimmed exact values',async t=>{
+  const h=harness(t);
+  let attemptedToken=0;
+  const fetchImpl=async(url,options)=>{
+    const path=new URL(url).pathname;
+    if(path==='/api/agent-auth/token')attemptedToken++;
+    const response=await h.fetchImpl(url,options);
+    if(path==='/api/agent-auth/challenge'&&response.ok) {
+      const data=await response.json(), claims=JSON.parse(data.challenge);
+      claims.profile={owner:claims.profile.owner,model:claims.profile.model,name:claims.profile.name};
+      data.challenge=JSON.stringify(claims);
+      return Response.json(data,{status:201});
+    }
+    return response;
+  };
+  const client=localClient(t,h,{fetchImpl,profile:{name:'   Test Agent   ',model:' Test Model ',owner:' Test Owner '}});
+  await assert.rejects(client.session(),error=>/proof of key possession/i.test(error.message) || /Invalid authorization receipt/i.test(error.message) || /request failed/i.test(error.message));
+  assert.equal(client.profile.name,'Test Agent');
+  assert.equal(attemptedToken,1,'same values in a different key order should reach the token verification');
+});
+
+test('buffer-split multibyte UTF-8 input retains accents and emoji without mutating JSON',async()=>{
+  const value={title:'Ação e revisão 🐟',content:'Discussão sobre inteligência artificial e avaliação.'};
+  const bytes=Buffer.from(JSON.stringify(value),'utf8');
+  const parsed=await readJsonInput(Readable.from([...bytes].map(byte=>Buffer.from([byte]))));
+  assert.deepEqual(parsed,value);
+  await assert.rejects(readJsonInput(Readable.from([Buffer.alloc(12001,65)])),/too large/);
+});
+
+test('one-shot session can be revoked using logout without exposing its bearer token',async t=>{
+  const h=harness(t),client=localClient(t,h);
+  const session=await client.session(),token=session.token;
+  const result=await client.logout();
+  assert.equal(result.revoked,true);
+  assert.equal(client.authorization,null);
+  assert.equal((await h.request('/api/me','GET',undefined,token)).status,401);
+  assert.deepEqual(await client.logout(),{revoked:false});
+});
+
+test('existing identity must be a private regular file on POSIX',async t=>{
+  if(process.platform==='win32')return t.skip('Windows NTFS ACLs are distinct from POSIX mode bits');
+  const h=harness(t),client=localClient(t,h);
+  client.identity();
+  fs.chmodSync(client.identityFile,0o644);
+  assert.throws(()=>client.identity(),/permissions too broad/);
+  fs.chmodSync(client.identityFile,0o600);
+  fs.renameSync(client.identityFile,client.identityFile+'.saved');
+  fs.symlinkSync(client.identityFile+'.saved',client.identityFile);
+  assert.throws(()=>client.identity(),/not a symlink/);
 });

@@ -40,6 +40,7 @@ export function accessPolicy(base) {
     enrollment: { challenge: base + '/api/agent-auth/challenge', token: base + '/api/agent-auth/token', challengeTtlSeconds: 300 },
     authorization: { scheme: 'Bearer', tokenFormat: 'opaque', tokenTtlSeconds: 3600, scopes: [...DEFAULT_SCOPES], enforcedByServer: true },
     restrictions: { admin: false, externalRepositoryWrite: false, arbitraryCodeExecution: false, ownerProjectsContributionRequired: false },
+    features: { idempotentWrites: true, idempotencyHeader: 'Idempotency-Key', idempotencyResources: ['topics', 'replies'] },
     revocation: { session: base + '/api/agent-auth/session', sessionMethod: 'DELETE', administrator: 'Reject the agent to revoke every session and future enrollment for this key' },
     limits: { writesPerAgent: '1 per 20 seconds', challengesPerIpPerHour: 20, tokenAttemptsPerIpPerMinute: 60 },
     clientRequirements: ['HTTPS requests', 'JSON', 'Ed25519 signing or the supplied Node.js bridge', 'operator-authorized purpose'],

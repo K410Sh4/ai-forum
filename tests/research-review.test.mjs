@@ -1,0 +1,343 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { reviewMaterial, validateReview } from '../agents/research-core.mjs';
+import { OllamaResearcher } from '../agents/research-model.mjs';
+
+const message = { title: 'Limites de uma pesquisa relatada', content: 'SÍNTESE\nO resumo relata um resultado limitado e não informa o método completo.\n\nPERSPECTIVAS PARA DEBATE\nUma proposta seria comparar outros cenários; isso ainda precisa ser testado.\n\nFONTES CONSULTADAS\n[S1] Relato — https://first.example/paper' };
+const material = reviewMaterial(message);
+const review = findings => ({ findings, note: 'Revisão restrita ao texto e às evidências disponíveis.' });
+const finding = (kind, reason) => ({ kind, claimId: material[1].id, reason });
+
+test('review suggestions distinguish missing names, methods and ethical depth from false claims', () => {
+  const result = validateReview(review([
+    finding('missing-detail', 'O resumo não informa os nomes dos membros nomeados como fellows.'),
+    finding('missing-detail', 'Faltam detalhes do método e impactos éticos de longo prazo.'),
+    finding('style', 'Uma explicação adicional poderia deixar a leitura mais clara.')
+  ]), material);
+  assert.equal(result.approved, true); assert.equal(result.issues.length, 0); assert.equal(result.suggestions.length, 3);
+  assert.equal(result.findings[0].quote, material[1].text);
+});
+test('an invented result remains blocking even when the critic also suggests more detail', () => {
+  const result = validateReview({ ...review([
+    finding('unsupported-claim', 'O texto afirma desempenho geral que os trechos não demonstram.'),
+    finding('missing-detail', 'Seria útil consultar o método completo em outra pesquisa.')
+  ]), approved: true }, material);
+  assert.equal(result.approved, false); assert.equal(result.issues.length, 1); assert.equal(result.suggestions.length, 1);
+  assert.match(result.issues[0], /O resumo relata/);
+  for (const kind of ['contradiction', 'hypothesis-as-fact', 'false-consensus', 'false-independence']) {
+    assert.equal(validateReview(review([finding(kind, 'O trecho apresenta uma conclusão que exige correção factual.')]), material).approved, false);
+  }
+});
+test('reviews fail closed on unknown targets, unknown categories or the old unclassified verdict', () => {
+  assert.throws(() => validateReview(review([{ ...finding('unsupported-claim', 'Afirmação fora do material avaliado.'), claimId: 'C999' }]), material), /existing claimId/);
+  assert.throws(() => validateReview(review([finding('anything', 'Uma categoria não definida não pode decidir a revisão.')]), material), /Unknown review/);
+  assert.throws(() => validateReview({ approved: false, issues: ['Faltam métodos completos.'], note: 'Rejeição sem categoria e sem trecho identificado.' }, material), /classified findings/);
+  assert.ok(material.every(part => !part.text.includes('https://')));
+});
+test('the model reviews existing block IDs with an explicit short-source rubric', async () => {
+  let calls = 0;
+  const model = new OllamaResearcher({ config: { numContext: 4096, modelAttempts: 2, modelTimeoutSeconds: 30 }, fetchImpl: async (url, options) => {
+    calls++;
+    const body = JSON.parse(options.body), prompt = body.messages[1].content;
+    const input = JSON.parse(prompt.slice(0, prompt.indexOf('\nEsquema:')));
+    assert.match(input.limits, /nomes, métodos/); assert.match(input.limits, /INVENTA/);
+    assert.ok(body.format.properties.findings.items.properties.claimId.enum.includes(input.material[1].id));
+    return Response.json({ message: { content: JSON.stringify(review([{ kind: 'missing-detail', claimId: input.material[1].id, reason: 'O resumo não fornece o método completo nem detalhes adicionais.' }])) }, done_reason: 'stop' });
+  } });
+  const result = await model.review(message, [], 'Panorama de evidências curtas.');
+  assert.equal(result.approved, true); assert.equal(calls, 1); assert.equal(model.reviewTrace[0].review, result);
+});
+test('four-source review keeps complete evidence quotes within the default context budget', async () => {
+  const quotes = ['a'.repeat(299) + '1', 'b'.repeat(299) + '2'];
+  const cards = Array.from({ length: 4 }, (_, index) => ({ sourceId: 'S' + (index + 1), summary: 'r'.repeat(260), limitations: 'l'.repeat(180), facts: quotes.map(quote => ({ statement: 'f'.repeat(160), quote })) }));
+  let calls = 0;
+  const model = new OllamaResearcher({ config: { numContext: 4096, modelAttempts: 1, modelTimeoutSeconds: 30 }, fetchImpl: async (url, options) => {
+    calls++;
+    const body = JSON.parse(options.body), prompt = body.messages[1].content;
+    const input = JSON.parse(prompt.slice(0, prompt.indexOf('\nEsquema:')));
+    assert.ok(prompt.length <= (4096 - 1200) * 3);
+    assert.equal(input.evidenceCards.length, 4); assert.deepEqual(input.evidenceCards[0].quotes, quotes);
+    assert.equal(input.evidenceCards[0].summary, undefined);
+    return Response.json({ message: { content: JSON.stringify(review([])) }, done_reason: 'stop' });
+  } });
+  const result = await model.review({ title: 't'.repeat(115), content: 'SÍNTESE\n' + 'c'.repeat(2800) }, cards, 'Métodos, resultados relatados e comparação das evidências');
+  assert.equal(result.approved, true); assert.equal(calls, 1);
+});
+
+
+test('regression: fixed authored disclosure must not become false-independence claim C2', () => {
+  const post = {
+    title: 'Panorama de pesquisas e seus limites',
+    content: 'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\n' +
+      'SÍNTESE\nOs relatórios descrevem resultados diferentes com limites próprios e sem confirmação independente.\n\n' +
+      'PERSPECTIVAS PARA DEBATE\n1. Aplicação: Uma hipótese seria comparar os métodos, sem afirmar validação.\n\n' +
+      'INCERTEZAS\nA generalização ainda não foi testada.\n\n' +
+      'FONTES CONSULTADAS\n[S1] Um estudo — https://first.example/report'
+  };
+  const actual = reviewMaterial(post);
+  assert.equal(actual[0].text, post.title);
+  assert.ok(actual.every(part => !part.text.includes('Perspectivas do mesmo modelo; revisão automática não comprova os fatos.')));
+  assert.ok(actual.some(part => part.text.includes('SÍNTESE')));
+  assert.ok(actual.some(part => part.text.includes('PERSPECTIVAS PARA DEBATE')));
+  assert.ok(actual.every(part => !part.text.includes('https://')));
+  // The quote alleged by the real local Qwen run can no longer be selected.
+  assert.throws(() => validateReview({
+    findings: [{ kind: 'false-independence', claimId: 'C999', reason: 'O aviso editorial não corresponde a agentes independentes.' }],
+    note: 'Verificar apenas conteúdo escrito pelo modelo.'
+  }, actual), /existing claimId/);
+});
+
+test('only the exact system disclosure is excluded, not lookalike user content or false independence', () => {
+  const fake = {
+    title: 'Agentes independentes',
+    content: 'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas de diversos agentes independentes confirmam os fatos.\n\nSÍNTESE\nTrês modelos independentes confirmaram o estudo.'
+  };
+  const parts = reviewMaterial(fake);
+  assert.equal(parts.length, 3);
+  assert.match(parts[1].text, /agentes independentes/);
+  assert.equal(validateReview({
+    findings: [{ kind: 'false-independence', claimId: parts[2].id, reason: 'O texto atribui confirmação a agentes inexistentes.' }],
+    note: 'A independência afirmada não foi demonstrada.'
+  }, parts).approved, false);
+});
+
+test('incomplete or unsupported conclusions remain blocking after removing boilerplate', () => {
+  const actual = reviewMaterial({
+    title: 'Teste de revisão',
+    content: 'Pesquisa assistida por IA local — Pesquisa de agentes e métodos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\nSÍNTESE\nO método funciona em todas as condições, inclusive fora dos testes.'
+  });
+  assert.equal(actual.length, 2);
+  const review = validateReview({
+    findings: [{ kind: 'unsupported-claim', claimId: actual[1].id, reason: 'A generalização não aparece nas evidências fornecidas.' }],
+    note: 'É necessário corrigir a afirmação antes de publicar.'
+  }, actual);
+  assert.equal(review.approved, false);
+  assert.equal(review.issues.length, 1);
+});
+
+
+test('integration: review prompt never asks Qwen to fact-check the fixed attribution notice', async () => {
+  let promptChecked=false;
+  const researcher=new OllamaResearcher({
+    config:{numContext:4096,modelAttempts:1,modelTimeoutSeconds:30},
+    fetchImpl:async(url,options)=>{
+      const body=JSON.parse(options.body);
+      const prompt=body.messages[1].content;
+      const input=JSON.parse(prompt.slice(0,prompt.indexOf('\nEsquema:')));
+      const serialized=input.material.map(part=>part.text).join('\n');
+      assert.doesNotMatch(serialized,/Perspectivas do mesmo modelo; revisão automática não comprova os fatos/);
+      assert.match(serialized,/SÍNTESE/);
+      assert.match(input.rubric,/NÃO quando o texto apresenta opiniões/);
+      promptChecked=true;
+      return Response.json({message:{content:JSON.stringify({
+        findings:[],note:'Não há alegação de agentes independentes neste texto.'
+      })},done_reason:'stop'});
+    }
+  });
+  const post={
+    title:'Análise de uma pesquisa relatada',
+    content:'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\nSÍNTESE\nO relato apresenta dados e hipóteses separadamente.\n\nPERSPECTIVAS PARA DEBATE\nA proposta é testar diferentes cenários.\n\nFONTES CONSULTADAS\n[S1] Fonte — https://first.example/article'
+  };
+  const result=await researcher.review(post,[],'Debate e limitações');
+  assert.equal(result.approved,true);
+  assert.equal(promptChecked,true);
+});
+
+
+test('real Qwen review: long factual critiques are preserved and keep publication blocked', () => {
+  const longReason = "O texto interrompe a frase 'A faculdade e dois ex-alunos foram nomeados como Fellows para pesquisa benéfica, enquanto um novo framework de sono foi apresentado para LLMs, prometendo melhorar a continuidade do aprendizado.'";
+  const longerReason = "A declaração 'A faculdade e dois ex-alunos foram nomeados como Fellows para pesquisa benéfica, enquanto um novo framework de sono foi apresentado para LLMs, prometendo melhorar a continuidade do aprendizado' não é suportada pelas evidências fornecidas.";
+  assert.ok(longReason.length > 180 && longerReason.length > 180);
+  const input = {
+    findings: [
+      { kind: 'unsupported-claim', claimId: material[1].id, reason: longerReason },
+      { kind: 'missing-detail', claimId: material[1].id, reason: 'O relato não informa os detalhes adicionais das fontes consultadas.' },
+      { kind: 'incomplete-text', claimId: material[1].id, reason: longReason }
+    ],
+    note: longerReason
+  };
+  const result = validateReview(input, material);
+  assert.equal(result.approved, false);
+  assert.equal(result.issues.length, 2);
+  assert.equal(result.suggestions.length, 1);
+  assert.equal(result.findings[0].reason, longerReason);
+  assert.equal(result.findings[2].reason, longReason);
+  assert.equal(result.note, longerReason);
+});
+
+test('review reason remains bounded: URLs, control chars, missing fields and excessive text still fail', () => {
+  for (const reason of [
+    'Consulte https://invalid.example/proof para detalhes.',
+    'Uma afirmação maliciosa \u001b[31m altera o terminal.',
+    'x'.repeat(501)
+  ]) {
+    assert.throws(() => validateReview(review([finding('unsupported-claim', reason)]), material), /Invalid review reason/);
+  }
+  assert.throws(() => validateReview({ findings: [], note: 'https://invalid.example' }, material), /Invalid review note/);
+  assert.throws(() => validateReview({ findings: [{ kind: 'invalid', claimId: material[1].id, reason: 'Uma explicação plausível para auditoria.' }], note: 'Revisão precisa de correção.' }, material), /Unknown review finding kind/);
+});
+
+test('realistic model review with >180-char reasons preserves blocking findings without retries or posting', async () => {
+  let calls = 0;
+  const reviewer = new OllamaResearcher({ config: { numContext: 4096, modelAttempts: 2, modelTimeoutSeconds: 30 }, fetchImpl: async (url, options) => {
+    calls++;
+    const request = JSON.parse(options.body);
+    const prompt = JSON.parse(request.messages[1].content.split('\nEsquema: ')[0]);
+    assert.match(prompt.task, /reason curto/);
+    const input = {
+      findings: [
+        { kind: 'unsupported-claim', claimId: prompt.material[1].id, reason: "A declaração 'A faculdade e dois ex-alunos foram nomeados como Fellows para pesquisa benéfica, enquanto um novo framework de sono foi apresentado para LLMs, prometendo melhorar a continuidade do aprendizado' não é suportada pelas evidências fornecidas." }
+      ],
+      note: 'A revisão identificou uma afirmação não fundamentada nos trechos citados.'
+    };
+    return Response.json({ message: { content: JSON.stringify(input) }, done_reason: 'stop' });
+  } });
+  const response = await reviewer.review(message, [], 'Comparar limitações sem inventar resultados.');
+  assert.equal(response.approved, false);
+  assert.equal(response.findings[0].kind, 'unsupported-claim');
+  assert.equal(response.issues.length, 1);
+  assert.equal(calls, 1);
+});
+
+
+test('MIT and Google diagnostic: isolate each synthesis sentence instead of rejecting the whole C2', () => {
+  const post = {
+    title: 'Avanços em IA e Pesquisa em Modelos',
+    content: 'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\n' +
+      'SÍNTESE\nO MIT e a Google Research apresentam avanços significativos em inteligência artificial e pesquisa em modelos. ' +
+      'Cinco membros da faculdade e dois ex-alunos foram honrados com bolsas para avançar pesquisa em IA benéfica. ' +
+      "Um novo framework chamado 'Framework de Sono' foi desenvolvido para LLMs, visando melhorar a capacidade de manter informações aprendidas ao longo do tempo.\n\n" +
+      'EVIDÊNCIAS\n• Cinco membros da faculdade e dois ex-alunos receberam bolsas. [S1]\n' +
+      "• O framework de sono busca reter conhecimentos de LLMs. [S2]\n\n" +
+      'FONTES CONSULTADAS\n[S1] MIT — https://example.org/mit'
+  };
+  const claims = reviewMaterial(post);
+  assert.equal(claims[0].id, 'C1');
+  assert.equal(claims[1].id, 'C2');
+  assert.equal(claims[2].id, 'C3');
+  assert.equal(claims[3].id, 'C4');
+  assert.match(claims[1].text, /^SÍNTESE\nO MIT/);
+  assert.doesNotMatch(claims[1].text, /Cinco membros/);
+  assert.match(claims[2].text, /^Cinco membros/);
+  assert.doesNotMatch(claims[2].text, /Framework de Sono/);
+  assert.match(claims[3].text, /Framework de Sono/);
+  assert.equal(claims[4].id, 'C5');
+  assert.match(claims[4].text, /^EVIDÊNCIAS\n/);
+  assert.ok(claims.every(item => !item.text.includes('https://')));
+  const review = validateReview({
+    findings: [{ kind: 'unsupported-claim', claimId: 'C2', reason: 'O qualificativo significativo não é demonstrado pelo trecho da bolsa.' }],
+    note: 'É necessário limitar a frase de abertura.'
+  }, claims);
+  assert.equal(review.approved, false);
+  assert.equal(review.findings[0].quote, claims[1].text);
+  assert.doesNotMatch(review.findings[0].quote, /framework chamado/);
+});
+
+test('review prompt distinguishes missing detail from incomplete sentences, and vague claims from specific evidence', async () => {
+  let examined = false;
+  const critic = new OllamaResearcher({
+    config:{numContext:4096,modelAttempts:1,modelTimeoutSeconds:30},
+    fetchImpl:async (_url,options)=>{
+      const request=JSON.parse(options.body);
+      const prompt=request.messages[1].content;
+      const input=JSON.parse(prompt.slice(0,prompt.indexOf('\nEsquema:')));
+      assert.match(input.task,/incomplete-text é SOMENTE texto realmente cortado/);
+      assert.match(input.task,/unsupported-claim exige citar uma afirmação específica/);
+      assert.match(input.rubric,/Ausência de detalhes nunca é incomplete-text/);
+      examined=true;
+      return Response.json({message:{content:JSON.stringify({
+        findings:[{kind:'missing-detail',claimId:input.material[1].id,reason:'O texto não detalha métodos que não foram fornecidos na notícia.'}],
+        note:'Falta de detalhes registrada como recomendação editorial.'
+      })},done_reason:'stop'});
+    }
+  });
+  const result=await critic.review(message, [], 'Comparar fontes sem generalizar.');
+  assert.ok(examined);
+  assert.equal(result.approved,true);
+  assert.equal(result.suggestions.length,1);
+  assert.equal(result.issues.length,0);
+});
+
+
+test('diagnostic C5: fully punctuated perspectives lacking details are advisory rather than cut prose', () => {
+  const post = {
+    title: 'MIT e Google Research: duas notícias distintas',
+    content:
+      'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\n' +
+      'SÍNTESE\nO MIT anunciou bolsas de pesquisa para membros da universidade. A Google Research apresentou uma proposta de aprendizado contínuo.\n\n' +
+      'EVIDÊNCIAS\n• A notícia relata concessão de bolsas. [S1]\n• O blog descreve uma abordagem de aprendizado contínuo. [S2]\n\n' +
+      'PERSPECTIVAS PARA DEBATE\n' +
+      '1. Inovação em IA: A MIT e Google Research estão contribuindo significativamente para o campo da IA. (Limite: É necessário mais tempo para avaliar o impacto prático dos avanços.)\n' +
+      '2. Aprendizado Contínuo: O novo framework pode revolucionar como os sistemas aprendem e se adaptam. (Limite: Ainda há desafios em implementar efetivamente em ambientes reais.)\n\n' +
+      'INCERTEZAS\nÉ preciso examinar os resultados antes de generalizar.\n\n' +
+      'FONTES CONSULTADAS\n[S1] MIT — https://example.org/mit'
+  };
+  const claims = reviewMaterial(post);
+  const views = claims.filter(part => /(?:^PERSPECTIVAS PARA DEBATE\n)?[12]\. (?:Inovação|Aprendizado)/u.test(part.text));
+  assert.equal(views.length, 2, 'one review ID per numbered perspective');
+  assert.notEqual(views[0].id, views[1].id);
+  assert.doesNotMatch(views[0].text, /2\. Aprendizado/);
+  assert.doesNotMatch(views[1].text, /1\. Inovação/);
+  const result = validateReview({
+    findings: [{
+      kind: 'incomplete-text', claimId: views[0].id,
+      reason: 'A frase é incompleta e falta detalhes sobre os desafios.'
+    }],
+    note: 'O comentário não identifica palavra cortada nem frase sem término.'
+  }, claims);
+  assert.equal(result.approved, true);
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.suggestions.length, 1);
+  assert.equal(result.findings[0].originalKind, 'incomplete-text');
+  assert.equal(result.findings[0].kind, 'missing-detail');
+  assert.equal(result.reclassified[0].claimId, views[0].id);
+  const unsupported = validateReview({
+    findings: [{
+      kind: 'unsupported-claim', claimId: views[1].id,
+      reason: 'A expressão revolucionar não está demonstrada nos trechos citados.'
+    }],
+    note: 'Evitar extrapolar os efeitos relatados nas fontes.'
+  }, claims);
+  assert.equal(unsupported.approved, false, 'unsupported hype remains a blocking claim');
+  assert.equal(unsupported.reclassified.length, 0);
+});
+
+test('genuinely truncated perspectives and explicit truncation reasons never lose incomplete-text block', () => {
+  const materials = [
+    { id: 'C1', text: 'PERSPECTIVAS PARA DEBATE\n1. Aplicações: O resultado é promissor para estudo. (Limite: O texto termina abrupta' },
+    { id: 'C2', text: 'PERSPECTIVAS PARA DEBATE\n1. Aplicações: Uma proposta precisa ser testada. (Limite: A execução ainda é incerta.)' }
+  ];
+  const inputs = [
+    { kind: 'incomplete-text', claimId: 'C1', reason: 'Falta detalhes e a frase está cortada antes do ponto final.' },
+    { kind: 'incomplete-text', claimId: 'C2', reason: 'A última frase foi truncada e perdeu uma parte do texto original.' }
+  ];
+  for (const finding of inputs) {
+    const result = validateReview({ findings:[finding], note:'O problema exige revisão do texto antes de divulgar.' }, materials);
+    assert.equal(result.approved, false);
+    assert.equal(result.findings[0].kind, 'incomplete-text');
+    assert.equal(result.reclassified.length, 0);
+  }
+});
+
+test('critic prompt explicitly separates missing challenges from actual incomplete sentences', async () => {
+  let checked=false;
+  const critic=new OllamaResearcher({
+    config:{numContext:4096,modelAttempts:1,modelTimeoutSeconds:30},
+    log:()=>{},
+    fetchImpl:async(_url,options)=>{
+      const request=JSON.parse(options.body);
+      const input=JSON.parse(request.messages[1].content.split('\nEsquema: ')[0]);
+      assert.match(input.task,/perspectivas com frases completas/);
+      assert.match(input.limits,/apenas porque falta discussão de desafios/);
+      checked=true;
+      return Response.json({message:{content:JSON.stringify({
+        findings:[{kind:'missing-detail',claimId:input.material[1].id,reason:'O texto poderia discutir os desafios de aplicação em outros cenários.'}],
+        note:'A perspectiva está completa e os detalhes adicionais são opcionais.'
+      })},done_reason:'stop'});
+    }
+  });
+  const result=await critic.review(message,[],'Separar os limites descritos.');
+  assert.equal(checked,true);
+  assert.equal(result.approved,true);
+  assert.equal(result.issues.length,0);
+});

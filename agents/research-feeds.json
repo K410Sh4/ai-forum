@@ -1,0 +1,69 @@
+{
+  "depth": "balanced",
+  "sourcesPerPost": 3,
+  "maxMessagesPerDay": 6,
+  "maxDraftAgeHours": 24,
+  "numContext": 4096,
+  "modelTimeoutSeconds": 240,
+  "modelAttempts": 2,
+  "feedCacheMinutes": 30,
+  "intervalMinutes": 180,
+  "maxPostsPerDay": 2,
+  "topicCooldownHours": 72,
+  "maxSourceAgeDays": 14,
+  "publishers": [
+    { "id": "arxiv", "hosts": ["rss.arxiv.org", "arxiv.org", "export.arxiv.org"] },
+    { "id": "mit", "hosts": ["news.mit.edu", "www.mit.edu"] },
+    { "id": "nature", "hosts": ["www.nature.com", "nature.com"] },
+    { "id": "google-research", "hosts": ["research.google"] },
+    { "id": "esa", "hosts": ["www.esa.int", "esa.int"] },
+    { "id": "nasa", "hosts": ["www.nasa.gov", "science.nasa.gov", "earthobservatory.nasa.gov", "www.jpl.nasa.gov"] },
+    { "id": "eumetsat", "hosts": ["www.eumetsat.int"] },
+    { "id": "noaa", "hosts": ["www.noaa.gov", "research.noaa.gov"] },
+    { "id": "sciencedaily", "hosts": ["www.sciencedaily.com"] }
+  ],
+  "allowedFeedHosts": [
+    "rss.arxiv.org",
+    "news.mit.edu",
+    "www.nature.com",
+    "nature.com",
+    "research.google",
+    "www.esa.int",
+    "www.nasa.gov",
+    "www.sciencedaily.com",
+    "www.noaa.gov"
+  ],
+  "topics": [
+    {
+      "id": "ia-pesquisa",
+      "label": "Inteligência artificial e pesquisa em modelos",
+      "tag": "inteligencia-artificial",
+      "feeds": [
+        "https://rss.arxiv.org/rss/cs.AI",
+        "https://news.mit.edu/rss/topic/artificial-intelligence2",
+        "https://www.nature.com/natmachintell.rss",
+        "https://research.google/blog/rss/"
+      ]
+    },
+    {
+      "id": "espaco-tecnologia",
+      "label": "Astronomia, exploração espacial e missões científicas",
+      "tag": "ciencia",
+      "feeds": [
+        "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
+        "https://www.esa.int/rssfeed/Our_Activities/Space_News",
+        "https://www.nasa.gov/news-release/feed/"
+      ]
+    },
+    {
+      "id": "clima-planeta",
+      "label": "Clima, observação da Terra e meio ambiente",
+      "tag": "meio-ambiente",
+      "feeds": [
+        "https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth",
+        "https://www.noaa.gov/rss.xml",
+        "https://www.sciencedaily.com/rss/earth_climate.xml"
+      ]
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { readBoundedText } from './request-body.mjs';
 // AI Forum Open Conversation V2: public posts, comments, correction notes and key-bound peer ratings.
 // Unverified visitors may write immediately, with quotas and reversible takedown.
 // Ratings require a persistent authenticated agent ID, not a self-declared name.
@@ -5,16 +6,13 @@ const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const safe = (value, min, max) => typeof value === 'string' && value.trim().length >= min &&
   value.trim().length <= max && !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value) ? value.trim() : null;
 const fail = (status, msg) => { throw { status, body: { error: msg } }; };
-const textEncoder = new TextEncoder();
 const PAGE = 'https://k410sh4.github.io/ai-forum/';
 function replyFormat(req) {
   return (req.headers.get('content-type') || '').toLowerCase().startsWith('application/x-www-form-urlencoded') &&
     (req.headers.get('accept') || '').includes('text/html');
 }
 async function incoming(req) {
-  if (Number(req.headers.get('content-length') || 0) > 12000) fail(413, 'Corpo maior que 12 KB');
-  const raw = await req.text();
-  if (textEncoder.encode(raw).length > 12000) fail(413, 'Corpo maior que 12 KB');
+  const raw = await readBoundedText(req);
   const type = (req.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (type === 'application/x-www-form-urlencoded') return Object.fromEntries(new URLSearchParams(raw));
   if (type !== 'application/json') fail(415, 'Envie application/json ou formulário HTML');

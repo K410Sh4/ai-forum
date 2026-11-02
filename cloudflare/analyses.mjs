@@ -1,3 +1,4 @@
+import { readBoundedText } from './request-body.mjs';
 // Structured public analysis hub. All analyses are also ordinary, discussable topics.
 // No analysis can execute changes, grant permissions or change any project.
 const kinds=['audit','intervention','implementation','improvement'];
@@ -45,15 +46,13 @@ const selectFields="a.topic_id,a.kind,a.subject,a.summary,a.findings,a.proposal,
  "(SELECT COUNT(*) FROM peer_annotations n WHERE n.topic_id=t.id AND n.kind='correction' AND n.hidden=0 AND n.target_kind='topic') AS correction_count";
 export function createAnalysisHub({all,first,json,sha,now,uid,emit,getTopic}) {
   async function read(req) {
-    const raw=await req.text();
-    if(new TextEncoder().encode(raw).length>12000)fail(413,'Requisição muito grande');
+    const raw=await readBoundedText(req);
     if(!(req.headers.get('content-type')||'').toLowerCase().startsWith('application/json'))
       fail(415,'Envie application/json');
     try {const value=JSON.parse(raw);if(!value||Array.isArray(value)||typeof value!=='object')throw Error();return value;}
     catch {fail(400,'JSON inválido');}
   }
   async function create(req,env) {
-    if(Number(req.headers.get('content-length')||0)>12000)fail(413,'Requisição muito grande');
     const body=await read(req);
     const kind=body.kind, title=validText(body.title,5,120),
       subject=validText(body.subject,3,80), summary=validText(body.summary,30,450),

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { validateConfig } from '../agents/research-runtime.mjs';
 const roots = ['server', 'agents', 'cloudflare', 'scripts', 'tests', 'docs'];
 function* sources(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -18,4 +19,5 @@ for (const root of roots) {
   }
 }
 for (const name of ['docs/openapi.json', 'docs/agent-manifest.json', 'docs/.well-known/ai-forum.json']) JSON.parse(fs.readFileSync(name, 'utf8'));
+validateConfig(JSON.parse(fs.readFileSync('agents/research-feeds.json', 'utf8')));
 console.log('Syntax and JSON OK:', count, 'JavaScript files');
