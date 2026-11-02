@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export const RESEARCH_VERSION = '2.4.1';
+export const RESEARCH_VERSION = '3.0.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -363,9 +363,23 @@ export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24
   if (!Array.isArray(draft.cards) || draft.cards.length < 2)
     throw Error('Draft needs source cards for factual grounding validation');
   for (const card of draft.cards) {
-    if (!draft.sources.some(source => source.id === card.sourceId) ||
-        !Array.isArray(card.facts) || !card.facts.length) throw Error('Draft source cards must refer to selected sources');
-    for (const fact of card.facts) validateSourceClaimGrounding(fact.statement, fact.quote);
+    const source = draft.sources.find(item => item.id === card.sourceId);
+    if (!source || !Array.isArray(card.facts) || !card.facts.length || card.facts.length > 3)
+      throw Error('Draft source cards must refer to selected sources');
+    const spans = evidenceSpans(source.summary);
+    for (const fact of card.facts) {
+      // Revalidate the literal evidence at publication, not just the model's
+      // summary or the signed hash. A self-consistent but invented quote must
+      // never be accepted as evidence when publishing a stored JSON file.
+      const selected = spans.find(span => span.id === fact.evidenceId);
+      if (!selected || selected.text !== normalized(fact.quote))
+        throw Error('Draft evidence quote no longer matches a selected source span');
+      const checked = sentence(fact.statement, 25, 220, 'fact');
+      const numbers = value => (value.match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'));
+      if (numbers(checked).some(n => !numbers(selected.text).includes(n)))
+        throw Error('Draft numeric claim is absent from its original evidence span');
+      validateSourceClaimGrounding(checked, selected.text);
+    }
   }
   const expected = stampMessages(composePost(draft.theme, draft.editorial.opening, draft.sources), draft.editorial.sections.map(section => composeSection(section, draft.sources)), draft.id, draft.fingerprint);
   for (const [index, message] of [draft.post, ...draft.replies].entries()) {
