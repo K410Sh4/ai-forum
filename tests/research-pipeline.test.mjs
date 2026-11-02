@@ -25,7 +25,7 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, criticRejects = 0, criticAdvice = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, criticRejects = 0, criticAdvice = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   let now = NOW, criticCalls = 0, writeCalls = 0, draftCalls = 0;
@@ -50,6 +50,7 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
       const draftIndex = draftCalls++;
       if (draftIndex < brokenDrafts) value.overview = 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis. Esses進';
       if (draftIndex < shortOverviews) value.overview = 'O relato descreve resultados limitados e recomenda ampliar os testes.';
+      if (draftIndex < urlOverviews) value.overview = 'O modelo encontra detalhes na página https://example.com que precisam ser lidos.';
     } else if (properties.heading) {
       stage = 'section'; assert.equal(properties.paragraphs.type, 'object');
       value = { heading: input.focus, paragraphs: Object.fromEntries(input.evidenceCards.map(c => [c.sourceId, 'O relato descreve uma comparação sob condições determinadas. Essa descrição permite formular questões metodológicas, mas não confirma aplicação em cenários diferentes.'])), limitations: 'As descrições disponíveis não substituem a leitura dos métodos completos.' };
@@ -269,6 +270,30 @@ test('invalid short overview retries with a precise minimum length without bypas
   assert.equal(drafts.length, 2);
   assert.match(drafts[1].prompt, /overview deve ter 160 a 450 caracteres/);
   assert.equal(f.calls.filter(c => c.stage === 'review').length, 1);
+  assert.equal(f.writeCalls, 0);
+});
+
+test('two short complete Qwen overviews yield a preview-only conservative source-fact summary with mandatory review', async t => {
+  const f = fixture(t, { shortOverviews: 10 });
+  const preview = await f.engine.generate({ auto: false, depth: 'quick' });
+  assert.equal(preview.status, 'draft');
+  const draft = readJSON(preview.file);
+  assert.equal(draft.editorial.opening.overviewMode, 'reviewed-source-facts-fallback');
+  assert.match(draft.editorial.opening.overview, /A fonte S1 relata:/);
+  assert.match(draft.editorial.opening.overview, /A fonte S2 relata:/);
+  assert.doesNotMatch(draft.editorial.opening.overview, /O relato descreve resultados limitados/);
+  assert.ok(draft.editorial.opening.overview.length >= 160);
+  assert.equal(f.calls.filter(call => call.stage === 'draft').length, 2);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 1, 'fallback never bypasses editorial review');
+  assert.equal(draft.review.factualGate.passed, true);
+  assert.equal(draft.review.factualGate.humanVerificationRequired, true);
+  assert.equal(f.writeCalls, 0, 'preview never publishes');
+});
+
+test('short overviews containing links do not qualify for recovery even in preview', async t => {
+  const f = fixture(t, { urlOverviews: 10 });
+  await assert.rejects(f.engine.generate({ auto: false }), /draft: Invalid overview/);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 0);
   assert.equal(f.writeCalls, 0);
 });
 
