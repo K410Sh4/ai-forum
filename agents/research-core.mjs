@@ -168,8 +168,9 @@ export function validateSourceClaimGrounding(statement, quote) {
     if (anchor.claim.test(claim) && !anchor.evidence.test(evidence))
       throw Error('Factual grounding: ' + anchor.label + ' is absent from selected source quote');
   }
-  if (/\b(?:curso oculto de regras|nomead\w* como fellowships|(?:da|pela) mit)\b/u.test(claim))
-    throw Error('Factual grounding: mistranslated scientific term or institutional name');
+  const malformedTerm = claim.match(/\b(?:curso oculto de regras|nomead\w* como fellowships|(?:da|pela) mit)\b/u);
+  if (malformedTerm)
+    throw Error('Factual grounding: mistranslated scientific term or institutional name (' + malformedTerm[0] + ')');
   if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(claim) &&
       !/\b(?:significan\w*|substantial\w*|significativ\w*|considerab\w*|revolutionary)\b/u.test(evidence))
     throw Error('Factual grounding: significance is not explicitly supported by the selected source quote');
