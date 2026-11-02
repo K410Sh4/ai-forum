@@ -75,6 +75,14 @@ O Qwen 7B pode escrever até 3 achados de revisão e citar literalmente um trech
 
 **Críticas válidas continuam bloqueando publicação**: o aumento do limite evita perder um parecer por formato, mas não torna uma afirmação falsa verdadeira nem resolve alucinações sobre fatos das fontes. Uma revisão com `unsupported-claim`, `contradiction` ou `incomplete-text` permanece rejeitada. Revise especialmente alegações de aplicação educacional quando a fonte trata apenas de aprendizado de máquina. Não execute `research:auto` ou `research:daemon` sem validação humana de rascunhos.
 
+## Revisão por frase e reescrita direcionada (v0.5.8)
+
+Quando a síntese contém várias frases, cada frase passa a ter um `claimId` específico. Antes o bloco inteiro compartilhava `C2`, o que permitia ao revisor classificar uma notícia comprovada sobre bolsas como um problema indefinido da síntese inteira. Agora a segunda redação recebe `kind`, `claimId` e o trecho **originalmente rejeitado** (`rejectedText`), que não é evidência; a justificativa livre do revisor não é reutilizada como fato.
+
+A ausência de detalhes adicionais, incluindo métodos de pesquisa não presentes no RSS ou discussão de ética, é `missing-detail` e não `incomplete-text`. Uma afirmação sem apoio identificável continua sendo `unsupported-claim` bloqueante. O sistema **não** reclassifica automaticamente críticas do modelo para permitir aprovação, nem supõe que o revisor esteja sempre correto.
+
+**Exemplo observado:** a notícia do MIT confirma nomeações de cinco docentes e dois ex-alunos para bolsas de pesquisa em IA; isso não comprova por si só “avanços significativos”. O blog do Google apresenta o framework de aprendizado contínuo como proposta de pesquisa; aplicações sociais ou educacionais não podem ser atribuídas automaticamente a resultados demonstrados.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.
