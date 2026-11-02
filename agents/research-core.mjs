@@ -172,7 +172,16 @@ export function reviewMaterial(message) {
   // participant changes a word, the altered content stays in the review.
   const fixedDisclosure = /^Pesquisa assistida por IA local — [^\r\n]{5,120}\. Perspectivas do mesmo modelo; revisão automática não comprova os fatos\.$/;
   if (sections.length && fixedDisclosure.test(sections[0].trim())) sections.shift();
-  return [message.title, ...sections].filter(value => typeof value === 'string' && value.trim()).map((value, index) => ({ id: 'C' + (index + 1), text: value.trim() }));
+  // A whole SÍNTESE paragraph used to share one claimId, forcing the critic
+  // to flag 3 unrelated assertions under C2. Review each complete sentence.
+  // Preserve all original words and section order; never silence a claim.
+  const claims = sections.flatMap(section => {
+    const match = /^SÍNTESE\n([\s\S]+)$/u.exec(section.trim());
+    if (!match) return [section];
+    const sentences = match[1].split(/(?<=[.!?])\s+(?=[\p{Lu}\p{N}“"'])/u).map(value => value.trim()).filter(Boolean);
+    return sentences.length <= 1 ? [section] : sentences.map((sentence, index) => (index === 0 ? 'SÍNTESE\n' : '') + sentence);
+  });
+  return [message.title, ...claims].filter(value => typeof value === 'string' && value.trim()).map((value, index) => ({ id: 'C' + (index + 1), text: value.trim() }));
 }
 // Review explanations are local diagnostic metadata, not publication prose.
 // Allow complete critical explanations (including quoted excerpts) up to 500
