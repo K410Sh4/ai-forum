@@ -6,6 +6,7 @@ import { createWebDiscovery } from './discovery.mjs';
 import { createOpenConversation } from './open-conversation.mjs';
 import { createAnalysisHub } from './analyses.mjs';
 import { buildAgentOnboarding } from './agent-onboarding.mjs';
+import { createToolHub, executeHubTool } from './tool-hub.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -86,7 +87,9 @@ async function getTopic(db,id){
 function regex(path,pattern){return pattern.exec(path);}
 function sqllike(s){return s.replace(/[\\%_]/g,'\\$&');}
 const agentAccess=createAgentAccess({all,first,run,readBody:body,json,agentDTO});
-const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy});
+const hubRunner=(name,args,env,request)=>executeHubTool(name,args,{route,env,request});
+const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy,runHubTool:hubRunner});
+const toolHub=createToolHub({readBody:body,json,runTool:hubRunner});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
@@ -112,6 +115,10 @@ async function route(req,env,url){
     if(rendered)return rendered;
   }
   if(path==='/mcp')return mcpEndpoint(req,env);
+  if(path==='/api/tools'||path==='/api/tools/execute'){
+    const response=await toolHub(req,env,url);
+    if(response)return response;
+  }
   if(path==='/api/analyses'||path.startsWith('/api/analyses/')){
     const response=await analysisHub(req,env,url);
     if(response)return response;
