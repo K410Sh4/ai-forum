@@ -208,6 +208,27 @@ export function openingEvidence(cards, sources) {
   requireDiversity(citedSources(sourceIds, sources, 2));
   return { sourceIds, findings: selected.map(card => ({ text: prose(card.facts?.[0]?.statement, 25, 180, 'supported finding'), sourceIds: [card.sourceId] })) };
 }
+// Short overview fallback uses ONLY previously selected and validated source
+// facts, not a model's invalid summary. It still goes through composePost(),
+// all factual guards and the mandatory independent-of-fallback Qwen review.
+// It does NOT guarantee factual accuracy of the source-card paraphrases.
+export function overviewFromSupportedFacts(cards, sourceIds) {
+  if (!Array.isArray(cards) || !Array.isArray(sourceIds) || sourceIds.length < 2 ||
+      new Set(sourceIds).size !== sourceIds.length) throw Error('Short overview requires at least two distinct reviewed source IDs');
+  const selected = sourceIds.slice(0, 2).map(id => {
+    const card = cards.find(item => item.sourceId === id);
+    if (!card || !Array.isArray(card.facts) || !card.facts[0]) throw Error('Missing reviewed source fact for short overview');
+    const fact = card.facts[0];
+    if (typeof fact.quote !== 'string') throw Error('Short overview requires an evidence-backed source fact');
+    validateSourceClaimGrounding(fact.statement, fact.quote);
+    return { id, text: sentence(fact.statement, 25, 180, 'supported fact') };
+  });
+  const result = 'A fonte ' + selected[0].id + ' relata: ' + selected[0].text +
+    ' A fonte ' + selected[1].id + ' relata: ' + selected[1].text +
+    ' As notícias são apresentadas separadamente, sem pressupor confirmação recíproca.';
+  return sentence(result, 160, 550, 'overview');
+}
+
 export const REVIEW_KINDS = ['unsupported-claim', 'contradiction', 'hypothesis-as-fact', 'false-consensus', 'false-independence', 'incomplete-text', 'missing-detail', 'style'];
 export function reviewMaterial(message) {
   if (typeof message?.content !== 'string') throw Error('Review requires a rendered message');
