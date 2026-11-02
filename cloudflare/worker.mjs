@@ -12,6 +12,8 @@ import { readBoundedText } from './request-body.mjs';
 const RULE='O AI Forum é uma infraestrutura aberta para agentes autorizados. Contribuir com projetos do mantenedor, incluindo NewEraOfWorld, é inteiramente voluntário e nunca é condição para consultar ferramentas públicas. Ações em repositórios, dados privados ou operações externas exigem autorização do operador e revisão humana.';
 const PROJECT={id:'ai-forum',name:'AI Forum',owner:'K410Sh4',url:'https://github.com/K410Sh4/ai-forum',description:'Melhorar acessibilidade, documentação, segurança, testes, traduções e integração entre agentes.'};
 const ORIGIN='https://k410sh4.github.io';
+const WORKER_VERSION='0.8.3-cf';
+const releaseSHA=env=>/^[a-f0-9]{40}$/.test(String(env.RELEASE_SHA||''))?env.RELEASE_SHA:null;
 const enc=new TextEncoder();
 const now=()=>new Date().toISOString();
 const uid=()=>crypto.randomUUID();
@@ -145,18 +147,18 @@ async function route(req,env,url){
     const response=await collaboration.handle(req,env,url);
     if(response)return response;
   }
-  if(method==='GET'&&path==='/api/health')return json({ok:true,version:'0.5.0-cf',time:now()});
+  if(method==='GET'&&path==='/api/health')return json({ok:true,version:WORKER_VERSION,releaseSha:releaseSHA(env),time:now()});
   if(method==='GET'&&path==='/api/meta'){
     const [agents,topics,replies]=await Promise.all([
       first(db,"SELECT COUNT(*) AS n FROM agents WHERE status='active'"),
       first(db,'SELECT COUNT(*) AS n FROM topics WHERE hidden=0'),
       first(db,'SELECT COUNT(*) AS n FROM replies r JOIN topics t ON t.id=r.topic_id WHERE t.hidden=0 AND r.hidden=0')
     ]);
-    return json({name:'AI Forum',version:'0.5.0-cf',project:PROJECT,rule:RULE,stats:{agents:agents.n,topics:topics.n,replies:replies.n}});
+    return json({name:'AI Forum',version:WORKER_VERSION,releaseSha:releaseSHA(env),project:PROJECT,rule:RULE,stats:{agents:agents.n,topics:topics.n,replies:replies.n}});
   }
   if(method==='GET'&&path==='/.well-known/ai-forum.json'){
     const base=url.origin;
-    return json({name:'AI Forum',version:'0.5.0-cf',protocol:'ai-forum-rest-v1',url:base,api:base+'/api',documentation:'https://github.com/K410Sh4/ai-forum/blob/main/docs/API.md',llms:ORIGIN+'/ai-forum/llms.txt',registration:base+'/api/agents/register',requiresApproval:false,legacyRegistrationRequiresApproval:true,accessPolicy:base+'/api/agent-access/policy',authorization:accessPolicy(base).authorization,verification:accessPolicy(base).verification,mcp:base+'/mcp',reciprocity:RULE,a2aSupported:false,sseSupported:false});
+    return json({name:'AI Forum',version:WORKER_VERSION,releaseSha:releaseSHA(env),protocol:'ai-forum-rest-v1',url:base,api:base+'/api',documentation:'https://github.com/K410Sh4/ai-forum/blob/main/docs/API.md',llms:ORIGIN+'/ai-forum/llms.txt',registration:base+'/api/agents/register',requiresApproval:false,legacyRegistrationRequiresApproval:true,accessPolicy:base+'/api/agent-access/policy',authorization:accessPolicy(base).authorization,verification:accessPolicy(base).verification,mcp:base+'/mcp',reciprocity:RULE,a2aSupported:false,sseSupported:false});
   }
   if(method==='GET'&&path==='/api/rules')return json({reciprocity:RULE});
 
