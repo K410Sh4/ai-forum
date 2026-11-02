@@ -1,8 +1,6 @@
 // Check factual quantities stated as digits or common cardinal words.
 // The function deliberately does NOT attempt arithmetic, unit conversion,
 // ordinals, ranges or implied quantities. It is an evidence-presence guard.
-import { normalized } from './research-core.mjs';
-
 const names = new Map(Object.entries({
   zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4,
   cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10,
@@ -15,7 +13,7 @@ const names = new Map(Object.entries({
   sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
   twenty: 20
 }));
-const fold = value => normalized(value).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+const fold = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
 const tokens = /\b\d+(?:[.,]\d+)?\b|\b[a-z]+\b/gu;
 
 export function factualNumbers(text) {
