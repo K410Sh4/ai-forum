@@ -78,8 +78,17 @@ export function retryDirective(stage, error) {
       return '\nCorrija especificamente facts[].statement: "alunis" não é português; se o trecho original diz "alumni", escreva "ex-alunos". Preserve todos os números, nomes e evidenceId. Não invente informação.';
     if (/significance is not explicitly supported/u.test(reason))
       return '\nEm facts[].statement não escreva significativas, revolucionárias ou outras qualificações de impacto quando o trecho citado não as utiliza. Relate apenas o resultado medido.';
-    if (/Numeric fact is absent from its evidence quote/u.test(reason))
-      return '\nConfira facts[].statement: cada número deve existir literalmente no trecho indicado por evidenceId. Não some grupos, não converta bolsistas em docentes e não adivinhe quantidades.';
+    if (/Numeric fact is absent from its evidence quote/u.test(reason)) {
+      const missing = reason.match(/^Numeric fact is absent from its evidence quote:\s*([\d., ]{1,40})$/u)?.[1] || '';
+      return '\nErro numérico específico em facts[].statement: ' +
+        (missing ? 'os valores ' + missing + ' NÃO estão no trecho literal selecionado por evidenceId. ' :
+          'há um número ausente do trecho literal selecionado por evidenceId. ') +
+        'Remova números sem apoio, especialmente ANOS copiados de títulos, datas de publicação ou contexto externo. ' +
+        'Um nome próprio como AI2050 não autoriza acrescentar o ano 2026 como quantidade nem data do evento. ' +
+        'Preserve AI2050 como nome próprio somente quando aparecer na citação. ' +
+        'Se uma quantidade de pessoas não consta no evidenceId, não a afirme; selecione outro evidenceId somente se ele efetivamente apoiar TODOS os dados da frase. ' +
+        'Não invente números, grupos, eventos, nem altere os fatos para contornar a verificação.';
+    }
     if (/existing evidenceId|Evidence quote was not found/u.test(reason))
       return '\nUse somente evidenceId listado em collectedEvidence. O programa recupera a citação original; não crie quote nem referência.';
     if (/educational claim|medical claim|transfer learning/u.test(reason))
