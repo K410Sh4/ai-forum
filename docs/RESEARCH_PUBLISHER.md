@@ -109,6 +109,14 @@ A checagem é repetida no `research:publish`. Um JSON assinado em versões anter
 
 Não ativar `research:auto`/ `research:daemon` até validar o fluxo local, conferir a política e resolver a ausência de `idempotentWrites` no Worker remoto.
 
+## Recuperação de síntese curta no preview (0.6.1)
+
+Se o Qwen produzir duas vezes um `overview` com menos de 160 caracteres, mas completo, sem URLs ou caracteres de controle, o **preview manual** pode gerar uma síntese alternativa usando exclusivamente os primeiros fatos já selecionados dos cartões de fontes distintos. Essa síntese não copia a interpretação recusada do modelo.
+
+A recuperação é identificada por `editorial.opening.overviewMode: "reviewed-source-facts-fallback"` e requer `review.approved: true` após uma **nova revisão**. Ela não é uma verificação factual independente e o material precisa ser confrontado com as fontes originais antes de publicar.
+
+Se o erro for texto incompleto, afirmação sem evidência, URL, caracteres de controle, JSON malformado ou outro campo inválido, **não existe fallback**. Em `research:auto` ou `research:daemon`, qualquer falha repetida de tamanho permanece bloqueante: a recuperação foi deliberadamente limitada ao preview. O limite mínimo de 160 caracteres não foi removido.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.
