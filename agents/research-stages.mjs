@@ -89,6 +89,8 @@ export function retryDirective(stage, error) {
   if (stage === 'plan')
     return '\nReenvie kind=analysis ou roundup e angle com uma única frase de 50 a 110 caracteres, sem URL ou nomes em lista; não invente ligação entre fontes.';
   if (stage === 'draft') {
+    if (/malformed use of benéfica in uncertainties/u.test(reason))
+      return '\nReescreva especificamente uncertainties usando uma frase completa e gramatical. Use "pesquisa em IA benéfica" apenas como descrição do objetivo, não como resultado; evite "a benéfica" isolado. Preserve fatos, números e referências. A síntese deve continuar com 160 a 450 caracteres.';
     if (/Editorial Portuguese/u.test(reason))
       return '\nReescreva SOMENTE os campos autorais com termos naturais em português brasileiro. Troque AI providers por provedores de IA e modelos AI por modelos de IA. Mantenha fatos, cifras, evidências, hipóteses e nomes próprios inalterados.';
     if (/Invalid overview|Incomplete overview/u.test(reason))
