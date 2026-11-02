@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { assertNumbersFromEvidence } from './research-numbers.mjs';
 
-export const RESEARCH_VERSION = '3.0.0';
+export const RESEARCH_VERSION = '3.1.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -136,12 +136,14 @@ export function validateSourceClaimGrounding(statement, quote) {
     if (domain.claim.test(claim) && !domain.evidence.test(evidence)) {
       throw Error('Factual grounding: ' + domain.label + ' claim lacks a matching term in the selected evidence quote');
     }
-  }
+  }  if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(claim) &&
+      !/\b(?:significan\w*|substantial\w*|significativ\w*|considerab\w*|revolutionary)\b/u.test(evidence))
+    throw Error('Factual grounding: significance is not explicitly supported by the selected source quote');
 }
 // Negative claims about the *absence* of empirical validation are not
 // established merely because an RSS excerpt does not mention a result.
 const highRiskClaims = [
-  { pattern: /\b(?:avanc\w*|contribui\w*|impact\w*)\s+significativ\w*\b/u, reason: 'unsubstantiated significance' },
+  { pattern: /\b(?:avanc\w*|contribui\w*|impact\w*|inovac\w*|benefici\w*|melhor\w*)\s+significativ\w*\b/u, reason: 'unsubstantiated significance' },
   { pattern: /\b(?:revolucion\w*|transformador\w*|transformar\s+(?:radicalmente|completamente))\b/u, reason: 'speculative impact' },
   { pattern: /\binovacao\s+educacional\b/u, reason: 'educational leap' },
   { pattern: /\b(?:eficacia|desempenho|aplicacao|modelo)\b.{0,120}\b(?:ainda\s+(?:precisa|necessita)\s+(?:ser\s+)?validad\w*|nao\s+(?:foi|esta|esta\s+sendo)\s+validad\w*)\b/u, reason: 'unqualified lack-of-validation claim' },
@@ -163,6 +165,7 @@ export function validateEditorialGrounding(opening) {
       if (risk.pattern.test(text)) throw Error('Factual grounding: ' + risk.reason + ' in ' + field + '; rewrite with precise, source-limited statements');
     }
     if (/\balunis\b/u.test(text)) throw Error('Factual grounding: invalid Portuguese inflection in ' + field);
+    if (/\b(?:a|uma|o)\s+benefica\b/u.test(text)) throw Error('Factual grounding: malformed use of benéfica in ' + field);
   }
   return { passed: true, independent: false, scope: 'known unsupported inferences and evidence-domain anchors', humanVerificationRequired: true };
 }
