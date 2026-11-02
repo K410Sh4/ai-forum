@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.4 — 2026-11-02 · proveniência de artigos RSS
+
+- Rejeita artigos cujo `articlePublisherId` (obtido do domínio do link do artigo) difira do `publisherId` do feed RSS; aliases explicitamente agrupados no mesmo publicador continuam válidos.
+- `research:preview` registra `publisherMismatch` no diagnóstico dos feeds. `validateDraft` também confere a origem, protegendo o envio contra JSON reescrito com hash recomputado.
+- Novas regressões de feed com links cruzados e adulteração do editor. Gerador 3.3.0 invalida rascunhos anteriores para a etapa de publicação.
+- Não foram executados os modelos locais nem realizada implantação na API pública.
+
+
 ## 0.8.3 — 2026-11-02 · evidências de release / deploy
 
 - O Worker expõe versão e SHA efetivo em `/api/health`, `/api/meta` e `/.well-known/ai-forum.json`; `releaseSha:null` significa deploy sem proveniência injetada.
