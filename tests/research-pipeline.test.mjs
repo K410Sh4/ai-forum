@@ -25,7 +25,7 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, significanceOverviews = 0, significancePerspective = false, badQuestions = false, criticRejects = 0, criticAdvice = false, criticOnlyQuestions = false, criticMixedBlockers = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, significanceOverviews = 0, significancePerspective = false, mixedUncertaintyShort = false, mixedShortUnsafe = '', badQuestions = false, criticRejects = 0, criticAdvice = false, criticOnlyQuestions = false, criticMixedBlockers = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   let now = NOW, criticCalls = 0, writeCalls = 0, draftCalls = 0;
@@ -56,6 +56,17 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
         value.overview = 'As duas publicações apresentam avanços significativos em inteligência artificial que transformam o campo. O texto combina resultados independentes e estabelece um impacto amplo que as fontes consultadas não permitem concluir.';
       if (significancePerspective)
         value.perspectives[0].argument = 'As pesquisas produziram contribuições significativas para a tecnologia atual.';
+      if (mixedUncertaintyShort && draftIndex === 0)
+        value.uncertainties = 'A benéfica precisa ser avaliada de forma mais detalhada.';
+      if (mixedUncertaintyShort && draftIndex === 1) {
+        value.overview = 'Os dois relatos tratam de modelos em situações diferentes. É preciso verificar cada fonte original.';
+        if (mixedShortUnsafe === 'url') value.overview = 'Consulte https://example.com para entender os modelos citados.';
+        if (mixedShortUnsafe === 'truncated') value.overview = 'Os dois relatos apresentam modelos que ainda não';
+        if (mixedShortUnsafe === 'perspective')
+          value.perspectives[0].argument = 'As pesquisas produziram avanços significativos para os métodos de todos os modelos.';
+        if (mixedShortUnsafe === 'uncertainty')
+          value.uncertainties = 'A benéfica precisa ser avaliada de forma mais detalhada.';
+      }
       if (draftIndex < brokenDrafts) value.overview = 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis. Esses進';
       if (draftIndex < shortOverviews) value.overview = 'O relato descreve resultados limitados e recomenda ampliar os testes.';
       if (draftIndex < urlOverviews && draftIndex >= significanceOverviews) value.overview = 'O modelo encontra detalhes na página https://example.com que precisam ser lidos.';
@@ -372,6 +383,47 @@ test('two short complete Qwen overviews yield a preview-only conservative source
   assert.equal(draft.review.factualGate.passed, true);
   assert.equal(draft.review.factualGate.humanVerificationRequired, true);
   assert.equal(f.writeCalls, 0, 'preview never publishes');
+});
+
+test('real incident: corrected malformed uncertainty followed by safe short overview produces a reviewed preview', async t => {
+  const f = fixture(t, { mixedUncertaintyShort: true });
+  const preview = await f.engine.generate({ auto: false, depth: 'quick' });
+  const draft = readJSON(preview.file);
+  assert.equal(preview.status, 'draft');
+  assert.equal(draft.editorial.opening.overviewMode, 'corrected-uncertainty-short-overview-preview-fallback');
+  assert.match(draft.editorial.opening.overview, /A fonte S1 relata:/);
+  assert.match(draft.editorial.opening.overview, /A fonte S2 relata:/);
+  assert.doesNotMatch(draft.post.content, /A benéfica precisa ser avaliada/iu);
+  assert.equal(f.model.validationTrace.filter(item => item.stage === 'draft').length, 2);
+  assert.deepEqual(f.model.validationTrace.filter(item => item.stage === 'draft').map(item => item.error), [
+    'Factual grounding: malformed use of benéfica in uncertainties',
+    'Invalid overview (length, URL or control character)'
+  ]);
+  assert.equal(f.calls.filter(call => call.stage === 'draft').length, 2);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 1);
+  assert.equal(draft.review.factualGate.humanVerificationRequired, true);
+  assert.equal(f.writeCalls, 0);
+});
+
+test('mixed-failure overview fallback never waives invalid URL, truncation or a second invalid field', async t => {
+  for (const unsafe of ['url', 'truncated', 'perspective', 'uncertainty']) {
+    const f = fixture(t, { mixedUncertaintyShort: true, mixedShortUnsafe: unsafe });
+    await assert.rejects(f.engine.generate({ auto: false, depth: 'quick' }));
+    assert.equal(f.calls.filter(call => call.stage === 'review').length, 0, unsafe);
+    assert.equal(f.writeCalls, 0, unsafe);
+  }
+});
+
+test('mixed-failure fallback is preview-only even when corrected fields and short synopsis are safe', async t => {
+  const f = fixture(t, { mixedUncertaintyShort: true });
+  const sources = chooseArticles([
+    ...readFeed(xml('first.example'), 'https://first.example/feed', { clock: NOW, publishers: f.config.publishers }),
+    ...readFeed(xml('second.example'), 'https://second.example/feed', { clock: NOW, publishers: f.config.publishers })
+  ], [], { count: 2, minHosts: 2 });
+  await assert.rejects(f.model.build(f.config.topics[0], sources, { depth: 'quick', allowDraftFallback: false }),
+    /draft: Invalid overview/);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 0);
+  assert.equal(f.writeCalls, 0);
 });
 
 test('two unsupported-significance overviews recover only in preview and still receive full review', async t => {
