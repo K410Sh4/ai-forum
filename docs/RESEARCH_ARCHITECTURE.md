@@ -44,6 +44,7 @@ Feeds RSS -> validação de URL/data/publicador -> seleção de fontes
 | `research-runtime.mjs` | Configuração, armazenamento, feeds e controles do ambiente |
 | `research-core.mjs` | Regras de evidência, renderização e validação final do artefato |
 | `research-stages.mjs` | Fronteiras puras entre estágios: normalização, projeção de evidências e feedback de erro |
+| `research-numbers.mjs` | Presença de números em algarismos e cardinais comuns inglês/português, sem inferir aritmética ou unidades |
 | `research-model.mjs` | Transporte local Ollama, orçamento, prompts, sequência dos estágios e revisão |
 | `research-engine.mjs` | Escolha de fontes, estados duráveis, rascunhos, cotas e publicação |
 | `tests/research-evidence-stages.test.mjs` | Regressões de extração, tradução e entrada do redator |
