@@ -25,7 +25,7 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, badQuestions = false, criticRejects = 0, criticAdvice = false, criticOnlyQuestions = false, criticMixedBlockers = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, significanceOverviews = 0, significancePerspective = false, badQuestions = false, criticRejects = 0, criticAdvice = false, criticOnlyQuestions = false, criticMixedBlockers = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   let now = NOW, criticCalls = 0, writeCalls = 0, draftCalls = 0;
@@ -52,6 +52,10 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
         'Quais são os desafios na implementação de sistemas de versão AI?'
       ];
       const draftIndex = draftCalls++;
+      if (draftIndex < significanceOverviews)
+        value.overview = 'As duas publicações apresentam avanços significativos em inteligência artificial que transformam o campo. O texto combina resultados independentes e estabelece um impacto amplo que as fontes consultadas não permitem concluir.';
+      if (significancePerspective)
+        value.perspectives[0].argument = 'As pesquisas produziram contribuições significativas para a tecnologia atual.';
       if (draftIndex < brokenDrafts) value.overview = 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis. Esses進';
       if (draftIndex < shortOverviews) value.overview = 'O relato descreve resultados limitados e recomenda ampliar os testes.';
       if (draftIndex < urlOverviews) value.overview = 'O modelo encontra detalhes na página https://example.com que precisam ser lidos.';
@@ -368,6 +372,35 @@ test('two short complete Qwen overviews yield a preview-only conservative source
   assert.equal(draft.review.factualGate.passed, true);
   assert.equal(draft.review.factualGate.humanVerificationRequired, true);
   assert.equal(f.writeCalls, 0, 'preview never publishes');
+});
+
+test('two unsupported-significance overviews recover only in preview and still receive full review', async t => {
+  const f = fixture(t, { significanceOverviews: 2 });
+  const preview = await f.engine.generate({ auto: false, depth: 'quick' });
+  assert.equal(preview.status, 'draft');
+  const draft = readJSON(preview.file);
+  assert.equal(draft.editorial.opening.overviewMode, 'rejected-significance-preview-fallback');
+  assert.match(draft.editorial.opening.overview, /A fonte S1 relata:/);
+  assert.match(draft.editorial.opening.overview, /A fonte S2 relata:/);
+  assert.doesNotMatch(draft.post.content, /avanços significativos|impacto amplo/iu);
+  assert.equal(f.calls.filter(call => call.stage === 'draft').length, 2);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 1);
+  assert.equal(draft.review.factualGate.humanVerificationRequired, true);
+  assert.equal(f.writeCalls, 0);
+});
+
+test('unsupported significance cannot hide a second invalid perspective', async t => {
+  const f = fixture(t, { significanceOverviews: 2, significancePerspective: true });
+  await assert.rejects(f.engine.generate({ auto: false, depth: 'quick' }), /draft: Factual grounding/);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 0);
+  assert.equal(f.writeCalls, 0);
+});
+
+test('one unsupported-significance failure followed by a different failure never qualifies for fallback', async t => {
+  const f = fixture(t, { significanceOverviews: 1, urlOverviews: 2 });
+  await assert.rejects(f.engine.generate({ auto: false, depth: 'quick' }), /draft: Invalid overview/);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 0);
+  assert.equal(f.writeCalls, 0);
 });
 
 test('short overviews containing links do not qualify for recovery even in preview', async t => {
