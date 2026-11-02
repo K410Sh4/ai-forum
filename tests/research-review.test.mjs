@@ -142,3 +142,59 @@ test('integration: review prompt never asks Qwen to fact-check the fixed attribu
   assert.equal(result.approved,true);
   assert.equal(promptChecked,true);
 });
+
+
+test('real Qwen review: long factual critiques are preserved and keep publication blocked', () => {
+  const longReason = "O texto interrompe a frase 'A faculdade e dois ex-alunos foram nomeados como Fellows para pesquisa benéfica, enquanto um novo framework de sono foi apresentado para LLMs, prometendo melhorar a continuidade do aprendizado.'";
+  const longerReason = "A declaração 'A faculdade e dois ex-alunos foram nomeados como Fellows para pesquisa benéfica, enquanto um novo framework de sono foi apresentado para LLMs, prometendo melhorar a continuidade do aprendizado' não é suportada pelas evidências fornecidas.";
+  assert.ok(longReason.length > 180 && longerReason.length > 180);
+  const input = {
+    findings: [
+      { kind: 'unsupported-claim', claimId: material[1].id, reason: longerReason },
+      { kind: 'missing-detail', claimId: material[1].id, reason: 'O relato não informa os detalhes adicionais das fontes consultadas.' },
+      { kind: 'incomplete-text', claimId: material[1].id, reason: longReason }
+    ],
+    note: longerReason
+  };
+  const result = validateReview(input, material);
+  assert.equal(result.approved, false);
+  assert.equal(result.issues.length, 2);
+  assert.equal(result.suggestions.length, 1);
+  assert.equal(result.findings[0].reason, longerReason);
+  assert.equal(result.findings[2].reason, longReason);
+  assert.equal(result.note, longerReason);
+});
+
+test('review reason remains bounded: URLs, control chars, missing fields and excessive text still fail', () => {
+  for (const reason of [
+    'Consulte https://invalid.example/proof para detalhes.',
+    'Uma afirmação maliciosa \u001b[31m altera o terminal.',
+    'x'.repeat(501)
+  ]) {
+    assert.throws(() => validateReview(review([finding('unsupported-claim', reason)]), material), /Invalid review reason/);
+  }
+  assert.throws(() => validateReview({ findings: [], note: 'https://invalid.example' }, material), /Invalid review note/);
+  assert.throws(() => validateReview({ findings: [{ kind: 'invalid', claimId: material[1].id, reason: 'Uma explicação plausível para auditoria.' }], note: 'Revisão precisa de correção.' }, material), /Unknown review finding kind/);
+});
+
+test('realistic model review with >180-char reasons preserves blocking findings without retries or posting', async () => {
+  let calls = 0;
+  const reviewer = new OllamaResearcher({ config: { numContext: 4096, modelAttempts: 2, modelTimeoutSeconds: 30 }, fetchImpl: async (url, options) => {
+    calls++;
+    const request = JSON.parse(options.body);
+    const prompt = JSON.parse(request.messages[1].content.split('\nEsquema: ')[0]);
+    assert.match(prompt.task, /reason curto/);
+    const input = {
+      findings: [
+        { kind: 'unsupported-claim', claimId: prompt.material[1].id, reason: "A declaração 'A faculdade e dois ex-alunos foram nomeados como Fellows para pesquisa benéfica, enquanto um novo framework de sono foi apresentado para LLMs, prometendo melhorar a continuidade do aprendizado' não é suportada pelas evidências fornecidas." }
+      ],
+      note: 'A revisão identificou uma afirmação não fundamentada nos trechos citados.'
+    };
+    return Response.json({ message: { content: JSON.stringify(input) }, done_reason: 'stop' });
+  } });
+  const response = await reviewer.review(message, [], 'Comparar limitações sem inventar resultados.');
+  assert.equal(response.approved, false);
+  assert.equal(response.findings[0].kind, 'unsupported-claim');
+  assert.equal(response.issues.length, 1);
+  assert.equal(calls, 1);
+});
