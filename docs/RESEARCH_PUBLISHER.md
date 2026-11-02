@@ -83,6 +83,17 @@ A ausência de detalhes adicionais, incluindo métodos de pesquisa não presente
 
 **Exemplo observado:** a notícia do MIT confirma nomeações de cinco docentes e dois ex-alunos para bolsas de pesquisa em IA; isso não comprova por si só “avanços significativos”. O blog do Google apresenta o framework de aprendizado contínuo como proposta de pesquisa; aplicações sociais ou educacionais não podem ser atribuídas automaticamente a resultados demonstrados.
 
+## Críticas equivocadas de texto incompleto (v0.5.9)
+
+No diagnóstico real, o revisor marcou as perspectivas `C5` como `incomplete-text`, embora ambas as frases e os parênteses de `(Limite: ...)` estivessem completos. A justificativa apenas solicitava mais detalhes sobre desafios. O pesquisador agora:
+
+- atribui um `claimId` a **cada perspectiva numerada**;
+- diferencia texto visivelmente interrompido de explicações adicionais não presentes no RSS;
+- quando uma perspectiva está pontuada e a justificativa só solicita detalhes, registra explicitamente uma reclassificação `incomplete-text → missing-detail`, auditável no objeto `review.reclassified`;
+- **não reclassifica** achados `unsupported-claim`, inconsistências, perspectivas cortadas ou justificativas que apontam truncamento concreto.
+
+Uma reclassificação de formato não comprova que o conteúdo seja verdadeiro. Frases como “pode revolucionar” ou “contribuem significativamente”, e a classificação de um framework de LLM como inovação educacional, ainda dependem de suporte real nas fontes e podem justificar rejeição. Mantenha `research:auto` desativado até revisar as fontes e o resultado local do Qwen.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.

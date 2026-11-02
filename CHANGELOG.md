@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.9 — 2026-11-01 (revisão editorial sem falsos incompletos)
+
+- O revisor analisa cada perspectiva numerada separadamente, além das frases da síntese; o erro não fica associado a um bloco contendo várias opiniões.
+- Um achado `incomplete-text` sobre uma perspectiva sintaticamente completa é registrado como sugestão `missing-detail` **somente** quando a justificativa exige detalhes/contexto, sem apontar interrupção real. A mudança aparece explicitamente em `review.reclassified` e no log local.
+- Permanecem bloqueantes `unsupported-claim`, `contradiction`, `hypothesis-as-fact`, textos verdadeiramente cortados e justificativas que apontam truncamento.
+- As instruções de escrita pedem linguagem ancorada nas evidências e desencorajam superlativos e aplicações educacionais não presentes nas fontes.
+- Testes reproduzem o falso positivo `C5` com as duas perspectivas do log real, além de regressões para texto truncado e alegação sem suporte.
+- Nenhuma publicação automática, migração, ou alteração no Worker; aprovação factual real ainda depende do preview local e de avaliação humana.
+
+
 ## 0.5.8 — 2026-11-01 (revisão por frase e correção direcionada)
 
 - Sintese da abertura agora gera um `claimId` por frase, não um único `C2` para todo o parágrafo. O revisor consegue identificar se a alegação problemática é o qualificativo “avanços significativos”, a notícia de bolsas do MIT ou a proposta do Google.

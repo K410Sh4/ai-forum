@@ -257,3 +257,87 @@ test('review prompt distinguishes missing detail from incomplete sentences, and 
   assert.equal(result.suggestions.length,1);
   assert.equal(result.issues.length,0);
 });
+
+
+test('diagnostic C5: fully punctuated perspectives lacking details are advisory rather than cut prose', () => {
+  const post = {
+    title: 'MIT e Google Research: duas notícias distintas',
+    content:
+      'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\n' +
+      'SÍNTESE\nO MIT anunciou bolsas de pesquisa para membros da universidade. A Google Research apresentou uma proposta de aprendizado contínuo.\n\n' +
+      'EVIDÊNCIAS\n• A notícia relata concessão de bolsas. [S1]\n• O blog descreve uma abordagem de aprendizado contínuo. [S2]\n\n' +
+      'PERSPECTIVAS PARA DEBATE\n' +
+      '1. Inovação em IA: A MIT e Google Research estão contribuindo significativamente para o campo da IA. (Limite: É necessário mais tempo para avaliar o impacto prático dos avanços.)\n' +
+      '2. Aprendizado Contínuo: O novo framework pode revolucionar como os sistemas aprendem e se adaptam. (Limite: Ainda há desafios em implementar efetivamente em ambientes reais.)\n\n' +
+      'INCERTEZAS\nÉ preciso examinar os resultados antes de generalizar.\n\n' +
+      'FONTES CONSULTADAS\n[S1] MIT — https://example.org/mit'
+  };
+  const claims = reviewMaterial(post);
+  const views = claims.filter(part => /(?:^PERSPECTIVAS PARA DEBATE\n)?[12]\. (?:Inovação|Aprendizado)/u.test(part.text));
+  assert.equal(views.length, 2, 'one review ID per numbered perspective');
+  assert.notEqual(views[0].id, views[1].id);
+  assert.doesNotMatch(views[0].text, /2\. Aprendizado/);
+  assert.doesNotMatch(views[1].text, /1\. Inovação/);
+  const result = validateReview({
+    findings: [{
+      kind: 'incomplete-text', claimId: views[0].id,
+      reason: 'A frase é incompleta e falta detalhes sobre os desafios.'
+    }],
+    note: 'O comentário não identifica palavra cortada nem frase sem término.'
+  }, claims);
+  assert.equal(result.approved, true);
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.suggestions.length, 1);
+  assert.equal(result.findings[0].originalKind, 'incomplete-text');
+  assert.equal(result.findings[0].kind, 'missing-detail');
+  assert.equal(result.reclassified[0].claimId, views[0].id);
+  const unsupported = validateReview({
+    findings: [{
+      kind: 'unsupported-claim', claimId: views[1].id,
+      reason: 'A expressão revolucionar não está demonstrada nos trechos citados.'
+    }],
+    note: 'Evitar extrapolar os efeitos relatados nas fontes.'
+  }, claims);
+  assert.equal(unsupported.approved, false, 'unsupported hype remains a blocking claim');
+  assert.equal(unsupported.reclassified.length, 0);
+});
+
+test('genuinely truncated perspectives and explicit truncation reasons never lose incomplete-text block', () => {
+  const materials = [
+    { id: 'C1', text: 'PERSPECTIVAS PARA DEBATE\n1. Aplicações: O resultado é promissor para estudo. (Limite: O texto termina abrupta' },
+    { id: 'C2', text: 'PERSPECTIVAS PARA DEBATE\n1. Aplicações: Uma proposta precisa ser testada. (Limite: A execução ainda é incerta.)' }
+  ];
+  const inputs = [
+    { kind: 'incomplete-text', claimId: 'C1', reason: 'Falta detalhes e a frase está cortada antes do ponto final.' },
+    { kind: 'incomplete-text', claimId: 'C2', reason: 'A última frase foi truncada e perdeu uma parte do texto original.' }
+  ];
+  for (const finding of inputs) {
+    const result = validateReview({ findings:[finding], note:'O problema exige revisão do texto antes de divulgar.' }, materials);
+    assert.equal(result.approved, false);
+    assert.equal(result.findings[0].kind, 'incomplete-text');
+    assert.equal(result.reclassified.length, 0);
+  }
+});
+
+test('critic prompt explicitly separates missing challenges from actual incomplete sentences', async () => {
+  let checked=false;
+  const critic=new OllamaResearcher({
+    config:{numContext:4096,modelAttempts:1,modelTimeoutSeconds:30},
+    log:()=>{},
+    fetchImpl:async(_url,options)=>{
+      const request=JSON.parse(options.body);
+      const input=JSON.parse(request.messages[1].content.split('\nEsquema: ')[0]);
+      assert.match(input.task,/perspectivas com frases completas/);
+      assert.match(input.limits,/apenas porque falta discussão de desafios/);
+      checked=true;
+      return Response.json({message:{content:JSON.stringify({
+        findings:[{kind:'missing-detail',claimId:input.material[1].id,reason:'O texto poderia discutir os desafios de aplicação em outros cenários.'}],
+        note:'A perspectiva está completa e os detalhes adicionais são opcionais.'
+      })},done_reason:'stop'});
+    }
+  });
+  const result=await critic.review(message,[],'Separar os limites descritos.');
+  assert.equal(checked,true);
+  assert.equal(result.approved,true);
+  assert.equal(result.issues.length,0);
+});
