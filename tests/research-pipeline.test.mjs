@@ -341,9 +341,13 @@ test('short overviews containing links do not qualify for recovery even in previ
   assert.equal(f.writeCalls, 0);
 });
 
-test('persistent short overview still fails closed and cannot generate or publish a draft', async t => {
+test('strict model build rejects repeated short overviews without a preview fallback', async t => {
   const f = fixture(t, { shortOverviews: 10 });
-  await assert.rejects(f.engine.generate({ auto: false }), /draft: Invalid overview/);
+  const sources = chooseArticles([
+    ...readFeed(xml('first.example'), 'https://first.example/feed', { clock: NOW, publishers: f.config.publishers }),
+    ...readFeed(xml('second.example'), 'https://second.example/feed', { clock: NOW, publishers: f.config.publishers })
+  ], [], { count: 2, minHosts: 2 });
+  await assert.rejects(f.model.build(f.config.topics[0], sources, { depth: 'quick', allowDraftFallback: false }), /draft: Invalid overview/);
   assert.equal(f.calls.filter(c => c.stage === 'review').length, 0);
   assert.equal(f.writeCalls, 0);
 });
@@ -449,6 +453,7 @@ test('source cache is bounded and an interrupted V1 write is never treated as em
 });
 test('publication policy is checked before any authorized request', async t => {
   const f = fixture(t); const preview = await f.engine.generate(); f.policy.policyVersion = 'another-policy';
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true });
   await assert.rejects(f.engine.publish(preview.file, preview.hash), /policy\/API mismatch/); assert.equal(f.writeCalls, 0);
 });
 test('daily limits apply before generation and theme cooldown blocks a second publication', async t => {
