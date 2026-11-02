@@ -35,7 +35,12 @@ export function factualNumbers(text) {
 
 export function assertNumbersFromEvidence(statement, quote, prefix = 'Numeric fact is absent from its evidence quote') {
   const evidence = new Set(factualNumbers(quote));
-  if (factualNumbers(statement).some(value => !evidence.has(value))) throw Error(prefix);
+  const missing = [...new Set(factualNumbers(statement).filter(value => !evidence.has(value)))];
+  // Return a bounded, machine-extracted number, NOT arbitrary model text.
+  // "AI2050" is a proper-name token and is not mistaken for a factual
+  // quantity. A standalone year (e.g. 2026) still requires literal support
+  // in the selected evidence quote, even if it appears in article metadata.
+  if (missing.length) throw Error(prefix + ': ' + missing.slice(0, 3).join(', '));
 }
 
 
