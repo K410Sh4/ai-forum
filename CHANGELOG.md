@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.7 — 2026-11-01 (revisão editorial robusta)
+
+- Revisão: os campos `reason` e `note` aceitam até 500 caracteres para preservar críticas completas do Qwen 7B. O limite anterior de 180 rejeitava justificativas reais com 222 e 252 caracteres.
+- O prompt solicita razões curtas e a nova tentativa recebe instruções específicas, sem descartar achados de categorias bloqueantes.
+- Continuam bloqueados URLs, caracteres de controle, razões acima do limite e classificações/IDs desconhecidos. Uma crítica com `unsupported-claim` ou `incomplete-text` segue impedindo aprovação.
+- Testes reproduzem os exemplos de tamanho e garantem que aprovação não é obtida pelo simples aumento do limite.
+- Necessária execução de `research:preview` com Qwen real no PC; não houve publicação automática nem alteração do Worker.
+
+
 ## 0.5.6 — 2026-11-01 (correções da revisão real do Qwen)
 
 - Reescrita de rascunhos rejeitados usa apenas os códigos/IDs de classificação do revisor e os cartões de evidência: comentários livres do crítico não entram como fatos.
