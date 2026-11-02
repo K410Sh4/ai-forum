@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assertNumbersFromEvidence, factualNumbers } from '../agents/research-numbers.mjs';
 import { retryDirective, prepareSourceCard } from '../agents/research-stages.mjs';
-import { evidenceSpans } from '../agents/research-core.mjs';
+import { evidenceSpans, validateSourceClaimGrounding } from '../agents/research-core.mjs';
 import { OllamaResearcher } from '../agents/research-model.mjs';
 
 // Regression taken from a real Qwen7B rejection on 2026-11-02.
@@ -18,6 +18,18 @@ test('AI2050 is a name, not a free-standing numeric quantity or asserted year', 
   assert.doesNotThrow(() => assertNumbersFromEvidence('O programa Schmidt Sciences AI2050 foi mencionado.', excerpt));
   assert.throws(() => assertNumbersFromEvidence('O MIT nomeou 2026 Schmidt Sciences AI2050 Fellows.', excerpt),
     /Numeric fact is absent from its evidence quote: 2026/);
+});
+
+test('AI2050 program name also requires a literal source anchor, even though it is not a numeric claim', () => {
+  const unrelated = 'MIT scientists described a fellowship program and its research goals.';
+  assert.throws(() => validateSourceClaimGrounding(
+    'O programa AI2050 é apresentado por pesquisadores.', unrelated
+  ), /program identifier AI2050 is absent from selected source quote/);
+  assert.doesNotThrow(() => validateSourceClaimGrounding(
+    'O programa AI2050 é apresentado por pesquisadores.', excerpt
+  ));
+  assert.match(retryDirective('source-S2', Error('Factual grounding: program identifier AI2050 is absent from selected source quote')),
+    /nome próprio AI2050/);
 });
 
 test('missing year and separate count are reported independently without fabricating either', () => {
