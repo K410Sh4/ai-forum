@@ -309,7 +309,7 @@ export function validateReview(value, material) {
   return { approved: issues.length === 0, issues, suggestions, findings, reclassified,
     note: prose(value.note, 10, 500, 'review note') };
 }
-function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
+function references(sources) { return sources.map(s => { const title = s.title.length > 65 ? s.title.slice(0, 61).trimEnd() + '…' : s.title; return '[' + s.id + '] ' + title + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')'; }).join('\n'); }
 export function composePost(topic, draft, sources) {
   validateEditorialGrounding(draft);
   const title = prose(draft.title, 12, 115, 'title');
@@ -348,6 +348,7 @@ export function stampMessages(post, replies, id, fingerprint) {
 export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24, maxSourceAgeDays = 14 } = {}) {
   if (![2, 3].includes(draft?.schemaVersion) || draft.hash !== payloadHash(draft) || !/^[a-f0-9]{64}$/.test(draft.hash) || !/^[a-f0-9]{24}$/.test(draft.id)) throw Error('Draft hash or format is invalid');
   if (draft.schemaVersion !== 3) throw Error('Draft predates complete-text validation; cancel any pending delivery of this draft, then generate a fresh preview');
+  if (draft.generatorVersion !== RESEARCH_VERSION) throw Error('Draft requires regeneration with current evidence-quality checks before publishing');
   if (draft.api !== api || draft.policyVersion !== POLICY_VERSION || draft.status !== 'ready' || draft.review?.approved !== true) throw Error('Draft is not approved for this API/policy');
   if (draft.review?.factualGate?.passed !== true || draft.review.factualGate.independent !== false ||
       draft.review.factualGate.humanVerificationRequired !== true)
