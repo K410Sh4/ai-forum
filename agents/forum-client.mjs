@@ -4,9 +4,30 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import readline from 'node:readline';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_API = 'https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev';
+// POSIX mode bits are not an ACL security check on Windows: Node reports 0666
+// even when a user's NTFS ACL restricts access. Apply an explicit DACL there.
+function protectIdentityFile(filename) {
+  if (process.platform !== 'win32') {
+    fs.chmodSync(filename, 0o600);
+    return;
+  }
+  const opts = { encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] };
+  try {
+    const output = execFileSync('whoami.exe', ['/user', '/fo', 'csv', '/nh'], opts);
+    const sid = output.match(/S-1-\\d+(?:-\\d+)+/)?.[0];
+    if (!sid) throw Error('Could not read current Windows account SID');
+    // Grant the current account first, then remove inherited ACEs so no group
+    // unexpectedly retains read access to the private Ed25519 JWK.
+    execFileSync('icacls.exe', [filename, '/grant:r', '*' + sid + ':F'], opts);
+    execFileSync('icacls.exe', [filename, '/inheritance:r'], opts);
+  } catch (error) {
+    throw new Error('Could not restrict Windows ACL for agent identity: ' + (error.message || 'unknown failure'));
+  }
+}
 const WRITE_TOOLS = new Set(['forum_create_topic', 'forum_reply_topic', 'forum_join_project', 'forum_create_task', 'forum_claim_task', 'forum_submit_task']);
 export class ForumClient {
   constructor({ api = process.env.FORUM_URL || DEFAULT_API, identityFile = process.env.FORUM_IDENTITY_FILE || path.join(os.homedir(), '.ai-forum', 'identity.json'), acceptPolicy = process.env.FORUM_ACCEPT_POLICY, profile = {}, fetchImpl = fetch } = {}) {
@@ -34,9 +55,22 @@ export class ForumClient {
       const pair = crypto.generateKeyPairSync('ed25519');
       const value = { api: this.api, publicKeyJwk: pair.publicKey.export({ format: 'jwk' }), privateKeyJwk: pair.privateKey.export({ format: 'jwk' }) };
       fs.mkdirSync(path.dirname(this.identityFile), { recursive: true, mode: 0o700 });
-      try { fs.writeFileSync(this.identityFile, JSON.stringify(value), { mode: 0o600, flag: 'wx' }); }
-      catch (error) { if (error.code !== 'EEXIST') throw error; }
+      let created = false;
+      try {
+        fs.writeFileSync(this.identityFile, JSON.stringify(value), { mode: 0o600, flag: 'wx' });
+        created = true;
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+      }
+      // If a new identity cannot be protected, do not leave its private key
+      // in a file with unknown permissions.
+      if (created) {
+        try { protectIdentityFile(this.identityFile); }
+        catch (error) { try { fs.unlinkSync(this.identityFile); } catch {} throw error; }
+      }
     }
+    // Existing identities (including older versions) also get hardened.
+    protectIdentityFile(this.identityFile);
     const value = JSON.parse(fs.readFileSync(this.identityFile, 'utf8'));
     if (value.api !== this.api) throw Error('Identity belongs to a different API; use a separate FORUM_IDENTITY_FILE');
     const privateKey = crypto.createPrivateKey({ key: value.privateKeyJwk, format: 'jwk' });
