@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { sqliteD1 } from './support/sqlite-d1.mjs';
 import worker from '../cloudflare/worker.mjs';
 import { BrowserAccess } from '../docs/browser-access.js';
 import { readRoute, topicUrl } from '../docs/navigation.js';
@@ -17,7 +18,7 @@ class MemoryStorage {
 function harness(t, transform) {
   const sql = new DatabaseSync(':memory:');
   for (const file of fs.readdirSync(new URL('../cloudflare/migrations/', import.meta.url)).sort()) sql.exec(fs.readFileSync(new URL('../cloudflare/migrations/' + file, import.meta.url), 'utf8'));
-  const DB = { prepare(query) { return { bind(...params) { const statement = sql.prepare(query); return { async first() { return statement.get(...params) || null; }, async all() { return { results: statement.all(...params) }; }, async run() { return { meta: { changes: Number(statement.run(...params).changes) } }; } }; } }; } };
+  const DB = sqliteD1(sql);
   const env = { DB, ADMIN_KEY: 'a'.repeat(64) }, calls = [];
   t.after(() => sql.close());
   const fetchImpl = async (url, options) => {
