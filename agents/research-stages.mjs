@@ -5,6 +5,15 @@ import { validateCard } from './research-core.mjs';
 const HAS_ALUMNI = /\balumni\b/iu;
 const BAD_ALUNIS = /\balunis\b/giu;
 
+// The source stage is only authorized to select facts and evidence IDs.
+// Descriptive source summaries and limitations are generated deterministically
+// and labeled as RSS-scope disclaimers; they are not model factual assertions.
+export const RSS_LIMITATION = 'O trecho disponível do RSS é limitado e não substitui a leitura do documento original.';
+export function supportedCardDescription(facts) {
+  if (!Array.isArray(facts) || !facts[0] || typeof facts[0].statement !== 'string')
+    throw Error('A selected source fact is required');
+  return 'Fato selecionado da fonte: ' + facts[0].statement;
+}
 export function prepareSourceCard(raw, source, spans) {
   // Repair a *known* morphology-only translation after confirming the exact
   // source fragment contains the English term. No generic text rewriting,
@@ -23,10 +32,20 @@ export function prepareSourceCard(raw, source, spans) {
       original: fact.statement, corrected: statement, evidenceId: fact.evidenceId });
     return { ...fact, statement };
   }) : raw?.facts;
-  // The core validator still checks all fields, original quote provenance,
-  // evidenceId, numbers, complete sentences and unsupported domains.
-  const checked = validateCard({ ...raw, facts }, source, { spans, requireSelection: true });
-  return changes.length ? { ...checked, normalizations: changes } : checked;
+  // Reconstruct canonical, source-limited notes from the validated fact.
+  // Drop model-written summary/limitations: they have no evidence IDs and
+  // caused the 2026-11-02 contradiction ("five faculty" vs "number unknown").
+  const canonical = { facts,
+    summary: supportedCardDescription(facts),
+    limitations: RSS_LIMITATION
+  };
+  const checked = validateCard(canonical, source, { spans, requireSelection: true });
+  return {
+    ...checked,
+    summaryMode: 'evidence-derived',
+    limitationsMode: 'rss-scope',
+    ...(changes.length ? { normalizations: changes } : {})
+  };
 }
 
 export function compactEvidenceCards(cards) {
@@ -46,6 +65,8 @@ export function retryDirective(stage, error) {
   if (stage.startsWith('source-')) {
     if (/invalid Portuguese inflection in source fact/u.test(reason))
       return '\nCorrija especificamente facts[].statement: "alunis" não é português; se o trecho original diz "alumni", escreva "ex-alunos". Preserve todos os números, nomes e evidenceId. Não invente informação.';
+    if (/significance is not explicitly supported/u.test(reason))
+      return '\nEm facts[].statement não escreva significativas, revolucionárias ou outras qualificações de impacto quando o trecho citado não as utiliza. Relate apenas o resultado medido.';
     if (/Numeric fact is absent from its evidence quote/u.test(reason))
       return '\nConfira facts[].statement: cada número deve existir literalmente no trecho indicado por evidenceId. Não some grupos, não converta bolsistas em docentes e não adivinhe quantidades.';
     if (/existing evidenceId|Evidence quote was not found/u.test(reason))

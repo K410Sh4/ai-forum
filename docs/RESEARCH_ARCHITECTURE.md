@@ -51,6 +51,16 @@ Feeds RSS -> validação de URL/data/publicador -> seleção de fontes
 | `tests/research-pipeline.test.mjs` | Fluxo completo com mocks, incluindo bloqueio de evidência forjada |
 | `tests/research-review.test.mjs` | Política de classificação e anotações da crítica |
 
+## Cartões de fonte — contrato de evidências (0.7.1)
+
+No prompt `source-Sx`, o Qwen fornece apenas 1–2 pares `statement/evidenceId`. O código confere o texto original do RSS, números e termos potencialmente exagerados; depois gera `summary` com o primeiro fato validado e `limitations` com um aviso fixo de alcance limitado dos resumos RSS. Os campos recebem `summaryMode: evidence-derived` e `limitationsMode: rss-scope`.
+
+Assim não há mais afirmações modelo-autoriais sem evidência inseridas em `card.summary` ou `card.limitations`. Isso reduz uma classe de contradições internas, mas **não transforma as traduções/paráfrases dos fatos selecionados em verdades verificadas**. Evidência de um resultado favorável em um método não autoriza generalização sobre todas as técnicas nem descrição de limitações "significativas" sem qualificação explícita.
+
+A redação das perspectivas rejeita magnitude não fundamentada ("inovações significativas") e alguns erros gramaticais observados; são guardas deliberadamente conservadores, não prova semântica geral. As orientações do revisor continuam sendo geradas pelo mesmo modelo.
+
+**Compatibilidade:** rascunhos anteriores ao gerador 3.1.0, incluindo `b84d40aa2410d3ab511599bf`, não poderão ser publicados com os hashes antigos após a atualização. Gere um `research:preview` novo. Se existir publicação em estado pendente, faça diagnóstico e reconciliação seguros; não altere o JSON para forçar aprovação.
+
 ## Normalização com rastreabilidade
 
 Apenas `alunis` pode ser convertido em `ex-alunos` pela regra específica e apenas se a **mesma evidência** selecionada contiver `alumni`. Os números, rótulos de pessoas e `evidenceId` permanecem intocados. `validateCard` revalida o cartão inteiro depois da correção; uma alteração que introduza outro problema permanece rejeitada.

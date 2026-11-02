@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { assertNumbersFromEvidence } from './research-numbers.mjs';
 
-export const RESEARCH_VERSION = '3.0.0';
+export const RESEARCH_VERSION = '3.1.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -137,11 +137,14 @@ export function validateSourceClaimGrounding(statement, quote) {
       throw Error('Factual grounding: ' + domain.label + ' claim lacks a matching term in the selected evidence quote');
     }
   }
+  if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(claim) &&
+      !/\b(?:significan\w*|substantial\w*|significativ\w*|considerab\w*|revolutionary)\b/u.test(evidence))
+    throw Error('Factual grounding: significance is not explicitly supported by the selected source quote');
 }
 // Negative claims about the *absence* of empirical validation are not
 // established merely because an RSS excerpt does not mention a result.
 const highRiskClaims = [
-  { pattern: /\b(?:avanc\w*|contribui\w*|impact\w*)\s+significativ\w*\b/u, reason: 'unsubstantiated significance' },
+  { pattern: /\b(?:avanc\w*|contribui\w*|impact\w*|inovac\w*|benefici\w*|melhor\w*)\s+significativ\w*\b/u, reason: 'unsubstantiated significance' },
   { pattern: /\b(?:revolucion\w*|transformador\w*|transformar\s+(?:radicalmente|completamente))\b/u, reason: 'speculative impact' },
   { pattern: /\binovacao\s+educacional\b/u, reason: 'educational leap' },
   { pattern: /\b(?:eficacia|desempenho|aplicacao|modelo)\b.{0,120}\b(?:ainda\s+(?:precisa|necessita)\s+(?:ser\s+)?validad\w*|nao\s+(?:foi|esta|esta\s+sendo)\s+validad\w*)\b/u, reason: 'unqualified lack-of-validation claim' },
@@ -163,6 +166,7 @@ export function validateEditorialGrounding(opening) {
       if (risk.pattern.test(text)) throw Error('Factual grounding: ' + risk.reason + ' in ' + field + '; rewrite with precise, source-limited statements');
     }
     if (/\balunis\b/u.test(text)) throw Error('Factual grounding: invalid Portuguese inflection in ' + field);
+    if (/\b(?:a|uma|o)\s+benefica\b/u.test(text)) throw Error('Factual grounding: malformed use of benéfica in ' + field);
   }
   return { passed: true, independent: false, scope: 'known unsupported inferences and evidence-domain anchors', humanVerificationRequired: true };
 }
@@ -305,7 +309,7 @@ export function validateReview(value, material) {
   return { approved: issues.length === 0, issues, suggestions, findings, reclassified,
     note: prose(value.note, 10, 500, 'review note') };
 }
-function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
+function references(sources) { return sources.map(s => { const title = s.title.length > 65 ? s.title.slice(0, 61).trimEnd() + '…' : s.title; return '[' + s.id + '] ' + title + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')'; }).join('\n'); }
 export function composePost(topic, draft, sources) {
   validateEditorialGrounding(draft);
   const title = prose(draft.title, 12, 115, 'title');
@@ -344,6 +348,7 @@ export function stampMessages(post, replies, id, fingerprint) {
 export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24, maxSourceAgeDays = 14 } = {}) {
   if (![2, 3].includes(draft?.schemaVersion) || draft.hash !== payloadHash(draft) || !/^[a-f0-9]{64}$/.test(draft.hash) || !/^[a-f0-9]{24}$/.test(draft.id)) throw Error('Draft hash or format is invalid');
   if (draft.schemaVersion !== 3) throw Error('Draft predates complete-text validation; cancel any pending delivery of this draft, then generate a fresh preview');
+  if (draft.generatorVersion !== RESEARCH_VERSION) throw Error('Draft requires regeneration with current evidence-quality checks before publishing');
   if (draft.api !== api || draft.policyVersion !== POLICY_VERSION || draft.status !== 'ready' || draft.review?.approved !== true) throw Error('Draft is not approved for this API/policy');
   if (draft.review?.factualGate?.passed !== true || draft.review.factualGate.independent !== false ||
       draft.review.factualGate.humanVerificationRequired !== true)
