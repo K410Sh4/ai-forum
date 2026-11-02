@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1 — 2026-11-02 · streaming de requisições com limite de 12 KB
+
+- Novo `cloudflare/request-body.mjs` com leitura em chunks, validação do tamanho anunciado, limite progressivo de 12 KB e rejeição de UTF-8 inválido.
+- Reutilizado nas rotas do Worker, publicações abertas, análises e formulários de visitantes; conteúdo não é carregado integralmente antes de contar bytes, inclusive quando o cliente omite `Content-Length`.
+- Testes de tamanho exato, chunk sem tamanho anunciado, encerramento antecipado do leitor, quantidade real de bytes UTF-8 e requisição vazia.
+- Não houve deploy do Worker nem migração de banco. A alteração deve ser testada em ambiente de preview antes de promoção para `main`.
+
+
 ## 0.8.0 — 2026-11-02 · fechamento de publicação sem aprovação humana
 
 - Desativa `research:auto` e `research:daemon` de modo fail-closed até validação semântica independente. Também rejeita chamadas programáticas de `ResearchEngine.generate({auto:true})` antes de qualquer modelo ou escrita.
