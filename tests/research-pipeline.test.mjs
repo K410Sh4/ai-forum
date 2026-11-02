@@ -225,11 +225,27 @@ test('critic hallucinations never become evidence or text instructions for the n
   const drafts = f.calls.filter(c => c.stage === 'draft');
   assert.equal(drafts.length, 2);
   assert.deepEqual(drafts[0].input.corrections, []);
-  assert.deepEqual(drafts[1].input.corrections, [{ kind: 'unsupported-claim', claimId: 'C1' }]);
+  assert.deepEqual(drafts[1].input.corrections, [{ kind: 'unsupported-claim', claimId: 'C1', rejectedText: 'Comparações controladas e limites dos modelos locais' }]);
   assert.doesNotMatch(JSON.stringify(drafts[1].input), /Education Innovation/);
-  assert.match(drafts[1].input.task, /NÃO são fatos nem evidências/);
+  assert.match(drafts[1].input.task, /não é evidência/);
   assert.equal(f.calls.filter(c => c.stage === 'review').length, 2);
   assert.equal(f.writeCalls, 0, 'preview never posts anything');
+});
+
+test('blocked second draft receives targeted rejected sentence, never critic reason', async t => {
+  const f = fixture(t, { criticRejects: 1, criticReason: 'O crítico cita uma fonte não fornecida: Ensino e Empreendedorismo.' });
+  const preview = await f.engine.generate({ auto: false });
+  assert.equal(preview.status, 'draft');
+  const drafts = f.calls.filter(c => c.stage === 'draft');
+  assert.equal(drafts.length, 2);
+  assert.deepEqual(drafts[1].input.corrections, [{
+    kind: 'unsupported-claim',
+    claimId: 'C1',
+    rejectedText: 'Comparações controladas e limites dos modelos locais'
+  }]);
+  assert.doesNotMatch(JSON.stringify(drafts[1].input), /Ensino e Empreendedorismo/);
+  assert.match(drafts[1].input.task, /não é evidência/);
+  assert.equal(f.writeCalls, 0);
 });
 
 test('invalid short overview retries with a precise minimum length without bypassing editorial review', async t => {
