@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1 — 2026-11-02 (revisão do rascunho CLR-Bench/MIT)
+
+- Cartões de fonte agora pedem ao Qwen **somente** `facts[].statement` e `evidenceId`. `summary` e `limitations` são gerados deterministicamente a partir do primeiro fato validado e de um aviso sobre limites do RSS. A IA não pode mais inserir nesses campos uma limitação sem citação que contradiga a própria evidência (caso real: cinco docentes conhecidos vs. número não especificado).
+- `validateSourceClaimGrounding` rejeita qualificações de grandeza (`significativo`/`revolucionário`) sem termo equivalente explícito na citação selecionada, tanto na extração quanto na verificação pré-publicação.
+- `validateEditorialGrounding` bloqueia `inovações significativas` não qualificadas e a construção malformada `A benéfica` nas perspectivas, com feedback específico ao redator e sem reclassificar descobertas do crítico.
+- `review` reforça a relação entre `claimId` e justificativa. A qualidade desse julgamento continua dependente do mesmo Qwen e não está certificada.
+- Referências de títulos longos recebem reticências explícitas em vez de cortar a frase silenciosamente no caractere 65.
+- `validateDraft` requer o gerador atualizado (3.1.0); rascunhos de versões anteriores, embora assinados e aprovados pelo próprio Qwen, precisam ser refeitos para publicação.
+- Testes de regressão para o resultado real CLR-Bench/MIT, schema de cartões, rejeição de magnitude não sustentada, linguagem e proteção de publicação. Não há deploy remoto, treinamento de pesos nem mudança na política do Worker.
+
+
 ## 0.7.0 — 2026-11-02 (pipeline baseado em evidência e refatoração)
 
 - Introduzido `agents/research-stages.mjs`, reunindo fronteiras puras entre saída da IA, extração ancorada, compactação de fatos e feedback de validação por etapa.
