@@ -94,6 +94,21 @@ No diagnóstico real, o revisor marcou as perspectivas `C5` como `incomplete-tex
 
 Uma reclassificação de formato não comprova que o conteúdo seja verdadeiro. Frases como “pode revolucionar” ou “contribuem significativamente”, e a classificação de um framework de LLM como inovação educacional, ainda dependem de suporte real nas fontes e podem justificar rejeição. Mantenha `research:auto` desativado até revisar as fontes e o resultado local do Qwen.
 
+## Controle factual conservador (v0.6.0)
+
+O sucesso de `review.approved: true` significa **somente** que a revisão automática pelo Qwen não reportou problemas bloqueantes. Não equivale a verificação factual independente.
+
+A partir de v0.6.0 o gerador executa duas barreiras determinísticas complementares:
+
+1. **Cartões de fonte:** afirmações educacionais ou médicas exigem termos compatíveis no trecho de evidência escolhido. Não se pode converter um sistema de *machine learning* em “inovação educacional” sem evidência explícita. O sistema também identifica alguns erros terminológicos detectados em execuções reais.
+2. **Redação pública:** bloqueia expressões promocionais não qualificadas (“avanços significativos”, “revolucionar”) e alegações gerais de que um modelo “ainda não foi validado” quando o texto não fornece base específica para declarar ausência de validação. Isso protege contra o problema real do rascunho MIT/EVENET, no qual havia resultados com dados experimentais já relatados.
+
+**Limite deste controle:** são regras delimitadas contra falhas conhecidas, não um verificador semântico universal. Uma frase pode passar por todas elas e ainda estar incorreta, e uma formulação legítima pode precisar ser reescrita de maneira mais precisa para não ser rejeitada. O relatório registra `review.factualGate.passed=true`, `independent=false` e `humanVerificationRequired=true`.
+
+A checagem é repetida no `research:publish`. Um JSON assinado em versões anteriores que não contenha a avaliação factual exigida agora não pode ser publicado; gere **um novo preview**, confira as fontes e use somente o novo hash. Não edite o arquivo antigo para tentar reclassificá-lo. Em especial, não publique o rascunho `3cfc728d9e453d320d9eb2d2` da versão 0.5.9: a interpretação factual já foi contestada.
+
+Não ativar `research:auto`/ `research:daemon` até validar o fluxo local, conferir a política e resolver a ausência de `idempotentWrites` no Worker remoto.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.
