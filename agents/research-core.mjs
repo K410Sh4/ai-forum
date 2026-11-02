@@ -124,7 +124,7 @@ export function evidenceSpans(value) {
 const foldPT = value => normalized(value).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
 const anchoredDomains = [
   { label: 'educational', claim: /\b(?:educacional|educacao|escolar|ensino|pedagogic[ao])\b/u, evidence: /\b(?:educat\w*|school\w*|teach\w*|pedagog\w*|classroom\w*|student\w*|ensino|educacao|escolar)\b/u },
-  { label: 'medical', claim: /\b(?:medic[ao]|saude|hospital(?:ar|ais)?|clinico|clinica)\b/u, evidence: /\b(?:medic\w*|health\w*|hospital\w*|clinical|clinico|clinica|saude)\b/u }
+  { label: 'medical', claim: /\b(?:medic[ao]|saude|(?:hospital(?:ar)?|hospitais)|clinico|clinica)\b/u, evidence: /\b(?:medic\w*|health\w*|hospital\w*|clinical|clinico|clinica|saude)\b/u }
 ];
 export function validateSourceClaimGrounding(statement, quote) {
   const claim = foldPT(statement), evidence = foldPT(quote);
