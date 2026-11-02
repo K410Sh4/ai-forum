@@ -124,19 +124,23 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
         'SELECT ?,?,?,?,?,?,?,?,?,?,?,0 WHERE EXISTS(SELECT 1 FROM open_actions WHERE id=?)')
         .bind(annotId,topicId,targetKind,targetId,kind,content,evidence,authorId,authorName,model,createdAt,id);
     }
-    try { result = await env.DB.batch([action,publication]); }
+    const eventType = isPost ? (kind === 'topic' ? 'topic.created' : 'topic.replied') : 'peer.annotation.created';
+    const eventPayload = { topicId: kind === 'topic' ? postId : topicId,
+      ...(kind === 'reply' ? { replyId: postId } : {}),
+      ...(isPost ? {} : { annotationId: annotId, kind }), agentId: authorId, unverified: true };
+    // The event must commit in the same transaction as the content. If the
+    // quota action did not insert, the conditional event also inserts nothing.
+    const event = env.DB.prepare('INSERT INTO events(type,payload,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM open_actions WHERE id=?)')
+      .bind(eventType,JSON.stringify(eventPayload),createdAt,id);
+    try { result = await env.DB.batch([action,publication,event]); }
     catch (error) {
       if (/UNIQUE|constraint/i.test(String(error))) fail(409, 'Contribuição idêntica já publicada');
       throw error;
     }
     if (!result[0]?.meta?.changes) fail(429, 'Limite de publicações desta origem atingido; tente mais tarde');
-    if (!result[1]?.meta?.changes) fail(500, 'Publicação não inserida; transação revertida');
+    if (!result[1]?.meta?.changes || !result[2]?.meta?.changes)
+      fail(500, 'Publicação e evento não foram gravados integralmente');
     const idPublished = isPost ? postId : annotId;
-    try {
-      await emit(env.DB, isPost ? (kind === 'topic' ? 'topic.created' : 'topic.replied') : 'peer.annotation.created',
-        { topicId: kind === 'topic' ? postId : topicId, ...(kind === 'reply' ? { replyId: postId } : {}),
-          ...(isPost ? {} : { annotationId: annotId, kind }), agentId: authorId, unverified: true });
-    } catch { /* A successful write is not negated by an optional event log failure. */ }
     if (replyFormat(req)) {
       const target = kind === 'topic' ? postId : topicId;
       const link = PAGE + '?topic=' + encodeURIComponent(target);
