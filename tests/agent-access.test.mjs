@@ -52,6 +52,33 @@ test('idempotent topic and reply writes preserve IDs, content and one event per 
   assert.equal(h.sql.prepare('SELECT hidden FROM replies WHERE id=?').get(reply.data.reply.id).hidden, 1);
   assert.equal((await h.request('/api/agent-access/policy')).data.features.idempotentWrites, true);
 });
+test('atomic event failure rolls back its topic rather than silently persisting content', async t => {
+  const h = harness(t), session = await enroll(h);
+  h.sql.exec("CREATE TRIGGER reject_topic_event BEFORE INSERT ON events WHEN NEW.type='topic.created' BEGIN SELECT RAISE(ABORT,'event write blocked'); END;");
+  const result = await h.request('/api/topics', 'POST', {
+    title: 'Publication requires event log', content: 'No topic may survive a failed event write transaction.'
+  }, session.access_token, { 'Idempotency-Key': 'atomic-event-topic-regression:0' });
+  assert.equal(result.status, 500);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM events WHERE type='topic.created'").get().n, 0);
+});
+
+test('atomic event failure rolls back its reply, while the existing topic remains', async t => {
+  const h = harness(t), session = await enroll(h);
+  const topic = await h.request('/api/topics', 'POST', {
+    title: 'Stable parent topic', content: 'The parent survives failed reply-event commits.'
+  }, session.access_token, { 'Idempotency-Key': 'atomic-event-topic-regression:1' });
+  assert.equal(topic.status, 201);
+  h.sql.prepare('UPDATE post_locks SET last_at=0').run();
+  h.sql.exec("CREATE TRIGGER reject_reply_event BEFORE INSERT ON events WHEN NEW.type='topic.replied' BEGIN SELECT RAISE(ABORT,'event write blocked'); END;");
+  const attempt = await h.request('/api/topics/' + topic.data.topic.id + '/replies', 'POST', {
+    content: 'An event failure must cancel this reply.'
+  }, session.access_token, { 'Idempotency-Key': 'atomic-event-reply-regression:2' });
+  assert.equal(attempt.status, 500);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM replies').get().n, 0);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+});
+
 test('idempotency remains scoped to the authorized agent and never restores hidden topics', async t => {
   const h = harness(t), left = await enroll(h), right = await enroll(h);
   const headers = { 'Idempotency-Key': 'research:shared-fixture-key:0' };
@@ -77,7 +104,30 @@ test('ForumClient forwards a stable idempotency key across renewed authorization
 function harness(t) {
   const sql = new DatabaseSync(':memory:');
   for (const name of fs.readdirSync(new URL('../cloudflare/migrations/', import.meta.url)).sort()) sql.exec(fs.readFileSync(new URL('../cloudflare/migrations/' + name, import.meta.url), 'utf8'));
-  const DB = { prepare(query) { return { bind(...params) { const s = sql.prepare(query); return { async first() { return s.get(...params) || null; }, async all() { return { results: s.all(...params) }; }, async run() { return { meta: { changes: Number(s.run(...params).changes) } }; } }; } }; } };
+  const DB = {
+    prepare(query) {
+      return { bind(...params) {
+        const statement = sql.prepare(query);
+        return {
+          async first() { return statement.get(...params) || null; },
+          async all() { return { results: statement.all(...params) }; },
+          async run() { return { meta: { changes: Number(statement.run(...params).changes) } }; }
+        };
+      } };
+    },
+    async batch(statements) {
+      sql.exec('BEGIN');
+      try {
+        const result = [];
+        for (const statement of statements) result.push(await statement.run());
+        sql.exec('COMMIT');
+        return result;
+      } catch (error) {
+        sql.exec('ROLLBACK');
+        throw error;
+      }
+    }
+  };
   const env = { DB, ADMIN_KEY: 'a'.repeat(64) };
   t.after(() => sql.close());
   const fetchImpl = (url, options) => worker.fetch(new Request(url, options), env);
