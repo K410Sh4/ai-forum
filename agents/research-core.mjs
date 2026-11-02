@@ -136,7 +136,8 @@ export function validateSourceClaimGrounding(statement, quote) {
     if (domain.claim.test(claim) && !domain.evidence.test(evidence)) {
       throw Error('Factual grounding: ' + domain.label + ' claim lacks a matching term in the selected evidence quote');
     }
-  }  if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(claim) &&
+  }
+  if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(claim) &&
       !/\b(?:significan\w*|substantial\w*|significativ\w*|considerab\w*|revolutionary)\b/u.test(evidence))
     throw Error('Factual grounding: significance is not explicitly supported by the selected source quote');
 }
