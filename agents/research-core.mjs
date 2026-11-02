@@ -302,7 +302,7 @@ function detailOnlyMisclassification(finding, text, reason) {
 // characters rather than losing all findings when Qwen exceeds 180.
 // prose() continues to reject URLs, control characters and invalid types.
 export function validateReview(value, material) {
-  if (!Array.isArray(value?.findings) || value.findings.length > MAX_REVIEW_FINDINGS) throw Error('Review exceeds the classified-finding limit');
+  if (!Array.isArray(value?.findings) || value.findings.length > MAX_REVIEW_FINDINGS) throw Error('Review requires at most ' + MAX_REVIEW_FINDINGS + ' classified findings');
   const findings = value.findings.map(finding => {
     if (!REVIEW_KINDS.includes(finding?.kind)) throw Error('Unknown review finding kind');
     const selected = material.find(part => part.id === finding.claimId);
