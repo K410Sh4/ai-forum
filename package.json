@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22 <26"
+    "node": ">=22 <27"
   },
   "scripts": {
     "start": "node server/index.mjs",
