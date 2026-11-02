@@ -92,3 +92,36 @@ node agents/research-benchmark.mjs --cases 18 --compare --model qwen2.5:7b-instr
 - O prompt selecionado precisa demonstrar ganho medido em casos não utilizados na sua formulação; ganho num conjunto de 18 casos isolado não autoriza troca em produção.
 
 Referências públicas de orientação: Ollama Structured Outputs; Ollama API; Qwen2.5-Coder model card; Qwen2.5-Instruct Ollama; estudos de factualidade, avaliação por conjuntos específicos e validação externa.
+
+## Avaliação real no Windows — rodada do operador de 2026-11-02
+
+O operador confirmou `npm.cmd run check`: **63 arquivos JavaScript e JSON válidos** e `npm.cmd test`: **202 casos, 201 aprovados, 0 falhas, 1 ignorado por ser POSIX**. Esse resultado precede as últimas mudanças desta seção e não pode ser atribuído a elas.
+
+**Qwen2.5-Coder 7B local, 18 casos sintéticos rotulados:**
+
+| Variante | Corretos | Falsos suportes | Latência média |
+| --- | ---: | ---: | ---: |
+| compact | 13/18 (72,2%) | 1 | 485 ms |
+| strict | 15/18 (83,3%) | 1 | 492 ms |
+
+Erros prioritários: ambos aceitaram `mit-benefits-invented` como `supported` apesar de a fonte apenas descrever concessões de bolsas, não resultados científicos comprovados. A variante strict tratou a inversão das quantidades de docentes e ex-alunos como `insufficient` quando o gabarito era `contradicted`. Outros casos de evidência ausente foram rotulados `contradicted` em vez de `insufficient`.
+
+**Conclusão limitada:** strict teve mais acertos nesta amostra, porém as duas variantes falharam num teste de falsa confirmação. Não é uma medida de desempenho em produção nem prova de capacidade comparável à de um modelo maior. Os casos usados para desenhar a nova variante calibrated estão agora contaminados para seleção final de prompts: o próximo aceite precisa usar um conjunto **novo e cego**.
+
+O `research:preview` real foi rejeitado após duas tentativas de geração, com `Factual grounding: unsubstantiated significance in overview`. O guardião impediu a criação de um rascunho inadequado. Em resposta, foi acrescentado um **fallback somente para preview**, aplicável apenas quando as duas tentativas são rejeitadas por esse mesmo erro da síntese. A síntese passa a ser composta com fatos previamente vinculados às fontes, todos os demais campos permanecem sob validação normal e o texto completo ainda exige revisão Qwen e aprovação humana. Qualquer outra falha continua bloqueando, assim como a falta de atestação humana.
+
+### Nova comparação experimental
+
+```powershell
+cd "$HOME\ai-forum-auditoria"
+git fetch origin
+git switch --detach origin/fix/audit-reliability-20261102
+npm.cmd run check
+npm.cmd test
+npm.cmd run research:benchmark -- --cases 18 --compare-calibrated
+npm.cmd run research:preview -- --topic ia-pesquisa --depth quick
+```
+
+A opção `--compare-calibrated` compara **strict** contra **calibrated**, alternando a ordem de execução. Não substitui a rodada original `--compare` (compact versus strict). O resultado é experimental e exige conjunto de validação independente antes de adotar o prompt em fluxos de publicação.
+
+**Ainda pendente:** resultados da nova suíte e nova execução do Qwen no equipamento do operador; verificação em ambiente Cloudflare D1 de homologação; checagem humana semântica; PR rascunho não mergeável. Nenhum deploy ou publicação efetuado nesta etapa.
