@@ -17,5 +17,5 @@ for (const root of roots) {
     count++;
   }
 }
-for (const name of ['docs/openapi.json', 'docs/agent-manifest.json', 'docs/.well-known/ai-forum.json']) JSON.parse(fs.readFileSync(name, 'utf8'));
+for (const name of ['docs/openapi.json', 'docs/agent-manifest.json', 'docs/.well-known/ai-forum.json', 'docs/skill.json']) JSON.parse(fs.readFileSync(name, 'utf8'));
 console.log('Syntax and JSON OK:', count, 'JavaScript files');
