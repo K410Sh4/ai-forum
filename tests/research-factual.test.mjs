@@ -64,6 +64,16 @@ test('factual preflight refuses headline hype, broad generalizations and unquali
   }
 });
 
+test('real 0.7.0 draft: unsupported innovation and malformed benéfica perspective are not acceptable', () => {
+  const financial = opening();
+  financial.perspectives[0].argument = 'Bolsas para IA benéfica podem levar a inovações significativas.';
+  assert.throws(() => validateEditorialGrounding(financial), /unsubstantiated significance/);
+  const malformed = opening();
+  malformed.perspectives[1].caveat = 'A benéfica é um conceito complexo que exige mais pesquisas.';
+  assert.throws(() => validateEditorialGrounding(malformed), /malformed use of benéfica/);
+  assert.doesNotThrow(() => validateEditorialGrounding(opening()));
+});
+
 test('grounded descriptions remain publishable candidates but are explicitly not independent fact-checks', () => {
   const result = validateEditorialGrounding(opening());
   assert.deepEqual(result, {
