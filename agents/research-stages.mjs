@@ -72,6 +72,8 @@ export function compactEvidenceCards(cards) {
 export function retryDirective(stage, error) {
   const reason = String(error?.message || '');
   if (stage.startsWith('source-')) {
+    if (/mistranslated scientific term or institutional name/u.test(reason))
+      return '\nCorrija SOMENTE facts[].statement que apresenta tradução imprecisa. Não escreva "curso oculto de regras": use a descrição real do artigo (por exemplo, "currículo de regras ocultas" APENAS se a citação mencionar curriculum). Não escreva "da MIT" ou "pela MIT": o nome institucional é "o MIT", com "do MIT" ou "pelo MIT". Não escreva "nomeados como fellowships": fellowships são bolsas, enquanto fellows são pessoas. Mantenha números, grupos e evidenceId, e só afirme o que a citação sustentar. Não crie resultados científicos.';
     if (/invalid Portuguese inflection in source fact/u.test(reason))
       return '\nCorrija especificamente facts[].statement: "alunis" não é português; se o trecho original diz "alumni", escreva "ex-alunos". Preserve todos os números, nomes e evidenceId. Não invente informação.';
     if (/significance is not explicitly supported/u.test(reason))
