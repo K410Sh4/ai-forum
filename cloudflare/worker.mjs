@@ -97,8 +97,8 @@ const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
-const openConversation=createOpenConversation({all,first,run,sha,now,uid,json,getTopic,emit,requireAdmin,auth});
-const analysisHub=createAnalysisHub({all,first,json,sha,now,uid,emit,getTopic});
+const openConversation=createOpenConversation({all,first,run,sha,now,uid,json,getTopic,requireAdmin,auth});
+const analysisHub=createAnalysisHub({all,first,json,sha,now,uid,getTopic});
 async function route(req,env,url){
   const db=env.DB;
   const path=url.pathname, method=req.method;
