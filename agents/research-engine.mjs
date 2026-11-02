@@ -93,19 +93,10 @@ export class ResearchEngine {
           const draft = { schemaVersion: 3, generatorVersion: RESEARCH_VERSION, id, createdAt, status: 'ready', api: this.client.api, policyVersion: POLICY_VERSION, model: this.model.model, depth, theme: { id: topic.id, label: topic.label, tag: topic.tag }, fingerprint, post: messages[0], replies: messages.slice(1), editorial: built.editorial, sources: built.sources, cards: built.cards, plan: built.plan, review: built.review, metrics: built.metrics };
           draft.hash = payloadHash(draft);
           validateDraft(draft, { api: this.client.api, clock: this.clock(), maxAgeHours: this.config.maxDraftAgeHours, maxSourceAgeDays: this.config.maxSourceAgeDays });
-    // Hash validation alone means nothing about human inspection. Require an
-    // independent, intentional approval action recorded in the local state.
-    if (!(state.approvals || []).some(item => item.draftId === draft.id &&
-        item.hash === expectedHash && item.sourceFingerprint === draft.fingerprint &&
-        item.method === 'local-interactive-operator-attestation')) {
-      throw Error('Human approval missing for this exact draft/hash; run research:approve first');
-    }
-
           const file = path.join(this.draftDir, id + '.json'); writeJSON(file, draft);
           fs.writeFileSync(path.join(this.draftDir, id + '.md'), '# ' + draft.post.title + '\n\n' + messages.map(m => m.content).join('\n\n---\n\n') + '\n\nSHA-256 do rascunho: `' + draft.hash + '`\n', { mode: 0o600, flag: 'wx' });
           run.status = 'draft'; run.topicId = topic.id; run.file = file; run.hash = draft.hash; run.metrics = built.metrics;
           this.store.save(state);
-          if (auto) return this.publishInState(state, file, draft.hash);
           return { status: 'draft', file, markdown: file.replace(/\.json$/, '.md'), hash: draft.hash, messages: messages.length, metrics: built.metrics };
         } catch (error) {
           // Publication failures must retain their pending journal and stop this cycle.
@@ -150,6 +141,14 @@ export class ResearchEngine {
     const draft = readJSON(file, null);
     if (!expectedHash || draft?.hash !== expectedHash) throw Error('Supply --hash with the SHA-256 of the exact reviewed JSON draft');
     validateDraft(draft, { api: this.client.api, clock: this.clock(), maxAgeHours: this.config.maxDraftAgeHours, maxSourceAgeDays: this.config.maxSourceAgeDays });
+    // Hash validation alone means nothing about human inspection. Require an
+    // independent, intentional approval action recorded in the local state.
+    if (!(state.approvals || []).some(item => item.draftId === draft.id &&
+        item.hash === expectedHash && item.sourceFingerprint === draft.fingerprint &&
+        item.method === 'local-interactive-operator-attestation')) {
+      throw Error('Human approval missing for this exact draft/hash; run research:approve first');
+    }
+
     if (!this.config.topics.some(t => t.id === draft.theme.id)) throw Error('Draft theme is not configured');
     for (const source of draft.sources) if (source.publisherId !== publisherId(publicURL(source.feedUrl).hostname, this.config.publishers) || !this.config.publishers.some(p => p.id === source.publisherId)) throw Error('Draft publisher mapping changed; regenerate the draft');
     const policy = await this.client.request('/api/agent-access/policy');
