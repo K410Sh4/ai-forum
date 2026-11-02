@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateReview, validateEditorialGrounding, evidenceSpans, normalized } from '../agents/research-core.mjs';
+import { validateReview, validateEditorialGrounding, validateSourceClaimGrounding, composePost, evidenceSpans, normalized } from '../agents/research-core.mjs';
 import { OllamaResearcher } from '../agents/research-model.mjs';
 import { prepareSourceCard, retryDirective } from '../agents/research-stages.mjs';
 
@@ -124,4 +124,42 @@ test('source card translates AI providers only when the literal selected quote w
   const unrelated = prepareSourceCard(unrelatedInput, otherSource, otherSpans);
   assert.equal(unrelated.facts[0].statement, unrelatedInput.facts[0].statement,
     'English phrase must not be silently replaced without literal source support');
+});
+
+test('Qwen source claims reject known incorrect genders for the MIT and CLR-Bench names', () => {
+  const excerpt = 'CLR-Bench measures learning ability across models, and an MIT fellowship was announced.';
+  for (const phrase of ['a MIT', 'da MIT', 'pela MIT', 'A CLR-Bench']) {
+    assert.throws(
+      () => validateSourceClaimGrounding(phrase + ' apresenta um estudo de pesquisa.', excerpt),
+      /mistranslated scientific term or institutional name/
+    );
+  }
+  assert.doesNotThrow(() => validateSourceClaimGrounding('O CLR-Bench apresenta uma comparação limitada.', excerpt));
+});
+
+test('publication-length editorial fields reject invalid institutional genders without silently rewriting them', () => {
+  const draft = {
+    title: 'Panorama de dois estudos e suas limitações',
+    overview: 'O primeiro estudo apresenta um benchmark de aprendizagem, enquanto o segundo relata outro desenvolvimento. As duas notícias são distintas e precisam ser verificadas nas referências publicadas.',
+    uncertainties: 'O alcance dos resultados não pode ser determinado somente por resumos.',
+    perspectives: [{ label: 'Método', argument: 'A comparação exige examinar as condições dos estudos publicados.', caveat: 'O escopo informado é limitado.' }],
+    questions: ['Como verificar as diferenças?', 'Quais condições foram utilizadas?']
+  };
+  assert.equal(validateEditorialGrounding(draft).passed, true);
+  assert.throws(() => validateEditorialGrounding({ ...draft, title: 'A CLR-Bench e os novos resultados publicados' }), /incorrect article/);
+  assert.throws(() => validateEditorialGrounding({ ...draft, overview: draft.overview.replace('O primeiro estudo', 'A MIT') }), /incorrect article/);
+  assert.throws(() => validateEditorialGrounding({ ...draft, uncertainties: 'A MIT descreve uma descoberta sem método comprovado.' }), /incorrect article/);
+  assert.throws(() => validateEditorialGrounding({ ...draft, questions: ['A CLR-Bench é uma metodologia?', 'Quais são as fontes?'] }), /incorrect article/);
+});
+
+test('an underlength overview with a wrong article is still blocked by composePost until fully replaced', () => {
+  const draft = {
+    title: 'Um estudo e seus possíveis limites',
+    overview: 'A CLR-Bench descreve um estudo e os resultados ainda precisam ser examinados.',
+    uncertainties: 'As evidências precisam ser examinadas com cuidado e contexto.',
+    perspectives: [], questions: [], sourceIds: ['S1', 'S2']
+  };
+  assert.doesNotThrow(() => validateEditorialGrounding(draft));
+  assert.throws(() => composePost({ label: 'Pesquisa', tag: 'pesquisa' }, draft, []),
+    /Invalid overview/);
 });
