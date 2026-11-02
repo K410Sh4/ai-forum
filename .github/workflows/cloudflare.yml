@@ -52,4 +52,4 @@ jobs:
         run: npx --no-install wrangler deploy
       - name: Verify live discovery and MCP tools
         if: steps.access.outputs.configured == 'true'
-        run: node scripts/verify-deployment.mjs https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev --agent-access --universal-agent-access
+        run: node scripts/verify-deployment.mjs https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev --agent-access --universal-agent-access --task-broker
