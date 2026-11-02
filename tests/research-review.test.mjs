@@ -198,3 +198,62 @@ test('realistic model review with >180-char reasons preserves blocking findings 
   assert.equal(response.issues.length, 1);
   assert.equal(calls, 1);
 });
+
+
+test('MIT and Google diagnostic: isolate each synthesis sentence instead of rejecting the whole C2', () => {
+  const post = {
+    title: 'Avanços em IA e Pesquisa em Modelos',
+    content: 'Pesquisa assistida por IA local — Inteligência artificial e pesquisa em modelos. Perspectivas do mesmo modelo; revisão automática não comprova os fatos.\n\n' +
+      'SÍNTESE\nO MIT e a Google Research apresentam avanços significativos em inteligência artificial e pesquisa em modelos. ' +
+      'Cinco membros da faculdade e dois ex-alunos foram honrados com bolsas para avançar pesquisa em IA benéfica. ' +
+      "Um novo framework chamado 'Framework de Sono' foi desenvolvido para LLMs, visando melhorar a capacidade de manter informações aprendidas ao longo do tempo.\n\n" +
+      'EVIDÊNCIAS\n• Cinco membros da faculdade e dois ex-alunos receberam bolsas. [S1]\n' +
+      "• O framework de sono busca reter conhecimentos de LLMs. [S2]\n\n" +
+      'FONTES CONSULTADAS\n[S1] MIT — https://example.org/mit'
+  };
+  const claims = reviewMaterial(post);
+  assert.equal(claims[0].id, 'C1');
+  assert.equal(claims[1].id, 'C2');
+  assert.equal(claims[2].id, 'C3');
+  assert.equal(claims[3].id, 'C4');
+  assert.match(claims[1].text, /^SÍNTESE\nO MIT/);
+  assert.doesNotMatch(claims[1].text, /Cinco membros/);
+  assert.match(claims[2].text, /^Cinco membros/);
+  assert.doesNotMatch(claims[2].text, /Framework de Sono/);
+  assert.match(claims[3].text, /Framework de Sono/);
+  assert.equal(claims[4].id, 'C5');
+  assert.match(claims[4].text, /^EVIDÊNCIAS\n/);
+  assert.ok(claims.every(item => !item.text.includes('https://')));
+  const review = validateReview({
+    findings: [{ kind: 'unsupported-claim', claimId: 'C2', reason: 'O qualificativo significativo não é demonstrado pelo trecho da bolsa.' }],
+    note: 'É necessário limitar a frase de abertura.'
+  }, claims);
+  assert.equal(review.approved, false);
+  assert.equal(review.findings[0].quote, claims[1].text);
+  assert.doesNotMatch(review.findings[0].quote, /framework chamado/);
+});
+
+test('review prompt distinguishes missing detail from incomplete sentences, and vague claims from specific evidence', async () => {
+  let examined = false;
+  const critic = new OllamaResearcher({
+    config:{numContext:4096,modelAttempts:1,modelTimeoutSeconds:30},
+    fetchImpl:async (_url,options)=>{
+      const request=JSON.parse(options.body);
+      const prompt=request.messages[1].content;
+      const input=JSON.parse(prompt.slice(0,prompt.indexOf('\nEsquema:')));
+      assert.match(input.task,/incomplete-text é SOMENTE texto realmente cortado/);
+      assert.match(input.task,/unsupported-claim exige citar uma afirmação específica/);
+      assert.match(input.rubric,/Ausência de detalhes nunca é incomplete-text/);
+      examined=true;
+      return Response.json({message:{content:JSON.stringify({
+        findings:[{kind:'missing-detail',claimId:input.material[1].id,reason:'O texto não detalha métodos que não foram fornecidos na notícia.'}],
+        note:'Falta de detalhes registrada como recomendação editorial.'
+      })},done_reason:'stop'});
+    }
+  });
+  const result=await critic.review(message, [], 'Comparar fontes sem generalizar.');
+  assert.ok(examined);
+  assert.equal(result.approved,true);
+  assert.equal(result.suggestions.length,1);
+  assert.equal(result.issues.length,0);
+});

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.8 — 2026-11-01 (revisão por frase e correção direcionada)
+
+- Sintese da abertura agora gera um `claimId` por frase, não um único `C2` para todo o parágrafo. O revisor consegue identificar se a alegação problemática é o qualificativo “avanços significativos”, a notícia de bolsas do MIT ou a proposta do Google.
+- Após crítica, a segunda redação recebe o texto original da frase rejeitada como **dado não confiável a corrigir/remover**, nunca a justificativa livre do revisor como se fosse fonte factual.
+- Revisão orientada a classificar ausência de detalhes como `missing-detail`, e `incomplete-text` somente como frase cortada ou malformada. `unsupported-claim` deve indicar a frase específica e a lacuna de suporte.
+- Casos reais reproduzidos em testes: síntese MIT/Google, revisão direcionada, separação de orientações e erros bloqueantes, ausência de publicação pelo `preview`.
+- Sem alteração no protocolo de autenticação ou idempotência do Worker. A aprovação pelo Qwen local permanece sujeita a teste; filtros factuais não foram desativados.
+
+
 ## 0.5.7 — 2026-11-01 (revisão editorial robusta)
 
 - Revisão: os campos `reason` e `note` aceitam até 500 caracteres para preservar críticas completas do Qwen 7B. O limite anterior de 180 rejeitava justificativas reais com 222 e 252 caracteres.
