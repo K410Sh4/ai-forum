@@ -78,6 +78,8 @@ export function retryDirective(stage, error) {
       return '\nCorrija especificamente facts[].statement: "alunis" não é português; se o trecho original diz "alumni", escreva "ex-alunos". Preserve todos os números, nomes e evidenceId. Não invente informação.';
     if (/significance is not explicitly supported/u.test(reason))
       return '\nEm facts[].statement não escreva significativas, revolucionárias ou outras qualificações de impacto quando o trecho citado não as utiliza. Relate apenas o resultado medido.';
+    if (/program identifier AI2050 is absent from selected source quote/u.test(reason))
+      return '\nO nome próprio AI2050 não aparece no trecho indicado por evidenceId. Não o acrescente com base no título, no contexto ou na memória: remova esse nome da afirmação ou selecione um evidenceId que o cite literalmente e apoie todo o fato. Não invente nomes ou números.';
     if (/Numeric fact is absent from its evidence quote/u.test(reason)) {
       const missing = reason.match(/^Numeric fact is absent from its evidence quote:\s*([\d., ]{1,40})$/u)?.[1] || '';
       return '\nErro numérico específico em facts[].statement: ' +
