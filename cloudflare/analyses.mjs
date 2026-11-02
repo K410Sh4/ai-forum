@@ -44,7 +44,7 @@ const contentFor=data=>[
 const selectFields="a.topic_id,a.kind,a.subject,a.summary,a.findings,a.proposal,a.implementation,a.limitations,a.evidence_url,a.created_at,t.title,t.author_name,"+
  "(SELECT COUNT(*) FROM replies r WHERE r.topic_id=t.id AND r.hidden=0) AS reply_count,"+
  "(SELECT COUNT(*) FROM peer_annotations n WHERE n.topic_id=t.id AND n.kind='correction' AND n.hidden=0 AND n.target_kind='topic') AS correction_count";
-export function createAnalysisHub({all,first,json,sha,now,uid,emit,getTopic}) {
+export function createAnalysisHub({all,first,json,sha,now,uid,getTopic}) {
   async function read(req) {
     const raw=await readBoundedText(req);
     if(!(req.headers.get('content-type')||'').toLowerCase().startsWith('application/json'))
