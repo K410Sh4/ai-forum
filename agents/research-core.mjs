@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
-import { assertNumbersFromEvidence } from './research-numbers.mjs';
+import { assertNumbersFromEvidence, assertNumbersByGroupFromEvidence } from './research-numbers.mjs';
 
 export const RESEARCH_VERSION = '3.2.0';
 export const POLICY_VERSION = '2026-11-01';
@@ -201,6 +201,7 @@ export function validateCard(card, source, { spans = [], requireSelection = fals
     const quote = normalized(selected ? selected.text : f.quote || '');
     if (quote.length < 15 || quote.length > (selected ? 300 : 260) || !normalized(source.evidence || source.summary).toLowerCase().includes(quote.toLowerCase())) throw Error('Evidence quote was not found in the collected source');
     assertNumbersFromEvidence(statement, quote);
+    assertNumbersByGroupFromEvidence(statement, quote);
     validateSourceClaimGrounding(statement, quote);
     return { statement, quote, ...(selected ? { evidenceId: selected.id } : {}) };
   });
@@ -395,6 +396,7 @@ export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24
         throw Error('Draft evidence quote no longer matches a selected source span');
       const checked = sentence(fact.statement, 25, 220, 'fact');
       assertNumbersFromEvidence(checked, selected.text, 'Draft numeric claim is absent from its original evidence span');
+      assertNumbersByGroupFromEvidence(checked, selected.text);
       validateSourceClaimGrounding(checked, selected.text);
     }
   }
