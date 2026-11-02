@@ -24,9 +24,16 @@ export class ResearchEngine {
     for (const url of topic.feeds) {
       try {
         const value = await this.feeds.read(url, state.cache);
-        const accepted = value.articles.filter(s => this.config.publishers.some(p => p.hosts.includes(s.host)));
+        const approved = value.articles.filter(article => this.config.publishers.some(p => p.hosts.includes(article.host)));
+        // Never attribute articles to their RSS feed publisher when the article
+        // actually resides under a different approved publisher. Aliased hosts
+        // are allowed only when they map to the same explicit publisher ID.
+        const accepted = approved.filter(article =>
+          article.articlePublisherId === article.publisherId &&
+          publisherId(article.host, this.config.publishers) === article.publisherId);
         articles.push(...accepted);
-        health.push({ url, ...value.diagnostics, mapped: accepted.length, cached: value.cached });
+        health.push({ url, ...value.diagnostics, mapped: accepted.length,
+          publisherMismatch: approved.length - accepted.length, cached: value.cached });
         this.log(topic.id + ': ' + new URL(url).hostname + ' → ' + accepted.length + ' artigos; descartes ' + JSON.stringify(value.diagnostics.rejected));
       } catch (error) {
         health.push({ url, error: error.message }); this.log(topic.id + ': feed indisponível — ' + error.message);
