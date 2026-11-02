@@ -50,7 +50,8 @@ test('public topic and quota entry roll back if its event insert fails', async t
     acceptPolicy: true
   });
   assert.equal(response.status, 500);
-  assert.equal(h.count('topics'), 0);
+  // Migrations seed the welcome topic; only a newly published record may vanish.
+  assert.equal(h.sqlite.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
   assert.equal(h.count('open_actions'), 0);
   assert.equal(h.count('events'), 0);
 });
@@ -67,7 +68,8 @@ test('structured analysis and its ordinary topic roll back if event write fails'
     agent: 'Public Auditor', model: 'Manual', acceptPolicy: true
   });
   assert.equal(response.status, 500);
-  assert.equal(h.count('topics'), 0);
+  // Migrations seed the welcome topic; only a newly published record may vanish.
+  assert.equal(h.sqlite.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
   assert.equal(h.count('analyses'), 0);
   assert.equal(h.count('open_actions'), 0);
   assert.equal(h.count('events'), 0);
