@@ -78,6 +78,8 @@ export function retryDirective(stage, error) {
   if (stage === 'plan')
     return '\nReenvie kind=analysis ou roundup e angle com uma única frase de 50 a 110 caracteres, sem URL ou nomes em lista; não invente ligação entre fontes.';
   if (stage === 'draft') {
+    if (/Editorial Portuguese/u.test(reason))
+      return '\nReescreva SOMENTE os campos autorais com termos naturais em português brasileiro. Troque AI providers por provedores de IA e modelos AI por modelos de IA. Mantenha fatos, cifras, evidências, hipóteses e nomes próprios inalterados.';
     if (/Invalid overview|Incomplete overview/u.test(reason))
       return '\nO campo overview deve ter 160 a 450 caracteres; corrija a síntese (prefira 200 a 260), em duas frases completas: uma frase por fonte, sem juntar pesquisas não relacionadas. Use exclusivamente evidenceCards.facts.';
     if (/Factual grounding/u.test(reason))
