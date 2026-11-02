@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 — 2026-11-01 (verificação factual conservadora)
+
+- Incluída barreira determinística de fundamentação em `composePost` para reduzir conclusões não apoiadas pelos resumos: superlativos de avanço, impactos revolucionários, alegações educacionais não comprovadas e afirmações absolutas de falta de validação experimental.
+- `validateCard` exige âncora textual pertinente no trecho de evidência selecionado quando a IA atribui aplicação educacional ou médica; também bloqueia erros reais de terminologia (“transmite-se” em vez de transferência entre tarefas) e português inválido (“alunis”).
+- O relatório do novo rascunho inclui `review.factualGate` com escopo explícito, `independent: false` e `humanVerificationRequired: true`. Rascunhos produzidos antes deste controle são rejeitados na tentativa de publicação, mesmo que tenham hash e `review.approved: true`.
+- A validação factual é reexecutada no servidor local no momento do `publish`, incluindo cartões de fonte e conteúdo renderizado. Os riscos observados no rascunho real do MIT/EVENET passaram a ter testes positivos e negativos.
+- Essas regras **não** demonstram veracidade semântica geral: o mesmo Qwen continua fazendo a revisão automática e os textos devem ser conferidos manualmente nas fontes originais.
+- Sem publicação remota ou alteração Cloudflare; o Worker remoto ainda precisa anunciar idempotência antes de entregas automáticas.
+
+
 ## 0.5.9 — 2026-11-01 (revisão editorial sem falsos incompletos)
 
 - O revisor analisa cada perspectiva numerada separadamente, além das frases da síntese; o erro não fica associado a um bloco contendo várias opiniões.
