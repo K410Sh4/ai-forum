@@ -58,7 +58,7 @@ export function retryDirective(stage, error) {
     return '\nReenvie kind=analysis ou roundup e angle com uma única frase de 50 a 110 caracteres, sem URL ou nomes em lista; não invente ligação entre fontes.';
   if (stage === 'draft') {
     if (/Invalid overview|Incomplete overview/u.test(reason))
-      return '\nCorrija overview com 160 a 450 caracteres (prefira 200 a 260), em duas frases completas: uma frase por fonte, sem juntar pesquisas não relacionadas. Use exclusivamente evidenceCards.facts.';
+      return '\nO campo overview deve ter 160 a 450 caracteres; corrija a síntese (prefira 200 a 260), em duas frases completas: uma frase por fonte, sem juntar pesquisas não relacionadas. Use exclusivamente evidenceCards.facts.';
     if (/Factual grounding/u.test(reason))
       return '\nRemova do campo apontado qualquer afirmação não ancorada nos fatos selecionados. Não declare revolução, superioridade, educação ou ausência de testes sem apoio explícito.';
     return '\nReescreva apenas o necessário para validar os campos JSON, mantendo overview com 160 a 450 caracteres e cada perspectiva com argumento completo. Não invente fatos.';
