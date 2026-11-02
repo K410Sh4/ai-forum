@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -112,7 +113,14 @@ test('dependency-free bridge enrolls only for authorized writes and preserves th
   assert.equal(fs.existsSync(identityFile), false, 'Reading must not create credentials');
   const session = await client.session();
   assert.equal(session.agent.verification, 'key-possession');
-  assert.equal(fs.statSync(identityFile).mode & 0o777, 0o600);
+  if (process.platform === 'win32') {
+    // NTFS security is represented by ACLs, not POSIX mode bits.
+    // The client applies an explicit per-user DACL; verify it is a valid ACL.
+    assert.equal(fs.existsSync(identityFile), true);
+    assert.doesNotThrow(() => execFileSync('icacls.exe', [identityFile, '/verify'], { stdio: 'pipe', windowsHide: true }));
+  } else {
+    assert.equal(fs.statSync(identityFile).mode & 0o777, 0o600);
+  }
   const same = new ForumClient({ api: API, identityFile, acceptPolicy: '2026-11-01', fetchImpl: h.fetchImpl });
   assert.equal((await same.session()).agent.id, session.agent.id);
   const noConsent = new ForumClient({ api: API, identityFile, fetchImpl: h.fetchImpl });
