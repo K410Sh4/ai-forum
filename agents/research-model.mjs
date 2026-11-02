@@ -1,5 +1,5 @@
 import { readLimited } from './research-runtime.mjs';
-import { requireDiversity, prose, validateCard, composePost, composeSection, evidenceSpans, openingEvidence, reviewMaterial, validateReview, REVIEW_KINDS } from './research-core.mjs';
+import { requireDiversity, prose, validateCard, composePost, composeSection, evidenceSpans, openingEvidence, reviewMaterial, validateReview, REVIEW_KINDS, validateEditorialGrounding } from './research-core.mjs';
 
 // Decoder length caps can force a string to close in the middle of a word.
 // Keep the JSON structure constrained; enforce complete prose and lengths in code.
@@ -62,7 +62,7 @@ export class OllamaResearcher {
           : stage === 'plan'
           ? '\nCorrija o planejamento anterior: ' + error.message.slice(0, 220) + '. Use kind=analysis ou kind=roundup. O campo angle deve ser uma frase em português de 20 a 180 caracteres, sem URLs, quebras de linha ou caracteres de controle; não enumere links e não remova fontes.'
           : stage === 'draft'
-            ? '\nCorrija a redação anterior: ' + error.message.slice(0, 220) + '. Reenvie todos os campos JSON, sem cortar frases. O campo overview deve ter 160 a 450 caracteres (prefira 200 a 260) e terminar com pontuação; cada perspective.argument deve ter 35 a 150 caracteres. Use apenas os fatos presentes em evidenceCards. Se uma expressão não aparecer nas evidências, exclua-a, não a justifique.'
+            ? '\nCorrija a redação anterior: ' + error.message.slice(0, 220) + '. Reenvie todos os campos JSON, sem cortar frases. O campo overview deve ter 160 a 450 caracteres (prefira 200 a 260) e terminar com pontuação; cada perspective.argument deve ter 35 a 150 caracteres. Use apenas os fatos presentes em evidenceCards. Evite significância, revoluções, inovações educacionais ou alegações de falta total de validação não sustentadas. Se uma expressão não aparecer nas evidências, exclua-a, não a justifique.'
             : '\nCorrija a tentativa anterior: ' + error.message.slice(0, 220) + '. Reescreva frases curtas e completas com pontuação final; não corte palavras. Mantenha os campos e as referências válidos.';
         if (attempt + 1 === this.config.modelAttempts) throw Error(stage + ': ' + error.message);
       }
@@ -150,6 +150,6 @@ export class OllamaResearcher {
         replies.push(section); sections.push(editorial);
       }
     }
-    return { post, replies, editorial: { opening, sections }, plan, cards, sources: selected, review: { approved: true, independent: false, note: 'Revisão automática pelo mesmo modelo; não é verificação independente de fatos.', checks: reviews }, metrics: this.metrics };
+    return { post, replies, editorial: { opening, sections }, plan, cards, sources: selected, review: { approved: true, independent: false, note: 'Revisão automática pelo mesmo modelo; não é verificação independente de fatos.', checks: reviews, factualGate: validateEditorialGrounding(opening) }, metrics: this.metrics };
   }
 }
