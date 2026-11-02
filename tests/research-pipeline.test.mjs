@@ -58,7 +58,7 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
         value.perspectives[0].argument = 'As pesquisas produziram contribuições significativas para a tecnologia atual.';
       if (draftIndex < brokenDrafts) value.overview = 'Os relatos apresentam comparações em condições determinadas e destacam limites de generalização. O panorama compara o alcance das evidências disponíveis. Esses進';
       if (draftIndex < shortOverviews) value.overview = 'O relato descreve resultados limitados e recomenda ampliar os testes.';
-      if (draftIndex < urlOverviews) value.overview = 'O modelo encontra detalhes na página https://example.com que precisam ser lidos.';
+      if (draftIndex < urlOverviews && draftIndex >= significanceOverviews) value.overview = 'O modelo encontra detalhes na página https://example.com que precisam ser lidos.';
     } else if (properties.heading) {
       stage = 'section'; assert.equal(properties.paragraphs.type, 'object');
       value = { heading: input.focus, paragraphs: Object.fromEntries(input.evidenceCards.map(c => [c.sourceId, 'O relato descreve uma comparação sob condições determinadas. Essa descrição permite formular questões metodológicas, mas não confirma aplicação em cenários diferentes.'])), limitations: 'As descrições disponíveis não substituem a leitura dos métodos completos.' };
