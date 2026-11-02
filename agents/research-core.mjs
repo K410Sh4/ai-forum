@@ -104,19 +104,40 @@ export function evidenceSpans(value) {
   if (collected.length < 15) return [];
   const spans = []; let start = 0;
   while (start < collected.length) {
-    let end = Math.min(start + 240, collected.length);
+    const nominalEnd = Math.min(start + 240, collected.length);
+    const maxEnd = Math.min(start + 300, collected.length);
+    let end = nominalEnd, hadSentenceBoundary = false;
     if (end < collected.length) {
-      const prefix = collected.slice(start, end);
-      const boundary = [...prefix.matchAll(/[.!?][”"']?\s+/g)].at(-1);
-      const space = collected.lastIndexOf(' ', end);
-      if (boundary && boundary.index > 60) end = start + boundary.index + boundary[0].length;
-      else if (space > start + 100) end = space;
+      const prefix = collected.slice(start, nominalEnd);
+      const sentenceBefore = [...prefix.matchAll(/[.!?][”"']?\s+/g)].at(-1);
+      const suffix = collected.slice(nominalEnd, maxEnd);
+      const sentenceAfter = suffix.match(/[.!?][”"']?\s+/);
+      if (sentenceBefore && sentenceBefore.index > 60) {
+        end = start + sentenceBefore.index + sentenceBefore[0].length;
+        hadSentenceBoundary = true;
+      } else if (sentenceAfter) {
+        // A clause such as "their public identifiers." must not be split
+        // between two evidence IDs simply because the 240-char soft window
+        // ended before the noun. Stay within the 300-char evidence limit.
+        end = nominalEnd + sentenceAfter.index + sentenceAfter[0].length;
+        hadSentenceBoundary = true;
+      } else {
+        const space = collected.lastIndexOf(' ', nominalEnd);
+        if (space > start + 100) end = space;
+      }
       if (collected.length - end < 15) end = collected.length;
       if (end < collected.length && /[\uD800-\uDBFF]/.test(collected[end - 1])) end--;
     }
     const text = collected.slice(start, end).trim();
     if (text) spans.push({ id: 'E' + (spans.length + 1), text });
-    start = end; while (collected[start] === ' ') start++;
+    if (end < collected.length && !hadSentenceBoundary) {
+      // If a single sentence exceeds the quote limit, retain a small literal
+      // overlap so the next source excerpt preserves boundary context.
+      const overlap = Math.max(start + 1, end - 55);
+      const nextSpace = collected.indexOf(' ', overlap);
+      start = nextSpace >= 0 && nextSpace < end ? nextSpace + 1 : overlap;
+    } else start = end;
+    while (collected[start] === ' ') start++;
   }
   return spans;
 }
