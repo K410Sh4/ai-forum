@@ -176,12 +176,38 @@ export function reviewMaterial(message) {
   // to flag 3 unrelated assertions under C2. Review each complete sentence.
   // Preserve all original words and section order; never silence a claim.
   const claims = sections.flatMap(section => {
+    const perspective = /^PERSPECTIVAS PARA DEBATE\n([\s\S]+)$/u.exec(section.trim());
+    if (perspective) {
+      const entries = perspective[1].split(/\n(?=\d+\.\s)/u).map(value => value.trim()).filter(Boolean);
+      return entries.length <= 1 ? [section] : entries.map((entry, index) => (index === 0 ? 'PERSPECTIVAS PARA DEBATE\n' : '') + entry);
+    }
     const match = /^SÍNTESE\n([\s\S]+)$/u.exec(section.trim());
     if (!match) return [section];
     const sentences = match[1].split(/(?<=[.!?])\s+(?=[\p{Lu}\p{N}“"'])/u).map(value => value.trim()).filter(Boolean);
     return sentences.length <= 1 ? [section] : sentences.map((sentence, index) => (index === 0 ? 'SÍNTESE\n' : '') + sentence);
   });
   return [message.title, ...claims].filter(value => typeof value === 'string' && value.trim()).map((value, index) => ({ id: 'C' + (index + 1), text: value.trim() }));
+}
+// When the critic calls a fully punctuated perspective "incomplete" only
+// because it wants more detail, this is an advisory, not a missing sentence.
+// Restrict this narrowly to the generated perspective list; do not reinterpret
+// unsupported claims, genuine truncation, contradictions or other categories.
+function perspectiveIsSyntacticallyComplete(text) {
+  if (!/^(?:PERSPECTIVAS PARA DEBATE\n)?\d+\.\s/u.test(text)) return false;
+  const lines = text.replace(/^PERSPECTIVAS PARA DEBATE\n/u, '').split('\n').filter(Boolean);
+  return lines.every(line => {
+    if (!/^\d+\.\s.+\(Limite: .+\)$/u.test(line)) return false;
+    const argument = line.slice(line.indexOf(': ') + 2, line.lastIndexOf(' (Limite: '));
+    const caveat = line.slice(line.lastIndexOf(' (Limite: ') + 9, -1);
+    return /[.!?][”"']*$/u.test(argument) && /[.!?][”"']*$/u.test(caveat) &&
+      !/[\uFFFD\u2026]/u.test(line) && !/\.{2,}/u.test(line) &&
+      (line.match(/\(/g) || []).length === (line.match(/\)/g) || []).length;
+  });
+}
+function detailOnlyMisclassification(finding, text, reason) {
+  return finding.kind === 'incomplete-text' && perspectiveIsSyntacticallyComplete(text) &&
+    /(?:falta(?:m)?\s+(?:de\s+)?(?:detalhes|detalhamento|contexto)|n[aã]o\s+(?:detalha|explica|descreve)|sem\s+(?:detalhes|contexto))/iu.test(reason) &&
+    !/(?:interrompid|cortad|truncad|palavra\s+incompleta|sem\s+pontua|n[aã]o\s+(?:termina|conclui)|idioma\s+mistur|sem\s+sentido|ileg[ií]vel)/iu.test(reason);
 }
 // Review explanations are local diagnostic metadata, not publication prose.
 // Allow complete critical explanations (including quoted excerpts) up to 500
@@ -193,12 +219,22 @@ export function validateReview(value, material) {
     if (!REVIEW_KINDS.includes(finding?.kind)) throw Error('Unknown review finding kind');
     const selected = material.find(part => part.id === finding.claimId);
     if (!selected) throw Error('Review finding must select an existing claimId from the evaluated text');
-    return { kind: finding.kind, claimId: selected.id, quote: selected.text, reason: prose(finding.reason, 15, 500, 'review reason') };
+    const reason = prose(finding.reason, 15, 500, 'review reason');
+    if (detailOnlyMisclassification(finding, selected.text, reason)) return {
+      kind: 'missing-detail', originalKind: finding.kind, classification: 'complete-perspective-needs-detail',
+      claimId: selected.id, quote: selected.text, reason
+    };
+    return { kind: finding.kind, claimId: selected.id, quote: selected.text, reason };
   });
   const advisory = finding => ['missing-detail', 'style'].includes(finding.kind);
   const issues = findings.filter(finding => !advisory(finding)).map(finding => finding.kind + ' [' + finding.claimId + '] «' + normalized(finding.quote).slice(0, 200) + '»: ' + finding.reason);
   const suggestions = findings.filter(advisory).map(finding => '[' + finding.claimId + '] ' + finding.reason);
-  return { approved: issues.length === 0, issues, suggestions, findings, note: prose(value.note, 10, 500, 'review note') };
+  const reclassified = findings.filter(finding => finding.classification).map(finding => ({
+    claimId: finding.claimId, from: finding.originalKind, to: finding.kind,
+    classification: finding.classification, reason: finding.reason
+  }));
+  return { approved: issues.length === 0, issues, suggestions, findings, reclassified,
+    note: prose(value.note, 10, 500, 'review note') };
 }
 function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
 export function composePost(topic, draft, sources) {
