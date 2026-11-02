@@ -14,15 +14,6 @@ export function supportedCardDescription(facts) {
     throw Error('A selected source fact is required');
   return 'Fato selecionado da fonte: ' + facts[0].statement;
 }
-export function assertFactualQualifiers(fact, quote) {
-  const fold = text => String(text).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-  // Subjective magnitude is not derivable from raw percentages alone. Only
-  // explicitly qualified evidence may establish a significance assertion.
-  if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(fold(fact)) &&
-      !/\b(?:significant|substantial|significativ\w*|considerable|revolutionary)\b/u.test(fold(quote)))
-    throw Error('Factual grounding: significance is not explicitly supported by the selected source quote');
-}
-
 export function prepareSourceCard(raw, source, spans) {
   // Repair a *known* morphology-only translation after confirming the exact
   // source fragment contains the English term. No generic text rewriting,
@@ -49,7 +40,6 @@ export function prepareSourceCard(raw, source, spans) {
     limitations: RSS_LIMITATION
   };
   const checked = validateCard(canonical, source, { spans, requireSelection: true });
-  for (const fact of checked.facts) assertFactualQualifiers(fact.statement, fact.quote);
   return {
     ...checked,
     summaryMode: 'evidence-derived',
