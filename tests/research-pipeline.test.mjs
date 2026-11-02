@@ -404,8 +404,10 @@ test('previous invalid CLR-Bench article is discarded, but only after a valid se
 
 test('a mixed fallback cannot hide an invalid newly generated title', async t => {
   const f = fixture(t, { mixedUncertaintyShort: true, mixedShortUnsafe: 'title' });
+  // The title is validated before overview length; an earlier, more specific
+  // rejection is expected and proves the invalid field was not masked.
   await assert.rejects(f.engine.generate({ auto: false, depth: 'quick' }),
-    /draft: Invalid overview/);
+    /draft: Editorial Portuguese: incorrect article for scientific\/institutional name in title/);
   assert.equal(f.calls.filter(item => item.stage === 'review').length, 0);
   assert.equal(f.writeCalls, 0);
 });
