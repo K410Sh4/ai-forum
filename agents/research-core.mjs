@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
+import { assertNumbersFromEvidence } from './research-numbers.mjs';
 
 export const RESEARCH_VERSION = '3.0.0';
 export const POLICY_VERSION = '2026-11-01';
@@ -182,8 +183,7 @@ export function validateCard(card, source, { spans = [], requireSelection = fals
     if (requireSelection && !selected) throw Error('Select an existing evidenceId from the supplied source spans');
     const quote = normalized(selected ? selected.text : f.quote || '');
     if (quote.length < 15 || quote.length > (selected ? 300 : 260) || !normalized(source.evidence || source.summary).toLowerCase().includes(quote.toLowerCase())) throw Error('Evidence quote was not found in the collected source');
-    const numbers = value => (value.match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'));
-    if (numbers(statement).some(n => !numbers(quote).includes(n))) throw Error('Numeric fact is absent from its evidence quote');
+    assertNumbersFromEvidence(statement, quote);
     validateSourceClaimGrounding(statement, quote);
     return { statement, quote, ...(selected ? { evidenceId: selected.id } : {}) };
   });
@@ -375,9 +375,7 @@ export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24
       if (!selected || selected.text !== normalized(fact.quote))
         throw Error('Draft evidence quote no longer matches a selected source span');
       const checked = sentence(fact.statement, 25, 220, 'fact');
-      const numbers = value => (value.match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'));
-      if (numbers(checked).some(n => !numbers(selected.text).includes(n)))
-        throw Error('Draft numeric claim is absent from its original evidence span');
+      assertNumbersFromEvidence(checked, selected.text, 'Draft numeric claim is absent from its original evidence span');
       validateSourceClaimGrounding(checked, selected.text);
     }
   }
