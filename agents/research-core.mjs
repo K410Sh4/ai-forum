@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export const RESEARCH_VERSION = '2.4.0';
+export const RESEARCH_VERSION = '2.4.1';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
