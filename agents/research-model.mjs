@@ -87,7 +87,7 @@ export class OllamaResearcher {
       return review;
     } catch (error) { entry.status = 'invalid-review'; entry.error = error.message; throw error; }
   }
-  async build(topic, sources, { depth = this.config.depth } = {}) {
+  async build(topic, sources, { depth = this.config.depth, allowDraftFallback = false } = {}) {
     this.metrics = []; this.reviewTrace = []; this.validationTrace = []; this.deadline = this.clock() + 15 * 60000;
     requireDiversity(sources);
     const planSchema = object({ kind: { type: 'string', enum: ['analysis', 'roundup'] }, angle: text(20, 180) });
@@ -133,7 +133,7 @@ export class OllamaResearcher {
         // Only TWO complete, well-formed but short overviews qualify. Never
         // recover URLs, control characters, incomplete sentences, malformed
         // JSON or factual-grounding failures, and never bypass composePost.
-        if (error.message !== 'draft: Invalid overview (length, URL or control character)' ||
+        if (!allowDraftFallback || error.message !== 'draft: Invalid overview (length, URL or control character)' ||
             this.config.modelAttempts < 2) throw error;
         const attempts = this.validationTrace.filter(item => item.stage === 'draft').slice(-this.config.modelAttempts);
         if (attempts.length !== this.config.modelAttempts ||
