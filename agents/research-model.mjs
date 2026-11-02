@@ -1,6 +1,7 @@
 import { readLimited } from './research-runtime.mjs';
 import { prepareSourceCard, compactEvidenceCards, retryDirective } from './research-stages.mjs';
 import { onlyQuestionsBlocked, sourceBoundedQuestions } from './research-questions.mjs';
+import { describeOverviewAttempt, summarizeDraftAttemptFailures } from './research-diagnostics.mjs';
 import { requireDiversity, prose, sentence, validateCard, composePost, composeSection, evidenceSpans, openingEvidence, overviewFromSupportedFacts, reviewMaterial, validateReview, REVIEW_KINDS, MAX_REVIEW_FINDINGS, validateEditorialGrounding } from './research-core.mjs';
 
 // Decoder length caps can force a string to close in the middle of a word.
@@ -56,7 +57,8 @@ export class OllamaResearcher {
         return validate(value);
       } catch (error) {
         if (output) {
-          this.validationTrace.push({ stage, attempt: attempt + 1, error: error.message, output: output.slice(0, 12000) });
+          this.validationTrace.push({ stage, attempt: attempt + 1, error: error.message, output: output.slice(0, 12000),
+            ...(stage === 'draft' ? { overviewDiagnostic: describeOverviewAttempt(output) } : {}) });
           this.validationTrace = this.validationTrace.slice(-8);
         }
         correction = retryDirective(stage, error);
@@ -138,6 +140,12 @@ export class OllamaResearcher {
         const significanceError = 'Factual grounding: unsubstantiated significance in overview; rewrite with precise, source-limited statements';
         const recoverable = [shortOverviewError, significanceError];
         const reason = error.message.startsWith('draft: ') ? error.message.slice(7) : '';
+        if (allowDraftFallback && recoverable.includes(reason)) {
+          const diagnostics = summarizeDraftAttemptFailures(this.validationTrace, this.config.modelAttempts);
+          this.log('Qwen: síntese rejeitada; classes por tentativa: ' +
+            diagnostics.map(entry => entry.attempt + '=' + entry.overview.category +
+              (entry.overview.length === undefined ? '' : ' (' + entry.overview.length + ' caracteres)')).join('; '));
+        }
         if (!allowDraftFallback || !recoverable.includes(reason) || this.config.modelAttempts < 2) throw error;
         const attempts = this.validationTrace.filter(item => item.stage === 'draft').slice(-this.config.modelAttempts);
         if (attempts.length !== this.config.modelAttempts ||
