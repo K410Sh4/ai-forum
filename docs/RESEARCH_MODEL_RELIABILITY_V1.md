@@ -125,3 +125,31 @@ npm.cmd run research:preview -- --topic ia-pesquisa --depth quick
 A opção `--compare-calibrated` compara **strict** contra **calibrated**, alternando a ordem de execução. Não substitui a rodada original `--compare` (compact versus strict). O resultado é experimental e exige conjunto de validação independente antes de adotar o prompt em fluxos de publicação.
 
 **Ainda pendente:** resultados da nova suíte e nova execução do Qwen no equipamento do operador; verificação em ambiente Cloudflare D1 de homologação; checagem humana semântica; PR rascunho não mergeável. Nenhum deploy ou publicação efetuado nesta etapa.
+
+## Auditoria de conteúdo aprovado com ressalvas — 2026-11-02
+
+O operador examinou o rascunho `dec1e2b73cc8229e3b08a822` (SHA-256 `79a02e1795dbf1a43243602340051bb3bfa7cb4d3fe63e13386375547922b20a`), gerado com Qwen2.5-Coder 7B:
+
+- **S1:** `arxiv.org/abs/2610.40758` aborda o CLR-Bench e aprendizado de regras ocultas por agentes; o trecho selecionado é compatível com a descrição limitada do método.
+- **S2:** `nature.com/articles/s42256-026-01323-8` é um artigo defendendo versionamento significativo para supervisão regulatória e reprodutibilidade. **É uma argumentação dos autores**, não um resultado empírico validado por S1.
+- O texto gerado misturou expressões `AI providers`, `modelos AI` e `sistemas AI`, concentrou perguntas em S2 e criou conexão editorial não demonstrada entre temas distintos.
+- **Falha específica de avaliação:** o crítico devolveu `approved:true` com oito findings `missing-detail` contendo exatamente o mesmo motivo, um por `C1..C8`. Como `missing-detail` é advisory, o relatório permitia aprovação mesmo sem revisão substantiva.
+- **Defeito de coleta de evidência:** o item S2 teve a locução `public identifiers` partida entre `E1` e `E2` por limite de caracteres, embora a primeira afirmação factual dependesse do substantivo da segunda citação.
+
+### Correções preventivas adicionadas após o log
+
+1. `validateReview()` não permite que quatro ou mais **claimIds distintos** recebam exatamente a mesma observação advisory: primeiro solicita nova revisão, e, se repetida, falha sem aprovação. Repetições de erros **bloqueantes** continuam bloqueantes. Este é um filtro de qualidade de avaliação, não uma prova semântica.
+2. Campos editoriais gerados em PT-BR rejeitam algumas combinações evidentes de inglês genérico (`AI providers`, `modelos AI`, `sistemas AI`); o modelo é solicitado a corrigi-los e não há edição silenciosa do rascunho aprovado.
+3. A tradução lexical `AI providers` → `provedores de IA` dentro de um fato de fonte só é realizada quando o **trecho literal identificado** contém a expressão inglesa, com registro da normalização e revalidação das referências.
+4. `evidenceSpans()` prioriza fronteiras de frases até 300 caracteres e usa sobreposição literal quando não existe uma fronteira segura, preservando melhor locuções que cruzariam o limite de 240 caracteres.
+5. Prompt de redação foi orientado a separar fontes não relacionadas e construir uma pergunta específica para cada estudo. Isso **não garante** equilíbrio temático nem constitui checagem semântica.
+6. Testes de regressão incluem o padrão de oito críticas repetidas, retry do parecer, bloqueio por português misto, preservação de `public identifiers` e localização lexical condicionada à citação.
+
+**Status atual da auditoria:** os testes do commit anterior `94619f0` passaram (205/206, com 1 ignorado). Estes novos commits **não foram executados na máquina Windows do operador**; apenas partes puras de validação, normalização e segmentação foram exercitadas isoladamente. Exige `npm.cmd run check`, `npm.cmd test` e novo `research:preview` antes de qualquer aceite. O rascunho antigo não deve ser publicado; gere outro após atualizar a branch. O Worker remoto segue com `idempotentWrites:false` no último doctor confirmado.
+
+### Requisitos ainda não resolvidos
+
+- Verificação de relações semânticas completas entre afirmação e texto integral da fonte original.
+- Revisão humana das citações, especialmente quando uma fonte apresenta uma **opinião normativa** e a outra traz um experimento.
+- Conjunto novo e cego de mais de 100 casos, para medir se as heurísticas aumentam falsos bloqueios e se o modelo realmente generaliza.
+- Harmonização do Worker remoto, migrações e política de publicação antes de permitir escrita.
