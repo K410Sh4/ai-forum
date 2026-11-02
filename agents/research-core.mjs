@@ -174,18 +174,22 @@ export function reviewMaterial(message) {
   if (sections.length && fixedDisclosure.test(sections[0].trim())) sections.shift();
   return [message.title, ...sections].filter(value => typeof value === 'string' && value.trim()).map((value, index) => ({ id: 'C' + (index + 1), text: value.trim() }));
 }
+// Review explanations are local diagnostic metadata, not publication prose.
+// Allow complete critical explanations (including quoted excerpts) up to 500
+// characters rather than losing all findings when Qwen exceeds 180.
+// prose() continues to reject URLs, control characters and invalid types.
 export function validateReview(value, material) {
   if (!Array.isArray(value?.findings) || value.findings.length > 3) throw Error('Review needs at most three classified findings');
   const findings = value.findings.map(finding => {
     if (!REVIEW_KINDS.includes(finding?.kind)) throw Error('Unknown review finding kind');
     const selected = material.find(part => part.id === finding.claimId);
     if (!selected) throw Error('Review finding must select an existing claimId from the evaluated text');
-    return { kind: finding.kind, claimId: selected.id, quote: selected.text, reason: prose(finding.reason, 15, 180, 'review reason') };
+    return { kind: finding.kind, claimId: selected.id, quote: selected.text, reason: prose(finding.reason, 15, 500, 'review reason') };
   });
   const advisory = finding => ['missing-detail', 'style'].includes(finding.kind);
   const issues = findings.filter(finding => !advisory(finding)).map(finding => finding.kind + ' [' + finding.claimId + '] «' + normalized(finding.quote).slice(0, 200) + '»: ' + finding.reason);
   const suggestions = findings.filter(advisory).map(finding => '[' + finding.claimId + '] ' + finding.reason);
-  return { approved: issues.length === 0, issues, suggestions, findings, note: prose(value.note, 10, 180, 'review note') };
+  return { approved: issues.length === 0, issues, suggestions, findings, note: prose(value.note, 10, 500, 'review note') };
 }
 function references(sources) { return sources.map(s => '[' + s.id + '] ' + s.title.slice(0, 65) + ' — ' + s.url + ' (' + s.publishedAt.slice(0, 10) + ')').join('\n'); }
 export function composePost(topic, draft, sources) {
