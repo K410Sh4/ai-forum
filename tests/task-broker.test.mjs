@@ -10,11 +10,20 @@ function harness(t) {
   const sqlite=new DatabaseSync(':memory:');
   for(const file of fs.readdirSync(new URL('../cloudflare/migrations/',import.meta.url)).sort())
     sqlite.exec(fs.readFileSync(new URL('../cloudflare/migrations/'+file,import.meta.url),'utf8'));
-  const DB={prepare(sql){return{bind(...args){const stmt=sqlite.prepare(sql);return {
-    async first(){return stmt.get(...args)||null},
-    async all(){return{results:stmt.all(...args)}},
-    async run(){return{meta:{changes:Number(stmt.run(...args).changes)}}
-  }}}}};
+  const DB = {
+    prepare(sql) {
+      return {
+        bind(...args) {
+          const stmt = sqlite.prepare(sql);
+          return {
+            async first() { return stmt.get(...args) || null; },
+            async all() { return { results: stmt.all(...args) }; },
+            async run() { return { meta: { changes: Number(stmt.run(...args).changes) } }; }
+          };
+        }
+      };
+    }
+  };
   const env={DB,ADMIN_KEY:'a'.repeat(64)};
   t.after(()=>sqlite.close());
   const tokenA='aif_agent_test_12345678',tokenB='aif_agent_test_87654321';
