@@ -246,6 +246,7 @@ export function overviewFromSupportedFacts(cards, sourceIds) {
   return sentence(result, 160, 550, 'overview');
 }
 
+export const MAX_REVIEW_FINDINGS = 12;
 export const REVIEW_KINDS = ['unsupported-claim', 'contradiction', 'hypothesis-as-fact', 'false-consensus', 'false-independence', 'incomplete-text', 'missing-detail', 'style'];
 export function reviewMaterial(message) {
   if (typeof message?.content !== 'string') throw Error('Review requires a rendered message');
@@ -300,7 +301,7 @@ function detailOnlyMisclassification(finding, text, reason) {
 // characters rather than losing all findings when Qwen exceeds 180.
 // prose() continues to reject URLs, control characters and invalid types.
 export function validateReview(value, material) {
-  if (!Array.isArray(value?.findings) || value.findings.length > 3) throw Error('Review needs at most three classified findings');
+  if (!Array.isArray(value?.findings) || value.findings.length > MAX_REVIEW_FINDINGS) throw Error('Review exceeds the classified-finding limit');
   const findings = value.findings.map(finding => {
     if (!REVIEW_KINDS.includes(finding?.kind)) throw Error('Unknown review finding kind');
     const selected = material.find(part => part.id === finding.claimId);
