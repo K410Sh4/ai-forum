@@ -1,5 +1,6 @@
 import { readLimited } from './research-runtime.mjs';
 import { prepareSourceCard, compactEvidenceCards, retryDirective } from './research-stages.mjs';
+import { onlyQuestionsBlocked, sourceBoundedQuestions } from './research-questions.mjs';
 import { requireDiversity, prose, sentence, validateCard, composePost, composeSection, evidenceSpans, openingEvidence, overviewFromSupportedFacts, reviewMaterial, validateReview, REVIEW_KINDS, MAX_REVIEW_FINDINGS, validateEditorialGrounding } from './research-core.mjs';
 
 // Decoder length caps can force a string to close in the middle of a word.
@@ -123,7 +124,7 @@ export class OllamaResearcher {
     for (let revision = 0; revision < 2; revision++) {
       const instruction = revision
         ? 'Reescreva o texto inteiro do zero: a versão anterior foi rejeitada por erros editoriais. Em corrections, rejectedText é uma FRASE DA VERSÃO REJEITADA, não um fato, não é evidência e não deve ser copiada. Remova ou reescreva especificamente essa frase com apoio exclusivo de evidenceCards. Evite exageros sem citação literal, incluindo “revolucionar”, “avanços significativos”, “contribuir significativamente” e supostas aplicações educacionais; explicite o que cada fonte apenas relata. Use SOMENTE os fatos textuais de evidenceCards, separando publicadores e relatando limitações sem extrapolar. Exclua afirmações não sustentadas; não invente estudos ou instituições. overview deve conter 160 a 450 caracteres, ser composto por frases completas com pontuação e não terminar com uma oração pendente. Mantenha os demais campos completos. A lista de fontes será inserida pelo programa.'
-        : 'Produza a abertura do debate a partir das notas fornecidas. As afirmações e referências verificadas serão anexadas pelo programa; não gere IDs nem altere essas notas. Faça uma síntese original de 160 a 450 caracteres, com 2 a 3 frases completas, separando os relatos de cada fonte e sem declarar resultados não presentes. Prefira 200 a 260 caracteres no overview. Não repita críticas, não invente conceitos, organizações, aplicações ou números. Evite expressões não comprovadas como “revolucionar”, “avanços significativos”, “contribuir significativamente” e “inovação educacional”; descreva a notícia de bolsas e a pesquisa de LLM separadamente. Chame roundup de panorama. Nomeação para uma bolsa não é um estudo nem prova de avanço técnico. Faça perguntas abertas, não conclusões inventadas.';
+        : 'Produza a abertura do debate a partir das notas fornecidas. As afirmações e referências verificadas serão anexadas pelo programa; não gere IDs nem altere essas notas. Faça uma síntese original de 160 a 450 caracteres, com 2 a 3 frases completas, separando os relatos de cada fonte e sem declarar resultados não presentes. Prefira 200 a 260 caracteres no overview. Não repita críticas, não invente conceitos, organizações, aplicações ou números. Evite expressões não comprovadas como “revolucionar”, “avanços significativos”, “contribuir significativamente” e “inovação educacional”; descreva a notícia de bolsas e a pesquisa de LLM separadamente. Chame roundup de panorama. Nomeação para uma bolsa não é um estudo nem prova de avanço técnico. Faça exatamente duas perguntas abertas, uma sobre cada fonte identificada por evidenceCards.sourceId, sem inventar conceitos ausentes nas evidências. Não formule conclusões como perguntas.';
       try {
         post = await this.ask('draft', draftSchema, { task: instruction, plan, evidenceCards: compactEvidenceCards(cards), corrections: correctionHints }, value => { opening = { ...value, ...supported }; return composePost(topic, opening, selected); });
       } catch (error) {
@@ -157,7 +158,23 @@ export class OllamaResearcher {
       if (review.approved) break;
       issues = review.issues;
       correctionHints = correctionCodes(review);
-      if (revision === 1) throw Error('Editorial review rejected the opening: ' + issues.join('; '));
+      if (revision === 1) {
+        // A second failed revision normally blocks. If the ONLY blocking
+        // material is the question section, remove model-invented question
+        // concepts and regenerate two source-bounded prompts without calling
+        // the writer again. Do not bypass the normal factual and editorial
+        // gates: the repaired post must receive a new complete model review.
+        if (onlyQuestionsBlocked(review)) {
+          opening = { ...opening, questions: sourceBoundedQuestions(selected), questionsMode: 'source-bounded-repair' };
+          post = composePost(topic, opening, selected);
+          this.log('Qwen: reparo conservador das perguntas, vinculado às fontes; nova revisão obrigatória.');
+          const repaired = await this.review(post, cards, plan.angle);
+          reviews.push(repaired);
+          if (repaired.approved) break;
+          throw Error('Editorial review rejected source-bounded questions: ' + repaired.issues.join('; '));
+        }
+        throw Error('Editorial review rejected the opening: ' + issues.join('; '));
+      }
     }
     const replies = [], sections = [];
     if (depth === 'deep') {
