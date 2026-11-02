@@ -20,17 +20,26 @@ export function prepareSourceCard(raw, source, spans) {
   // numeric inference, or fabricated evidence is permitted.
   const changes = [];
   const facts = Array.isArray(raw?.facts) ? raw.facts.map((fact, index) => {
-    if (typeof fact?.statement !== 'string' || !BAD_ALUNIS.test(fact.statement)) {
-      BAD_ALUNIS.lastIndex = 0;
-      return fact;
+    if (typeof fact?.statement !== 'string') return fact;
+    const quote = spans.find(span => span.id === fact.evidenceId)?.text || '';
+    let statement = fact.statement;
+    // Only correct known lexical translations when the ORIGINAL, literal
+    // evidence contains the corresponding English term. Never rewrite an
+    // arbitrary factual claim, number or evidenceId.
+    if (BAD_ALUNIS.test(statement) && HAS_ALUMNI.test(quote)) {
+      statement = statement.replace(BAD_ALUNIS, 'ex-alunos');
+      changes.push({ field: 'facts[' + index + '].statement', rule: 'alumni-to-ex-alunos',
+        original: fact.statement, corrected: statement, evidenceId: fact.evidenceId });
     }
     BAD_ALUNIS.lastIndex = 0;
-    const quote = spans.find(span => span.id === fact.evidenceId)?.text || '';
-    if (!HAS_ALUMNI.test(quote)) return fact;
-    const statement = fact.statement.replace(BAD_ALUNIS, 'ex-alunos');
-    changes.push({ field: 'facts[' + index + '].statement', rule: 'alumni-to-ex-alunos',
-      original: fact.statement, corrected: statement, evidenceId: fact.evidenceId });
-    return { ...fact, statement };
+    if (/\b(?:artificial intelligence\s*\(AI\)|AI)\s+providers\b/iu.test(quote) &&
+        /\bAI providers\b/iu.test(statement)) {
+      const before = statement;
+      statement = statement.replace(/\bAI providers\b/giu, 'provedores de IA');
+      changes.push({ field: 'facts[' + index + '].statement', rule: 'ai-providers-to-provedores-de-ia',
+        original: before, corrected: statement, evidenceId: fact.evidenceId });
+    }
+    return statement === fact.statement ? fact : { ...fact, statement };
   }) : raw?.facts;
   // Reconstruct canonical, source-limited notes from the validated fact.
   // Drop model-written summary/limitations: they have no evidence IDs and
