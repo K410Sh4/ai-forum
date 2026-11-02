@@ -73,6 +73,6 @@ test('grounded descriptions remain publishable candidates but are explicitly not
     humanVerificationRequired: true
   });
   const post = composePost({ label: 'Inteligência artificial e pesquisa em modelos', tag: 'ia' }, opening(), articles);
-  assert.match(post.content, /Bolsas de pesquisa/);
+  assert.match(post.content, /bolsas de investigação/);
   assert.match(post.content, /FONTES CONSULTADAS/);
 });
