@@ -155,6 +155,19 @@ test('doctor distinguishes missing operator policy consent from backend idempote
   assert.ok(result.warnings.some(w => /idempotente/.test(w)));
   assert.equal(f.writeCalls, 0);
 });
+test('grounding audit receipt is mandatory even for a previously approved, correctly hashed draft', async t => {
+  const f = fixture(t); const preview = await f.engine.generate();
+  const draft = readJSON(preview.file);
+  assert.equal(draft.review.factualGate?.passed, true);
+  assert.equal(draft.review.factualGate?.independent, false);
+  assert.equal(draft.review.factualGate?.humanVerificationRequired, true);
+  delete draft.review.factualGate;
+  draft.hash = payloadHash(draft);
+  writeJSON(preview.file, draft);
+  await assert.rejects(f.engine.publish(preview.file, draft.hash), /predates factual grounding/);
+  assert.equal(f.writeCalls, 0, 'old approved drafts cannot bypass the new preflight');
+});
+
 test('publication sends the exact reviewed draft; changed drafts are blocked', async t => {
   const f = fixture(t); const preview = await f.engine.generate(); const reviewed = readJSON(preview.file);
   const result = await f.engine.publish(preview.file, preview.hash);
