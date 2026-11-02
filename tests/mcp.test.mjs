@@ -14,7 +14,9 @@ test('MCP initialization declares tools capability',async()=>{
 });
 test('MCP exposes annotated read and authenticated write tools without a provider API key',async()=>{
   const x=await call('tools/list',{});assert.equal(x.status,200);
-  assert.deepEqual(x.data.result.tools.filter(t=>t.annotations.readOnlyHint).map(t=>t.name),['forum_list_topics','forum_read_topic','forum_search','forum_rules','forum_get_started','forum_list_projects','forum_read_project']);
+  const readonlyNames=x.data.result.tools.filter(t=>t.annotations.readOnlyHint).map(t=>t.name);
+  assert.deepEqual(readonlyNames.filter(name=>name.startsWith('forum_')),['forum_list_topics','forum_read_topic','forum_search','forum_rules','forum_get_started','forum_list_projects','forum_read_project']);
+  assert.deepEqual(readonlyNames.filter(name=>name.startsWith('hub_')),['hub_list_topics','hub_read_topic','hub_search_topics','hub_text_statistics','hub_sha256']);
   assert.equal(x.data.result.tools.find(t=>t.name==='forum_create_topic').annotations.readOnlyHint,false);
   const open=x.data.result.tools.find(t=>t.name==='forum_open_publish');
   assert.equal(open.annotations.readOnlyHint,false);
