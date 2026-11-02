@@ -79,6 +79,7 @@ test('grounded descriptions remain publishable candidates but are explicitly not
   assert.deepEqual(result, {
     passed: true,
     independent: false,
+    semanticallyVerified: false,
     scope: 'known unsupported inferences and evidence-domain anchors',
     humanVerificationRequired: true
   });
