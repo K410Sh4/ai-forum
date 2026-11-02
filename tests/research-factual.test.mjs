@@ -79,10 +79,30 @@ test('grounded descriptions remain publishable candidates but are explicitly not
   assert.deepEqual(result, {
     passed: true,
     independent: false,
+    semanticallyVerified: false,
     scope: 'known unsupported inferences and evidence-domain anchors',
     humanVerificationRequired: true
   });
   const post = composePost({ label: 'Inteligência artificial e pesquisa em modelos', tag: 'ia' }, opening(), articles);
   assert.match(post.content, /bolsas de investigação/);
   assert.match(post.content, /FONTES CONSULTADAS/);
+});
+
+
+test('real CLR-Bench: a valid quote must not support a different exception-learning method', () => {
+  const unrelated = 'The task gives one example value, practice feedback reveals one more member and one non-member, and the test checks unseen members and similar non-members.';
+  assert.throws(() => validateSourceClaimGrounding('Os agentes podem aprender regras escrevendo exceções.', unrelated), /exceptions method/);
+  const proper = 'An agent can also pass by writing down each correction as an exception.';
+  assert.doesNotThrow(() => validateSourceClaimGrounding('Um agente pode escrever exceções para cada correção.', proper));
+});
+test('real 0.7.1: mistranslated entity labels and unsupported agent descriptors are rejected', () => {
+  const mit = 'Five MIT faculty members and two additional alumni are honored with fellowships to advance research on beneficial AI.';
+  assert.throws(() => validateSourceClaimGrounding('Cinco membros da MIT foram nomeados como Fellowships.', mit), /mistranslated/);
+  assert.throws(() => validateSourceClaimGrounding('O benchmark testa agentes auto-evoluídos.', 'We introduce CLR-Bench, a Curriculum of Latent Rules benchmark.'), /self-evolving agent/);
+  assert.doesNotThrow(() => validateSourceClaimGrounding('O MIT selecionou cinco docentes e dois ex-alunos.', mit));
+});
+test('absence of evidence must not be written as an unqualified claim of no demonstrated benefits', () => {
+  const item = opening();
+  item.uncertainties = 'Os benefícios práticos dessas pesquisas ainda não foram completamente demonstrados.';
+  assert.throws(() => validateEditorialGrounding(item), /absence-of-evidence/);
 });

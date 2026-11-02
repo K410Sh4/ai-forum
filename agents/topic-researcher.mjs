@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createInterface } from 'node:readline/promises';
 import { ForumClient } from './forum-client.mjs';
 import { ResearchStore, FeedReader, readJSON, validateConfig } from './research-runtime.mjs';
 import { OllamaResearcher } from './research-model.mjs';
@@ -27,8 +28,8 @@ export function parseArgs(argv) {
     else positional.push(arg);
   }
   options.command = positional[0] || 'preview'; options.file = positional[1];
-  const needsFile = ['publish', 'cancel'].includes(options.command);
-  if (!['preview', 'publish', 'auto', 'daemon', 'doctor', 'auth', 'status', 'reconcile', 'cancel'].includes(options.command) || positional.length > (needsFile ? 2 : 1)) throw Error('Unknown command or extra arguments; use --help');
+  const needsFile = ['approve', 'publish', 'cancel'].includes(options.command);
+  if (!['preview', 'approve', 'publish', 'auto', 'daemon', 'doctor', 'auth', 'status', 'reconcile', 'cancel'].includes(options.command) || positional.length > (needsFile ? 2 : 1)) throw Error('Unknown command or extra arguments; use --help');
   if (needsFile && (!options.file || !/^[a-f0-9]{64}$/.test(options.hash || ''))) throw Error('Usage: ' + options.command + ' DRAFT.json --hash SHA256');
   if ((options.hash && !needsFile) || (options.depth && !['preview', 'auto', 'daemon'].includes(options.command)) || (options.topic && !['preview', 'auto', 'daemon', 'reconcile'].includes(options.command))) throw Error('Option does not apply to this command');
   if (options.depth && !['quick', 'balanced', 'deep'].includes(options.depth)) throw Error('depth must be quick, balanced or deep');
@@ -37,9 +38,11 @@ export function parseArgs(argv) {
 export async function main(argv = process.argv.slice(2), env = process.env) {
   const options = parseArgs(argv);
   if (options.help) {
-    console.log('AI Forum Research Publisher 2\npreview [--topic ID] [--depth quick|balanced|deep]\npublish DRAFT.json --hash SHA256\ncancel DRAFT.json --hash SHA256\nauto | daemon | doctor | auth | status | reconcile [--topic REMOTE_ID]\nOptions: --config FILE --state FILE --draft-dir DIR --json\nDefault: preview. Writes require explicit FORUM_ACCEPT_POLICY acceptance.');
+    console.log('AI Forum Research Publisher 3\npreview [--topic ID] [--depth quick|balanced|deep]\napprove DRAFT.json --hash SHA256 (interactive local attestation)\npublish DRAFT.json --hash SHA256\ncancel DRAFT.json --hash SHA256\ndoctor | auth | status | reconcile [--topic REMOTE_ID]\n(auto/daemon deliberately disabled)\nOptions: --config FILE --state FILE --draft-dir DIR --json\nDefault: preview. Writes require explicit FORUM_ACCEPT_POLICY acceptance.');
     return;
   }
+  if (['auto', 'daemon'].includes(options.command))
+    throw Error('Unattended publication disabled until independent semantic validation and operator approval are implemented. Use preview, approve, publish.');
   const runtime = runtimeInfo();
   if (!runtime.compatible) {
     const message = 'Node detectado: ' + runtime.node + ' (' + runtime.executable + '). Requer Node.js 22 ou superior' + (runtime.missingCapabilities.length ? '; recursos ausentes: ' + runtime.missingCapabilities.join(', ') : '') + '. Instale uma versão LTS em https://nodejs.org/en/download e abra um novo terminal.';
@@ -80,6 +83,24 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
       try {
         let result;
         if (options.command === 'doctor') result = { ...await engine.doctor(), runtime };
+        else if (options.command === 'approve') {
+          if (!process.stdin.isTTY || !process.stdout.isTTY)
+            throw Error('Approval requires an interactive terminal (TTY); scripted approvals are refused');
+          // The operator must inspect the source and exact JSON before attesting.
+          const draft = readJSON(path.resolve(options.file), null);
+          if (!draft || draft.hash !== options.hash)
+            throw Error('The displayed draft/hash must match the file to approve');
+          console.log('REVISÃO HUMANA LOCAL: ' + draft.id + '\nTítulo: ' + draft.post?.title +
+            '\nFonte(s): ' + draft.sources.map(s => s.url).join(' | ') +
+            '\nA aprovação é uma declaração do operador, não uma garantia de verificação independente.');
+          const prompt = 'Digite APROVAR ' + options.hash.slice(0, 12) + ' após conferir as fontes e o texto: ';
+          const ui = createInterface({ input: process.stdin, output: process.stdout });
+          let response;
+          try { response = await ui.question(prompt); } finally { ui.close(); }
+          if (response.trim() !== 'APROVAR ' + options.hash.slice(0, 12))
+            throw Error('Approval cancelled; no receipt was stored');
+          result = await engine.approve(path.resolve(options.file), options.hash, { confirmed: true });
+        }
         else if (options.command === 'publish') result = await engine.publish(path.resolve(options.file), options.hash);
         else if (options.command === 'cancel') result = await engine.cancel(path.resolve(options.file), options.hash);
         else if (options.command === 'reconcile') result = await engine.reconcile({ topicId: options.topic });

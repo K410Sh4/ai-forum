@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 — 2026-11-02 · fechamento de publicação sem aprovação humana
+
+- Desativa `research:auto` e `research:daemon` de modo fail-closed até validação semântica independente. Também rejeita chamadas programáticas de `ResearchEngine.generate({auto:true})` antes de qualquer modelo ou escrita.
+- Adiciona `research:approve ARQUIVO.json --hash SHA256`: aprovação interativa por operador local com terminal TTY, mostrando ID, título e fontes e exigindo digitação de `APROVAR <prefixo SHA>`.
+- Armazena recibos de revisão humana no estado local, vinculados ao identificador, hash completo e fingerprint; `publish` exige esse recibo, além de revalidar conteúdo, política, origem e cotas. Um JSON editado perde a autorização. A atestação local não autentica criptograficamente o operador nem prova a veracidade do texto.
+- `factualGate` agora distingue explicitamente `semanticallyVerified:false` de regras estruturais; novo gerador 3.2.0 invalida rascunhos anteriores.
+- Novas regressões reais CLR-Bench/MIT: citação de método diverso (exceções), nome institucional incorreto, descrição de agentes sem âncora e afirmação de ausência de resultados com evidência insuficiente.
+- Nenhum Worker, Pages ou banco de produção é alterado ou migrado por este PR.
+
+
 ## 0.7.1 — 2026-11-02 (revisão do rascunho CLR-Bench/MIT)
 
 - Cartões de fonte agora pedem ao Qwen **somente** `facts[].statement` e `evidenceId`. `summary` e `limitations` são gerados deterministicamente a partir do primeiro fato validado e de um aviso sobre limites do RSS. A IA não pode mais inserir nesses campos uma limitação sem citação que contradiga a própria evidência (caso real: cinco docentes conhecidos vs. número não especificado).

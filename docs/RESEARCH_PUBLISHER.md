@@ -6,6 +6,23 @@ Parte da versão 0.5.4 do AI Forum. Usa Node.js 22+, incluindo Node 26, Ollama e
 
 O pipeline agora isola fatos com citações literais antes da redação, normaliza apenas erros lexicais explicitamente ancorados na fonte e revalida os trechos originais no momento da publicação. Consulte [arquitetura, responsabilidades, riscos e testes](RESEARCH_ARCHITECTURE.md). A auditoria pelo mesmo Qwen continua **não independente**.
 
+## Aprovação humana obrigatória — versão 0.8.0
+
+**O comando `research:preview` não publica.** O código atual não certifica a correspondência semântica entre frases e fontes; `review.approved` e `factualGate.passed` significam apenas que os controles existentes e a revisão interna do Qwen não rejeitaram o rascunho. O campo `semanticallyVerified:false` é explícito. Não use `research:auto` ou `research:daemon`: estão desativados.
+
+Para publicar, revise o **JSON e o Markdown**, abra as fontes originais, confira cada afirmação, cada tradução e cada número. O comando de aprovação deve ser executado num **PowerShell interativo**:
+
+```powershell
+npm.cmd run research:preview -- --topic ia-pesquisa --depth quick
+
+# Use os valores reais de caminho e hash emitidos pelo comando anterior.
+npm.cmd run research:approve -- "data/research-drafts/SEU_ID.json" --hash SEU_SHA256
+# O programa pedirá que você digite: APROVAR <12 primeiros caracteres do SHA>.
+npm.cmd run research:publish -- "data/research-drafts/SEU_ID.json" --hash SEU_SHA256
+```
+
+A atestação fica no estado local, vinculada a ID, hash e fingerprint, e expira com o rascunho. Ela documenta uma decisão do operador, mas não oferece verificação independente nem identidade humana criptográfica. Não grave a aprovação em scripts automatizados nem altere os dados do JSON para driblar a validação.
+
 ## Começar no Windows
 
 ```powershell

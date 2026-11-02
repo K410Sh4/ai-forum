@@ -62,6 +62,9 @@ export class ResearchEngine {
     return file;
   }
   async generate({ auto = false, topicId, depth = this.config.depth } = {}) {
+    // There is no independent semantic verifier. Human approval is mandatory;
+    // never generate-and-publish from an unattended process.
+    if (auto) throw Error('Unattended research publishing is disabled; use preview, approve, then publish');
     if (!['quick', 'balanced', 'deep'].includes(depth)) throw Error('Unknown research depth');
     return this.locked(async state => {
       if (state.pending) {
@@ -94,7 +97,6 @@ export class ResearchEngine {
           fs.writeFileSync(path.join(this.draftDir, id + '.md'), '# ' + draft.post.title + '\n\n' + messages.map(m => m.content).join('\n\n---\n\n') + '\n\nSHA-256 do rascunho: `' + draft.hash + '`\n', { mode: 0o600, flag: 'wx' });
           run.status = 'draft'; run.topicId = topic.id; run.file = file; run.hash = draft.hash; run.metrics = built.metrics;
           this.store.save(state);
-          if (auto) return this.publishInState(state, file, draft.hash);
           return { status: 'draft', file, markdown: file.replace(/\.json$/, '.md'), hash: draft.hash, messages: messages.length, metrics: built.metrics };
         } catch (error) {
           // Publication failures must retain their pending journal and stop this cycle.
@@ -113,12 +115,40 @@ export class ResearchEngine {
       return { status: 'no-new-sources', message: 'Nenhum tema elegível com fontes novas suficientes; nenhuma publicação realizada.' };
     });
   }
+  async approve(file, expectedHash, { confirmed = false } = {}) {
+    if (confirmed !== true) throw Error('Approval requires explicit local operator confirmation');
+    return this.locked(state => {
+      const draft = readJSON(file, null);
+      if (!expectedHash || draft?.hash !== expectedHash)
+        throw Error('Supply --hash for the exact draft reviewed by the operator');
+      validateDraft(draft, { api: this.client.api, clock: this.clock(),
+        maxAgeHours: this.config.maxDraftAgeHours, maxSourceAgeDays: this.config.maxSourceAgeDays });
+      if (state.pending && (state.pending.draftId !== draft.id || state.pending.hash !== expectedHash))
+        throw Error('Cannot approve a different draft during uncertain publication');
+      state.approvals ||= [];
+      const receipt = { draftId: draft.id, hash: expectedHash,
+        sourceFingerprint: draft.fingerprint, approvedAt: new Date(this.clock()).toISOString(),
+        method: 'local-interactive-operator-attestation' };
+      state.approvals = state.approvals.filter(item => item.draftId !== draft.id);
+      state.approvals.push(receipt);
+      return { status: 'human-approved', draftId: draft.id, hash: expectedHash,
+        method: receipt.method, note: 'Recorded local operator attestation; source accuracy was not independently certified' };
+    });
+  }
   async publish(file, expectedHash) { return this.locked(state => this.publishInState(state, file, expectedHash)); }
   async publishInState(state, file, expectedHash) {
     if (this.signal?.aborted) throw Error('Research interrupted');
     const draft = readJSON(file, null);
     if (!expectedHash || draft?.hash !== expectedHash) throw Error('Supply --hash with the SHA-256 of the exact reviewed JSON draft');
     validateDraft(draft, { api: this.client.api, clock: this.clock(), maxAgeHours: this.config.maxDraftAgeHours, maxSourceAgeDays: this.config.maxSourceAgeDays });
+    // Hash validation alone means nothing about human inspection. Require an
+    // independent, intentional approval action recorded in the local state.
+    if (!(state.approvals || []).some(item => item.draftId === draft.id &&
+        item.hash === expectedHash && item.sourceFingerprint === draft.fingerprint &&
+        item.method === 'local-interactive-operator-attestation')) {
+      throw Error('Human approval missing for this exact draft/hash; run research:approve first');
+    }
+
     if (!this.config.topics.some(t => t.id === draft.theme.id)) throw Error('Draft theme is not configured');
     for (const source of draft.sources) if (source.publisherId !== publisherId(publicURL(source.feedUrl).hostname, this.config.publishers) || !this.config.publishers.some(p => p.id === source.publisherId)) throw Error('Draft publisher mapping changed; regenerate the draft');
     const policy = await this.client.request('/api/agent-access/policy');

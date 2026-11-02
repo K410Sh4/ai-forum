@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { assertNumbersFromEvidence } from './research-numbers.mjs';
 
-export const RESEARCH_VERSION = '3.1.0';
+export const RESEARCH_VERSION = '3.2.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -137,6 +137,18 @@ export function validateSourceClaimGrounding(statement, quote) {
       throw Error('Factual grounding: ' + domain.label + ' claim lacks a matching term in the selected evidence quote');
     }
   }
+  // Explicit lexical anchors catch a recurrent error where a real evidence
+  // span was linked to a DIFFERENT method or characterization.
+  const technicalAnchors = [
+    { claim: /\bexcec(?:ao|oes)\b/u, evidence: /\bexceptions?\b/u, label: 'exceptions method' },
+    { claim: /\bauto[- ]?evoluid[oa]s?\b/u, evidence: /\b(?:self[- ]evolv\w*|self[- ]improv\w*|evolving agents?)\b/u, label: 'self-evolving agent' }
+  ];
+  for (const anchor of technicalAnchors) {
+    if (anchor.claim.test(claim) && !anchor.evidence.test(evidence))
+      throw Error('Factual grounding: ' + anchor.label + ' is absent from selected source quote');
+  }
+  if (/\b(?:curso oculto de regras|nomead\w* como fellowships|(?:da|pela) mit)\b/u.test(claim))
+    throw Error('Factual grounding: mistranslated scientific term or institutional name');
   if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(claim) &&
       !/\b(?:significan\w*|substantial\w*|significativ\w*|considerab\w*|revolutionary)\b/u.test(evidence))
     throw Error('Factual grounding: significance is not explicitly supported by the selected source quote');
@@ -148,7 +160,8 @@ const highRiskClaims = [
   { pattern: /\b(?:revolucion\w*|transformador\w*|transformar\s+(?:radicalmente|completamente))\b/u, reason: 'speculative impact' },
   { pattern: /\binovacao\s+educacional\b/u, reason: 'educational leap' },
   { pattern: /\b(?:eficacia|desempenho|aplicacao|modelo)\b.{0,120}\b(?:ainda\s+(?:precisa|necessita)\s+(?:ser\s+)?validad\w*|nao\s+(?:foi|esta|esta\s+sendo)\s+validad\w*)\b/u, reason: 'unqualified lack-of-validation claim' },
-  { pattern: /\b(?:nao\s+(?:foi|esta)\s+validad\w*|ainda\s+nao\s+foi\s+(?:testad|avaliad)\w*)\b/u, reason: 'unqualified lack-of-validation claim' }
+  { pattern: /\b(?:nao\s+(?:foi|esta)\s+validad\w*|ainda\s+nao\s+foi\s+(?:testad|avaliad)\w*)\b/u, reason: 'unqualified lack-of-validation claim' },
+  { pattern: /\b(?:ainda\s+nao\s+(?:foi|foram|esta|estao)\s+(?:completamente\s+)?(?:comprovad|demonstrad|verificad)\w*|ainda\s+nao\s+foi\s+completamente\s+comprovad\w*)\b/u, reason: 'unqualified absence-of-evidence claim' }
 ];
 export function validateEditorialGrounding(opening) {
   const fields = [
@@ -168,7 +181,7 @@ export function validateEditorialGrounding(opening) {
     if (/\balunis\b/u.test(text)) throw Error('Factual grounding: invalid Portuguese inflection in ' + field);
     if (/\b(?:a|uma|o)\s+benefica\b/u.test(text)) throw Error('Factual grounding: malformed use of benéfica in ' + field);
   }
-  return { passed: true, independent: false, scope: 'known unsupported inferences and evidence-domain anchors', humanVerificationRequired: true };
+  return { passed: true, independent: false, semanticallyVerified: false, scope: 'known unsupported inferences and evidence-domain anchors', humanVerificationRequired: true };
 }
 
 export function validateCard(card, source, { spans = [], requireSelection = false } = {}) {
