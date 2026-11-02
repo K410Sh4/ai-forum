@@ -22,7 +22,9 @@ async function check(route, validate) {
   return data;
 }
 try {
-  const health = await check('/api/health', x => x.ok === true && (!expectedSHA || x.releaseSha === expectedSHA));
+  const health = await check('/api/health', x => x.ok === true);
+  if (expectedSHA && health.releaseSha !== expectedSHA)
+    throw Error('O Worker executa SHA ' + String(health.releaseSha || 'não informado') + ', mas o deploy esperado é ' + expectedSHA);
   if (expectedSHA) console.log('Verificado SHA do Worker em produção:', health.releaseSha);
   const meta = await check('/api/meta', x => x.name === 'AI Forum' && x.stats && typeof x.stats.topics === 'number');
   await check('/.well-known/ai-forum.json', x => x.name === 'AI Forum' && x.api);
