@@ -148,13 +148,24 @@ export class OllamaResearcher {
         }
         if (!allowDraftFallback || !recoverable.includes(reason) || this.config.modelAttempts < 2) throw error;
         const attempts = this.validationTrace.filter(item => item.stage === 'draft').slice(-this.config.modelAttempts);
-        if (attempts.length !== this.config.modelAttempts ||
-            attempts.some(item => item.error !== reason)) throw error;
+        if (attempts.length !== this.config.modelAttempts) throw error;
+        const matchingFailures = attempts.every(item => item.error === reason);
+        // Observed Qwen incident 2026-11-02: attempt 1 had a malformed
+        // "benéfica" phrase in uncertainties, which the model corrected in
+        // attempt 2, but then generated a complete 135-character overview.
+        // Only that explicitly recognized sequence can use the LAST draft's
+        // other fields. Revalidate those fields from scratch in composePost().
+        const correctedUncertaintyThenShort = reason === shortOverviewError &&
+          attempts.length === 2 &&
+          attempts[0].error === 'Factual grounding: malformed use of benéfica in uncertainties' &&
+          attempts[1].error === shortOverviewError;
+        if (!matchingFailures && !correctedUncertaintyThenShort) throw error;
         let candidate;
         try {
           const outputs = attempts.map(item => JSON.parse(item.output));
           if (reason === shortOverviewError)
-            for (const value of outputs) sentence(value.overview, 50, 159, 'short overview');
+            for (const value of (correctedUncertaintyThenShort ? outputs.slice(-1) : outputs))
+              sentence(value.overview, 50, 159, 'short overview');
           else
             // A significant-impact claim must be present in each rejected
             // overview. Never turn a different rejected field into an accepted
@@ -167,9 +178,11 @@ export class OllamaResearcher {
           opening = {
             ...outputs.at(-1), ...supported,
             overview: overviewFromSupportedFacts(cards, supported.sourceIds),
-            overviewMode: reason === shortOverviewError
-              ? 'reviewed-source-facts-fallback'
-              : 'rejected-significance-preview-fallback'
+            overviewMode: correctedUncertaintyThenShort
+              ? 'corrected-uncertainty-short-overview-preview-fallback'
+              : reason === shortOverviewError
+                ? 'reviewed-source-facts-fallback'
+                : 'rejected-significance-preview-fallback'
           };
           candidate = composePost(topic, opening, selected);
         } catch {
@@ -178,7 +191,9 @@ export class OllamaResearcher {
           throw error;
         }
         post = candidate;
-        this.log('Qwen: duas sínteses rejeitadas (' + (reason === shortOverviewError ? 'curtas' : 'impacto não comprovado') +
+        this.log('Qwen: duas tentativas rejeitadas (' +
+          (correctedUncertaintyThenShort ? 'incerteza corrigida, depois síntese curta' :
+            reason === shortOverviewError ? 'sínteses curtas' : 'impacto não comprovado') +
           '); usando somente fatos vinculados às fontes. Revisão editorial integral permanece obrigatória.');
       }
       const review = await this.review(post, cards, plan.angle); reviews.push(review);
