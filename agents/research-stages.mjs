@@ -5,6 +5,24 @@ import { validateCard } from './research-core.mjs';
 const HAS_ALUMNI = /\balumni\b/iu;
 const BAD_ALUNIS = /\balunis\b/giu;
 
+// The source stage is only authorized to select facts and evidence IDs.
+// Descriptive source summaries and limitations are generated deterministically
+// and labeled as RSS-scope disclaimers; they are not model factual assertions.
+export const RSS_LIMITATION = 'O trecho disponível do RSS é limitado e não substitui a leitura do documento original.';
+export function supportedCardDescription(facts) {
+  if (!Array.isArray(facts) || !facts[0] || typeof facts[0].statement !== 'string')
+    throw Error('A selected source fact is required');
+  return 'Fato selecionado da fonte: ' + facts[0].statement;
+}
+export function assertFactualQualifiers(fact, quote) {
+  const fold = text => String(text).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  // Subjective magnitude is not derivable from raw percentages alone. Only
+  // explicitly qualified evidence may establish a significance assertion.
+  if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(fold(fact)) &&
+      !/\b(?:significant|substantial|significativ\w*|considerable|revolutionary)\b/u.test(fold(quote)))
+    throw Error('Factual grounding: significance is not explicitly supported by the selected source quote');
+}
+
 export function prepareSourceCard(raw, source, spans) {
   // Repair a *known* morphology-only translation after confirming the exact
   // source fragment contains the English term. No generic text rewriting,
@@ -23,10 +41,21 @@ export function prepareSourceCard(raw, source, spans) {
       original: fact.statement, corrected: statement, evidenceId: fact.evidenceId });
     return { ...fact, statement };
   }) : raw?.facts;
-  // The core validator still checks all fields, original quote provenance,
-  // evidenceId, numbers, complete sentences and unsupported domains.
-  const checked = validateCard({ ...raw, facts }, source, { spans, requireSelection: true });
-  return changes.length ? { ...checked, normalizations: changes } : checked;
+  // Reconstruct canonical, source-limited notes from the validated fact.
+  // Drop model-written summary/limitations: they have no evidence IDs and
+  // caused the 2026-11-02 contradiction ("five faculty" vs "number unknown").
+  const canonical = { facts,
+    summary: supportedCardDescription(facts),
+    limitations: RSS_LIMITATION
+  };
+  const checked = validateCard(canonical, source, { spans, requireSelection: true });
+  for (const fact of checked.facts) assertFactualQualifiers(fact.statement, fact.quote);
+  return {
+    ...checked,
+    summaryMode: 'evidence-derived',
+    limitationsMode: 'rss-scope',
+    ...(changes.length ? { normalizations: changes } : {})
+  };
 }
 
 export function compactEvidenceCards(cards) {
