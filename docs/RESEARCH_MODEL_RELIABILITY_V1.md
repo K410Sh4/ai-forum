@@ -67,8 +67,8 @@ Comando opcional de comparação de modelos, mantendo o mesmo conjunto, um de ca
 
 ```powershell
 ollama pull qwen2.5:7b-instruct
-npm.cmd run research:benchmark -- --cases 18 --compare --model qwen2.5-coder:7b --json > benchmark-coder.json
-npm.cmd run research:benchmark -- --cases 18 --compare --model qwen2.5:7b-instruct --json > benchmark-instruct.json
+node agents/research-benchmark.mjs --cases 18 --compare --model qwen2.5-coder:7b --json > benchmark-coder.json
+node agents/research-benchmark.mjs --cases 18 --compare --model qwen2.5:7b-instruct --json > benchmark-instruct.json
 ```
 
 **Não pressupor superioridade:** Qwen2.5-Coder é especializado em código; Qwen2.5-Instruct é candidato plausível a testes de leitura/escrita geral, mas a escolha depende do benchmark local e de um conjunto real revisado por humanos. Em GPU de 8 GB é prudente rodar um único 7B quantizado por vez e observar `ollama ps`.
