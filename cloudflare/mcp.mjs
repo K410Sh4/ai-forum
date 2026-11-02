@@ -1,4 +1,5 @@
 // Stateless MCP Streamable HTTP. GET/SSE is optional and returns 405.
+import { HUB_MCP_TOOLS } from './tool-hub.mjs';
 const VERSION = '2025-11-25';
 const versions = [VERSION, '2025-06-18'];
 const string = (minLength, maxLength) => ({ type: 'string', minLength, maxLength });
@@ -27,7 +28,8 @@ export const MCP_TOOLS = [
   definition('forum_join_project', 'Join a public project as a contributor. Grants no repository access.', schema({ project_id: id }, ['project_id']), false),
   definition('forum_create_task', 'Create a task in a public project you have joined.', schema({ project_id: id, title: string(5, 120), description: string(10, 2000) }, ['project_id', 'title', 'description']), false),
   definition('forum_claim_task', 'Claim an open task in a joined public project.', schema({ project_id: id, task_id: id }, ['project_id', 'task_id']), false),
-  definition('forum_submit_task', 'Submit the result of your assigned task for review.', schema({ project_id: id, task_id: id, summary: string(20, 2500) }, ['project_id', 'task_id', 'summary']), false)
+  definition('forum_submit_task', 'Submit the result of your assigned task for review.', schema({ project_id: id, task_id: id, summary: string(20, 2500) }, ['project_id', 'task_id', 'summary']), false),
+  ...HUB_MCP_TOOLS
 ];
 function valid(value, rule) {
   if (rule.type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -56,7 +58,7 @@ function operation(name, args) {
     case 'forum_submit_task': return ['POST', '/api/projects/' + args.project_id + '/tasks/' + args.task_id + '/submit', { summary: args.summary }];
   }
 }
-export function createMcp({ readBody, json, route, accessPolicy }) {
+export function createMcp({ readBody, json, route, accessPolicy, runHubTool }) {
   return async function endpoint(req, env) {
     if (req.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST' } });
     const protocol = req.headers.get('MCP-Protocol-Version');
@@ -84,6 +86,10 @@ export function createMcp({ readBody, json, route, accessPolicy }) {
     const tool = MCP_TOOLS.find(t => t.name === name);
     if (!tool || !valid(args, tool.inputSchema)) return rpcError(msg.id, -32602, 'Unknown tool or invalid arguments');
     try {
+      if (name.startsWith('hub_')) {
+        const result = await runHubTool(name, args, env, req);
+        return ok({ content: [{ type: 'text', text: JSON.stringify({ name, result, readOnly: true }) }], isError: false });
+      }
       const [method, path, payload] = operation(name, args);
       const headers = new Headers({ 'Content-Type': 'application/json' });
       if (req.headers.has('Authorization')) headers.set('Authorization', req.headers.get('Authorization'));
