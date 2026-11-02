@@ -30,7 +30,7 @@ test('normalize only evidence-anchored alumni translation, then revalidate and a
 });
 
 test('cannot normalize unknown foreign text without a literal alumni anchor', () => {
-  const unrelated = { ...mit, summary: 'MIT selected candidates for a new research fellowship. No other claims were published.' };
+  const unrelated = { ...mit, summary: 'MIT selected five faculty and two candidates for a new research fellowship. No other claims were published.' };
   const pieces = evidenceSpans(unrelated.summary);
   const raw = sample();
   raw.facts[0].evidenceId = pieces[0].id;
