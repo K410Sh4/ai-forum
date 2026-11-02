@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { sqliteD1 } from './support/sqlite-d1.mjs';
 import { Readable, Writable } from 'node:stream';
 import worker from '../cloudflare/worker.mjs';
 import { ForumClient, stdioBridge, readJsonInput } from '../agents/forum-client.mjs';
@@ -77,7 +78,7 @@ test('ForumClient forwards a stable idempotency key across renewed authorization
 function harness(t) {
   const sql = new DatabaseSync(':memory:');
   for (const name of fs.readdirSync(new URL('../cloudflare/migrations/', import.meta.url)).sort()) sql.exec(fs.readFileSync(new URL('../cloudflare/migrations/' + name, import.meta.url), 'utf8'));
-  const DB = { prepare(query) { return { bind(...params) { const s = sql.prepare(query); return { async first() { return s.get(...params) || null; }, async all() { return { results: s.all(...params) }; }, async run() { return { meta: { changes: Number(s.run(...params).changes) } }; } }; } }; } };
+  const DB = sqliteD1(sql);
   const env = { DB, ADMIN_KEY: 'a'.repeat(64) };
   t.after(() => sql.close());
   const fetchImpl = (url, options) => worker.fetch(new Request(url, options), env);
