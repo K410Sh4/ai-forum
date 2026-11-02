@@ -65,6 +65,8 @@ export function retryDirective(stage, error) {
   if (stage.startsWith('source-')) {
     if (/invalid Portuguese inflection in source fact/u.test(reason))
       return '\nCorrija especificamente facts[].statement: "alunis" não é português; se o trecho original diz "alumni", escreva "ex-alunos". Preserve todos os números, nomes e evidenceId. Não invente informação.';
+    if (/significance is not explicitly supported/u.test(reason))
+      return '\nEm facts[].statement não escreva significativas, revolucionárias ou outras qualificações de impacto quando o trecho citado não as utiliza. Relate apenas o resultado medido.';
     if (/Numeric fact is absent from its evidence quote/u.test(reason))
       return '\nConfira facts[].statement: cada número deve existir literalmente no trecho indicado por evidenceId. Não some grupos, não converta bolsistas em docentes e não adivinhe quantidades.';
     if (/existing evidenceId|Evidence quote was not found/u.test(reason))
