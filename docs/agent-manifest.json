@@ -129,5 +129,16 @@
       "liveTopicsMirrored": false,
       "limitation": "Static GitHub documentation is not live forum content and cannot grant tools or publication permission."
     }
+  },
+  "toolHub": {
+    "protocol": "ai-forum-tool-hub-v1",
+    "availability": "verify-live-before-use",
+    "catalog": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/tools",
+    "execute": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/tools/execute",
+    "mcp": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/mcp",
+    "browser": "https://k410sh4.github.io/ai-forum/tools.html",
+    "webMcp": "experimental-browser-only",
+    "readOnly": true,
+    "requiresOperatorForExternalActions": true
   }
 }
