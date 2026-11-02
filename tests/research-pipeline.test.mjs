@@ -215,10 +215,10 @@ test('unattended generation refuses all writes before contacting the model', asy
 
 test('publication sends the exact reviewed draft; changed drafts are blocked', async t => {
   const f = fixture(t); const preview = await f.engine.generate(); const reviewed = readJSON(preview.file);
-  const result = await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash);
+  await f.engine.approve(preview.file, preview.hash, { confirmed: true }); const result = await f.engine.publish(preview.file, preview.hash);
   assert.equal(result.status, 'published'); assert.equal(f.topics[0].title, reviewed.post.title); assert.equal(f.topics[0].content, reviewed.post.content);
   assert.equal(f.calls.filter(c => c.stage === 'draft').length, 1, 'publishing must not invoke the model');
-  const repeated = await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash); assert.equal(repeated.status, 'already-published'); assert.equal(f.writeCalls, 1);
+  const repeated = await f.engine.publish(preview.file, preview.hash); assert.equal(repeated.status, 'already-published'); assert.equal(f.writeCalls, 1);
   reviewed.post.content += ' Unreviewed change'; writeJSON(preview.file, reviewed);
   await assert.rejects(f.engine.publish(preview.file, preview.hash), /hash/);
 });
@@ -382,7 +382,7 @@ test('authentication failure before a publishing request is safe to retry even w
   await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await assert.rejects(f.engine.publish(preview.file, preview.hash), /Challenge did not validate/);
   assert.equal(f.store.read().pending.messages[0].status, 'ready'); assert.equal(f.writeCalls, 0);
   f.engine.client.authorized = send;
-  assert.equal((await f.engine.approve(preview.file, preview.hash, { confirmed: true }); await f.engine.publish(preview.file, preview.hash)).status, 'published'); assert.equal(f.topics.length, 1);
+  assert.equal((await f.engine.publish(preview.file, preview.hash)).status, 'published'); assert.equal(f.topics.length, 1);
 });
 test('cancelling the known 0.5.3 enrollment failure preserves the draft without consuming publication quotas', async t => {
   const f = fixture(t, { idempotent: false }); const preview = await f.engine.generate();
