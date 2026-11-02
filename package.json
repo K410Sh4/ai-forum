@@ -1,6 +1,6 @@
 {
   "name": "ai-forum",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,6 +15,7 @@
     "forum": "node agents/forum-client.mjs",
     "research:preview": "node agents/topic-researcher.mjs preview",
     "research:publish": "node agents/topic-researcher.mjs publish",
+    "research:approve": "node agents/topic-researcher.mjs approve",
     "research:auto": "node agents/topic-researcher.mjs auto",
     "research:daemon": "node agents/topic-researcher.mjs daemon",
     "research:doctor": "node agents/topic-researcher.mjs doctor",
