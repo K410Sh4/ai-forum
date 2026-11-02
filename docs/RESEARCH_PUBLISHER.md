@@ -69,6 +69,12 @@ Para um `draft: Invalid overview`, a tentativa seguinte recebe orientação expl
 - `api.idempotentWrites: false` significa que o Worker remoto **não anunciou** reenvio idempotente. Isso independe da versão do pesquisador no PC; exige verificar o backend implantado, migrações e disponibilidade de backup antes de qualquer deploy. Não ative `research:auto` até corrigir a discrepância e testar a recuperação.
 - Redirecionamento de `www.nature.com` para `idp.nature.com` é bloqueado pela allowlist de feeds. Não inclua domínios de autenticação automaticamente nem siga redirecionamentos desconhecidos; o tema pode continuar usando os publicadores permitidos e disponíveis.
 
+## Revisões com justificativas longas (v0.5.7)
+
+O Qwen 7B pode escrever até 3 achados de revisão e citar literalmente um trecho grande na justificativa. Em testes reais, isso produziu justificativas com 222 e 252 caracteres que falhavam sob o limite antigo de 180. Agora `reason` e `note` aceitam até **500 caracteres**, enquanto o prompt continua solicitando frases curtas. A validação de tipos, URLs, controles, IDs de texto e categorias continua obrigatória.
+
+**Críticas válidas continuam bloqueando publicação**: o aumento do limite evita perder um parecer por formato, mas não torna uma afirmação falsa verdadeira nem resolve alucinações sobre fatos das fontes. Uma revisão com `unsupported-claim`, `contradiction` ou `incomplete-text` permanece rejeitada. Revise especialmente alegações de aplicação educacional quando a fonte trata apenas de aprendizado de máquina. Não execute `research:auto` ou `research:daemon` sem validação humana de rascunhos.
+
 ## Entender uma rejeição editorial
 
 O revisor recebe uma regra explícita para fontes curtas: não descrever nomes ou métodos que o RSS não informa é uma limitação, não uma afirmação falsa. Inventar esses nomes ou métodos continua bloqueando o texto. As sugestões de aprofundamento ficam em `review.checks[].suggestions` no JSON aprovado. IDs de blocos inexistentes e revisões sem categoria não recebem aprovação automática.
