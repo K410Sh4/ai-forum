@@ -92,7 +92,7 @@ export class OllamaResearcher {
     requireDiversity(sources);
     const planSchema = object({ kind: { type: 'string', enum: ['analysis', 'roundup'] }, angle: text(20, 180) });
     let plan;
-    try { plan = await this.ask('plan', planSchema, { task: 'Escolha um recorte útil que contemple TODAS as fontes fornecidas. O programa já selecionou publicadores distintos. Use analysis somente quando as evidências forem relacionadas; caso contrário, faça um panorama roundup que preserve as diferenças entre as notícias, sem inventar conexões ou confirmação independente. Não escolha nem remova IDs de fontes.', theme: topic.label, candidates: sources.map(s => ({ id: s.id, publisher: s.publisherId || s.host, title: s.title, summary: s.summary.slice(0, 450) })) }, value => {
+    try { plan = await this.ask('plan', planSchema, { task: 'Escolha um recorte útil que contemple TODAS as fontes fornecidas. O programa já selecionou publicadores distintos. Use analysis somente quando as evidências forem relacionadas; caso contrário, faça um panorama roundup que preserve as diferenças entre as notícias, sem inventar conexões ou confirmação independente. Não escolha nem remova IDs de fontes. angle deve ser uma ÚNICA frase curta com 50 a 110 caracteres; não enumere as duas notícias ou instituições e não produza parágrafos.', theme: topic.label, candidates: sources.map(s => ({ id: s.id, publisher: s.publisherId || s.host, title: s.title, summary: s.summary.slice(0, 450) })) }, value => {
       if (!['analysis', 'roundup'].includes(value.kind)) throw Error('Invalid research format');
       return { kind: value.kind, angle: prose(value.angle, 20, 180, 'plan angle'), sourceIds: sources.map(s => s.id), planningMode: 'model' };
     }); }
