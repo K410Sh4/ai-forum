@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Offline model benchmark. Never touches forum credentials, research state,
 // Cloudflare, GitHub, publication or any host except localhost Ollama.
+import { pathToFileURL } from 'node:url';
 import { RESEARCH_EVAL_CASES, RESEARCH_EVAL_LABELS, summarizeResearchEval } from './research-eval-cases.mjs';
 
 const LOCAL_OLLAMA = 'http://127.0.0.1:11434/api/chat';
@@ -108,6 +109,6 @@ async function main() {
   }
   if (result.rows.every(row => row.predicted === null)) process.exitCode = 1;
 }
-if (process.argv[1] && import.meta.url === new URL('file://' + process.argv[1].replaceAll('\\', '/')).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => { console.error(error.message); process.exitCode = 1; });
 }
