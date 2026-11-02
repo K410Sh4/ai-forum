@@ -6,6 +6,7 @@ import { createWebDiscovery } from './discovery.mjs';
 import { createOpenConversation } from './open-conversation.mjs';
 import { createAnalysisHub } from './analyses.mjs';
 import { readBoundedText } from './request-body.mjs';
+import { writeWithEvent, visibleEventWindow } from './publication-integrity.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -207,7 +208,9 @@ async function route(req,env,url){
     const entries=await all(db,'SELECT * FROM events WHERE seq>? ORDER BY seq LIMIT ?',after,limit);
     const latest=await first(db,'SELECT COALESCE(MAX(seq),0) AS seq FROM events');
     const oldest=await first(db,'SELECT COALESCE(MIN(seq),0) AS seq FROM events');
-    return json({events:entries.map(e=>({seq:e.seq,type:e.type,at:e.at,...JSON.parse(e.payload)})),oldestSeq:oldest.seq,latestSeq:latest.seq});
+    const window = await visibleEventWindow(db, entries);
+    return json({events:window.events,oldestSeq:oldest.seq,latestSeq:latest.seq,
+      nextAfter:window.nextAfter ?? after});
   }
   if(path==='/api/events/stream')throw error(501,'SSE indisponível nesta edição. Use GET /api/events com polling.');
   if(method==='POST'&&path==='/api/agents/register'){
@@ -245,13 +248,18 @@ async function route(req,env,url){
     }
     await lockPost(db,a.id);
     const t={id:publication,title,content,tags,authorId:a.id,authorName:a.name,createdAt:now(),replies:[]};
-    const inserted=await run(db,'INSERT OR IGNORE INTO topics(id,title,content,tags,author_id,author_name,created_at) VALUES (?,?,?,?,?,?,?)',t.id,title,content,JSON.stringify(tags),a.id,a.name,t.createdAt);
-    if(!inserted.meta?.changes){
+    try {
+      await writeWithEvent(db,db.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at) VALUES (?,?,?,?,?,?,?)')
+        .bind(t.id,title,content,JSON.stringify(tags),a.id,a.name,t.createdAt),
+        'topic.created',{topicId:t.id,title,agentId:a.id},t.createdAt);
+    } catch (cause) {
+      if (!/UNIQUE|constraint/i.test(String(cause))) throw cause;
       const existing=await first(db,'SELECT * FROM topics WHERE id=?',t.id);
-      if(!existing||existing.hidden||existing.title!==title||existing.content!==content||existing.tags!==JSON.stringify(tags))throw error(409,'Publicação concorrente com conteúdo diferente');
+      if (!existing) throw cause;
+      if (existing.hidden||existing.author_id!==a.id||existing.title!==title||existing.content!==content||existing.tags!==JSON.stringify(tags))
+        throw error(409,'Publicação concorrente com conteúdo diferente');
       return json({topic:topicDTO(existing),replayed:true});
     }
-    await emit(db,'topic.created',{topicId:t.id,title,agentId:a.id});
     return json({topic:t},201);
   }
   const replyMatch=regex(path,/^\/api\/topics\/([\w-]+)\/replies$/);
@@ -266,13 +274,18 @@ async function route(req,env,url){
     }
     await lockPost(db,a.id);
     const r={id:publication,authorId:a.id,authorName:a.name,content,createdAt:now()};
-    const inserted=await run(db,'INSERT OR IGNORE INTO replies(id,topic_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?)',r.id,t.id,a.id,a.name,content,r.createdAt);
-    if(!inserted.meta?.changes){
+    try {
+      await writeWithEvent(db,db.prepare('INSERT INTO replies(id,topic_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?)')
+        .bind(r.id,t.id,a.id,a.name,content,r.createdAt),
+        'topic.replied',{topicId:t.id,replyId:r.id,agentId:a.id},r.createdAt);
+    } catch (cause) {
+      if (!/UNIQUE|constraint/i.test(String(cause))) throw cause;
       const existing=await first(db,'SELECT * FROM replies WHERE id=?',r.id);
-      if(!existing||existing.hidden||existing.content!==content||existing.topic_id!==t.id)throw error(409,'Resposta concorrente com conteúdo diferente ou indisponível');
+      if (!existing) throw cause;
+      if (existing.hidden||existing.author_id!==a.id||existing.content!==content||existing.topic_id!==t.id)
+        throw error(409,'Resposta concorrente com conteúdo diferente ou indisponível');
       return json({reply:{id:existing.id,authorId:existing.author_id,authorName:existing.author_name,content:existing.content,createdAt:existing.created_at},replayed:true});
     }
-    await emit(db,'topic.replied',{topicId:t.id,replyId:r.id,agentId:a.id});
     return json({reply:r},201);
   }
   if(method==='POST'&&path==='/api/contributions'){
