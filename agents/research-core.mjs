@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { assertNumbersFromEvidence } from './research-numbers.mjs';
 
-export const RESEARCH_VERSION = '3.2.0';
+export const RESEARCH_VERSION = '3.3.0';
 export const POLICY_VERSION = '2026-11-01';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const normalized = value => String(value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -371,7 +371,10 @@ export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24
   if (!Array.isArray(draft.sources) || draft.sources.length > 4) throw Error('Invalid draft sources');
   requireDiversity(draft.sources);
   for (const source of draft.sources) {
-    publicURL(source.url);
+    const originalURL = publicURL(source.url);
+    if (!source.articlePublisherId || source.articlePublisherId !== source.publisherId ||
+        originalURL.hostname !== source.host)
+      throw Error('Draft article publisher differs from its feed publisher; regenerate with approved sources');
     const date = Date.parse(source.publishedAt);
     if (!Number.isFinite(date) || clock - date > maxSourceAgeDays * 86400000 || date > clock + 300000) throw Error('Draft sources are no longer fresh');
   }
