@@ -98,6 +98,26 @@ test('Nature content:encoded is usable; missing links, future dates and local UR
   assert.equal(readFeed(body.replace('2026-10-30', '2026-11-03'), 'https://www.nature.com/feed', { clock: NOW }).length, 0);
   for (const url of ['https://127.0.0.1/a', 'https://[::1]/a', 'https://internal/a', 'https://host.local/a', 'https://x:secret@example.org/a']) assert.throws(() => publicURL(url));
 });
+test('collector refuses cross-publisher article links but accepts aliases of the same publisher', async t => {
+  const f = fixture(t);
+  const config = f.config;
+  const foreignArticle = readFeed(xml('second.example'), 'https://first.example/feed',
+    { clock: NOW, publishers: config.publishers });
+  const samePublisherAlias = readFeed(xml('science.first.example'), 'https://first.example/feed',
+    { clock: NOW, publishers: config.publishers });
+  assert.equal(foreignArticle[0].publisherId, 'first');
+  assert.equal(foreignArticle[0].articlePublisherId, 'second');
+  f.engine.feeds.read = async url => ({
+    articles: url.includes('first.example') ? [...foreignArticle, ...samePublisherAlias] : [],
+    diagnostics: { accepted: 2, rejected: {} }, cached: false
+  });
+  const collected = await f.engine.collect(config.topics[0], f.store.read());
+  assert.equal(collected.articles.length, 1);
+  assert.equal(collected.articles[0].host, 'science.first.example');
+  assert.equal(collected.health[0].publisherMismatch, 1);
+  assert.equal(f.writeCalls, 0);
+});
+
 test('publisher mapping prevents NASA subdomains from satisfying diversity', () => {
   const publishers = [{ id: 'nasa', hosts: ['www.nasa.gov', 'science.nasa.gov'] }];
   const left = readFeed(xml('www.nasa.gov'), 'https://www.nasa.gov/feed', { clock: NOW, publishers });
