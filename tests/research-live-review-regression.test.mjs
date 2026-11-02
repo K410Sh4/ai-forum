@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateReview, validateEditorialGrounding, evidenceSpans, normalized } from '../agents/research-core.mjs';
 import { OllamaResearcher } from '../agents/research-model.mjs';
-import { retryDirective } from '../agents/research-stages.mjs';
+import { prepareSourceCard, retryDirective } from '../agents/research-stages.mjs';
 
 const generic = 'O texto não explica como as atualizações dos modelos AI afetam a confiabilidade e a eficácia dos sistemas.';
 const material = Array.from({ length: 8 }, (_, i) => ({
@@ -100,4 +100,28 @@ test('quoted evidence preserves the complete public identifiers clause', () => {
     'The complete noun phrase must stay together in one literal quote');
   assert.ok(spans.every(span => span.text.length <= 300 && normalized(evidence).includes(span.text)));
   assert.equal(new Set(spans.map(span => span.id)).size, spans.length);
+});
+
+test('source card translates AI providers only when the literal selected quote warrants it', () => {
+  const text = 'Artificial intelligence (AI) providers frequently update their models and system integrations without corresponding changes to their public identifiers.';
+  const source = { id: 'S2', summary: text };
+  const spans = evidenceSpans(text);
+  const input = { facts: [{
+    statement: 'AI providers atualizam seus modelos e integrações sem alterar os identificadores públicos.',
+    evidenceId: spans[0].id
+  }] };
+  const card = prepareSourceCard(input, source, spans);
+  assert.match(card.facts[0].statement, /^provedores de IA atualizam/iu);
+  assert.equal(card.facts[0].quote, spans[0].text);
+  assert.equal(card.facts[0].evidenceId, spans[0].id);
+  assert.equal(card.normalizations[0].rule, 'ai-providers-to-provedores-de-ia');
+  const otherSource = { id: 'S1', summary: 'A generic research paper presents a test methodology and does not mention any model provider.' };
+  const otherSpans = evidenceSpans(otherSource.summary);
+  const unrelatedInput = { facts: [{
+    statement: 'AI providers atualizam os modelos em estudos científicos.',
+    evidenceId: otherSpans[0].id
+  }] };
+  const unrelated = prepareSourceCard(unrelatedInput, otherSource, otherSpans);
+  assert.equal(unrelated.facts[0].statement, unrelatedInput.facts[0].statement,
+    'English phrase must not be silently replaced without literal source support');
 });
