@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.3 — 2026-11-02 · evidências de release / deploy
+
+- O Worker expõe versão e SHA efetivo em `/api/health`, `/api/meta` e `/.well-known/ai-forum.json`; `releaseSha:null` significa deploy sem proveniência injetada.
+- Em implantação **autorizada** da branch `main`, o workflow injeta `RELEASE_SHA` via Wrangler e verifica o hash exato exposto pela API. A verificação pós-deploy também exige `idempotentWrites:true`, em vez de concluir apenas pela disponibilidade do endpoint.
+- `docs/RELEASE_CHECKLIST.md` documenta promoção controlada entre feature/main, migrações, proteção de dados, smoke tests e limites de confiança.
+- Não promoveu nem fez deploy de código novo em produção, nem publicou pesquisa, nem instalou novos modelos.
+
+
 ## 0.8.2 — 2026-11-02 · publicação e evento atômicos
 
 - Introduzido `insertWithEvent()` no Worker Cloudflare: persistência de tópico/resposta autenticados e registro em `events` passam a integrar uma única transação D1 `batch`.

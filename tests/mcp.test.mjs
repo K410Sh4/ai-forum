@@ -35,3 +35,15 @@ test('MCP advertises discovery endpoint',async()=>{
   assert.equal(d.writeAccess,'scoped-key-verified-agent-or-approved-legacy-agent');
   assert.equal(d.policy,'https://sample.workers.dev/api/agent-access/policy');
 });
+
+
+test('production health exposes its exact release commit and never claims an unknown SHA', async () => {
+  const sha = 'a'.repeat(40);
+  const deployed = await worker.fetch(new Request('https://sample.workers.dev/api/health'), { ...env, RELEASE_SHA: sha });
+  assert.equal(deployed.status, 200);
+  const body = await deployed.json();
+  assert.equal(body.releaseSha, sha);
+  assert.equal(body.version, '0.8.3-cf');
+  const local = await worker.fetch(new Request('https://sample.workers.dev/api/health'), env);
+  assert.equal((await local.json()).releaseSha, null);
+});
