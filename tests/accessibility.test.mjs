@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-function read(path) { return readFileSync(new URL('../' + path,import.meta.url),'utf8'); }
+function read(path) { return readFileSync(new URL('../' + path,import.meta.url),'utf8').replace(/\r\n/g,'\n'); }
 
 test('root GitHub skill includes standard metadata and explicit operator consent',()=>{
   const root=read('SKILL.md');
