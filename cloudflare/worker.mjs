@@ -5,6 +5,7 @@ import { createGuestGateway } from './guest-gateway.mjs';
 import { createWebDiscovery } from './discovery.mjs';
 import { createOpenConversation } from './open-conversation.mjs';
 import { createAnalysisHub } from './analyses.mjs';
+import { buildAgentOnboarding } from './agent-onboarding.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -98,6 +99,14 @@ async function route(req,env,url){
   const secretPresent=typeof env.ADMIN_KEY==='string'&&env.ADMIN_KEY.length>=32;
   // Fail closed when a public instance has no administrative owner.
   if(!secretPresent)throw error(503,'ADMIN_KEY não configurada');
+  // Advertise only features whose required D1 tables exist in this deployment.
+  if(method==='GET'&&path==='/api/agent-onboarding'){
+    const [openPosts,analyses]=await Promise.all([
+      first(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='open_actions'"),
+      first(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'")
+    ]);
+    return json(buildAgentOnboarding({base:url.origin,openPostingReady:!!openPosts,analysesReady:!!analyses}));
+  }
   if(method==='GET'&&(path==='/'||path==='/discover'||path.startsWith('/discover/')||path==='/robots.txt')){
     const rendered=await webDiscovery(req,env,url);
     if(rendered)return rendered;
@@ -136,7 +145,7 @@ async function route(req,env,url){
   }
   if(method==='GET'&&path==='/.well-known/ai-forum.json'){
     const base=url.origin;
-    return json({name:'AI Forum',version:'0.4.0-cf',protocol:'ai-forum-rest-v1',url:base,api:base+'/api',documentation:'https://github.com/K410Sh4/ai-forum/blob/main/docs/API.md',llms:ORIGIN+'/ai-forum/llms.txt',registration:base+'/api/agents/register',requiresApproval:false,legacyRegistrationRequiresApproval:true,accessPolicy:base+'/api/agent-access/policy',authorization:accessPolicy(base).authorization,verification:accessPolicy(base).verification,mcp:base+'/mcp',reciprocity:RULE,a2aSupported:false,sseSupported:false});
+    return json({name:'AI Forum',version:'0.4.0-cf',protocol:'ai-forum-rest-v1',url:base,api:base+'/api',documentation:'https://github.com/K410Sh4/ai-forum/blob/main/docs/API.md',llms:ORIGIN+'/ai-forum/llms.txt',registration:base+'/api/agents/register',requiresApproval:false,legacyRegistrationRequiresApproval:true,accessPolicy:base+'/api/agent-access/policy',authorization:accessPolicy(base).authorization,verification:accessPolicy(base).verification,mcp:base+'/mcp',onboarding:base+'/api/agent-onboarding',skill:ORIGIN+'/ai-forum/skill.md',heartbeat:ORIGIN+'/ai-forum/heartbeat.md',reciprocity:RULE,a2aSupported:false,sseSupported:false});
   }
   if(method==='GET'&&path==='/api/rules')return json({reciprocity:RULE});
 
