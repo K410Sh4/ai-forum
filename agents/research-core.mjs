@@ -128,6 +128,9 @@ const anchoredDomains = [
 ];
 export function validateSourceClaimGrounding(statement, quote) {
   const claim = foldPT(statement), evidence = foldPT(quote);
+  if (/\balunis\b/u.test(claim)) throw Error('Factual grounding: invalid Portuguese inflection in source fact');
+  if (/\btransmite-se\b/u.test(claim) && /\btransfer\w*\b/u.test(evidence) && !/\btransmi\w*\b/u.test(evidence))
+    throw Error('Factual grounding: transfer learning was inaccurately described as transmission');
   for (const domain of anchoredDomains) {
     if (domain.claim.test(claim) && !domain.evidence.test(evidence)) {
       throw Error('Factual grounding: ' + domain.label + ' claim lacks a matching term in the selected evidence quote');
@@ -321,6 +324,9 @@ export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24
   if (![2, 3].includes(draft?.schemaVersion) || draft.hash !== payloadHash(draft) || !/^[a-f0-9]{64}$/.test(draft.hash) || !/^[a-f0-9]{24}$/.test(draft.id)) throw Error('Draft hash or format is invalid');
   if (draft.schemaVersion !== 3) throw Error('Draft predates complete-text validation; cancel any pending delivery of this draft, then generate a fresh preview');
   if (draft.api !== api || draft.policyVersion !== POLICY_VERSION || draft.status !== 'ready' || draft.review?.approved !== true) throw Error('Draft is not approved for this API/policy');
+  if (draft.review?.factualGate?.passed !== true || draft.review.factualGate.independent !== false ||
+      draft.review.factualGate.humanVerificationRequired !== true)
+    throw Error('Draft predates factual grounding validation; generate a new preview before publishing');
   const created = Date.parse(draft.createdAt);
   if (!Number.isFinite(created) || created > clock + 300000 || clock - created > maxAgeHours * 3600000) throw Error('Draft expired; generate and review a fresh draft');
   if (!Array.isArray(draft.sources) || draft.sources.length > 4) throw Error('Invalid draft sources');
@@ -333,6 +339,13 @@ export function validateDraft(draft, { api, clock = Date.now(), maxAgeHours = 24
   if (!draft.post || prose(draft.post.title, 5, 120).length < 5 || !Array.isArray(draft.replies) || draft.replies.length > 2) throw Error('Invalid draft messages');
   for (const message of [draft.post, ...draft.replies]) if (typeof message.content !== 'string' || message.content.length < 10 || message.content.length > 3000 || !message.content.includes('Pesquisa ' + draft.id)) throw Error('Invalid draft message or provenance marker');
   if (!draft.editorial?.opening || !Array.isArray(draft.editorial.sections) || draft.editorial.sections.length !== draft.replies.length) throw Error('Draft needs its validated editorial fields');
+  if (!Array.isArray(draft.cards) || draft.cards.length < 2)
+    throw Error('Draft needs source cards for factual grounding validation');
+  for (const card of draft.cards) {
+    if (!draft.sources.some(source => source.id === card.sourceId) ||
+        !Array.isArray(card.facts) || !card.facts.length) throw Error('Draft source cards must refer to selected sources');
+    for (const fact of card.facts) validateSourceClaimGrounding(fact.statement, fact.quote);
+  }
   const expected = stampMessages(composePost(draft.theme, draft.editorial.opening, draft.sources), draft.editorial.sections.map(section => composeSection(section, draft.sources)), draft.id, draft.fingerprint);
   for (const [index, message] of [draft.post, ...draft.replies].entries()) {
     if (message.content !== expected[index].content || message.title !== expected[index].title || JSON.stringify(message.tags) !== JSON.stringify(expected[index].tags)) throw Error('Rendered draft differs from its validated editorial fields');
