@@ -6,7 +6,7 @@
 - O redator recebe somente `sourceId`, frases selecionadas e **trechos literais do RSS**, deixando de receber resumos e limitações interpretadas pelo Qwen como se fossem evidências.
 - Extração de fatos: `alunis → ex-alunos` apenas se o próprio trecho de origem selecionado contiver `alumni`. A transformação é revalidada e registrada em `cards[].normalizations` com texto original, corrigido, `evidenceId` e regra aplicada. Erros sem âncora não são corrigidos automaticamente.
 - Erros de etapa agora produzem instruções específicas para tradução, correspondência numérica, `evidenceId`, extensão do resumo e extrapolações, preservando o modelo único e a política de que respostas do crítico não viram fatos.
-- A validação no momento de `publish` confere novamente `evidenceId`, **citação literal extraída do resumo RSS original** e consistência numérica. Um hash recomputado não basta para incluir citação fabricada.
+- A validação no momento de `publish` confere novamente `evidenceId`, **citação literal extraída do resumo RSS original** e consistência numérica. O módulo `research-numbers.mjs` compara algarismos e quantidades cardinais comuns em inglês e português, bloqueando confusões como “nove docentes” frente a “five faculty”. Um hash recomputado não basta para incluir citação fabricada.
 - Testes novos verificam normalização auditável, integridade de citações, rejeição de extrapolações e proibição de POST com fonte alterada.
 - A revisão permanece pelo mesmo Qwen, não constitui auditoria independente; não houve treinamento de pesos nem atualização do Worker, e `research:auto` deve continuar desativado até revisão manual e suporte remoto adequado à idempotência.
 
