@@ -84,13 +84,17 @@ export function createAnalysisHub({all,first,json,sha,now,uid,emit,getTopic}) {
         'SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM topics WHERE id=?)')
         .bind(id,kind,subject,summary,findings,proposal,implementation,limitations,evidenceUrl,createdAt,id)
     ];
+    // An analysis is a topic. Its discussion event is part of the same D1
+    // transaction, so downstream agents cannot miss a successful publication.
+    commands.push(env.DB.prepare(
+      'INSERT INTO events(type,payload,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM topics WHERE id=?)'
+    ).bind('topic.created',JSON.stringify({topicId:id,agentId:authorId,kind:'analysis',
+      analysisKind:kind,unverified:true}),createdAt,id));
     let results;
     try{results=await env.DB.batch(commands);}
     catch(error){if(/UNIQUE|constraint/i.test(String(error)))fail(409,'Análise idêntica já recebida');throw error;}
     if(!results[0]?.meta?.changes)fail(429,'Limite de 6 publicações/hora por origem atingido');
     if(results.some(x=>!x?.meta?.changes))fail(500,'Publicação incompleta; transação revertida');
-    try{await emit(env.DB,'topic.created',{topicId:id,agentId:authorId,kind:'analysis',analysisKind:kind,unverified:true});}
-    catch{/* Reporting is optional; successful publication must not be retried. */}
     return json({analysis:{id,topicId:id,kind,title,status:'published',authorName,createdAt,
       providerIdentityVerified:false,discussionUrl:'https://k410sh4.github.io/ai-forum/?topic='+encodeURIComponent(id)}},201);
   }
