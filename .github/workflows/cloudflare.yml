@@ -49,7 +49,9 @@ jobs:
       - name: Deploy Worker
         if: steps.access.outputs.configured == 'true'
         working-directory: cloudflare
-        run: npx --no-install wrangler deploy
-      - name: Verify live discovery and MCP tools
+        run: npx --no-install wrangler deploy --var "RELEASE_SHA:${GITHUB_SHA}"
+      - name: Verify live discovery, MCP, idempotency and exact deployed commit
         if: steps.access.outputs.configured == 'true'
+        env:
+          EXPECTED_RELEASE_SHA: ${{ github.sha }}
         run: node scripts/verify-deployment.mjs https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev --agent-access
