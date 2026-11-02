@@ -153,3 +153,23 @@ O operador examinou o rascunho `dec1e2b73cc8229e3b08a822` (SHA-256 `79a02e1795db
 - Revisão humana das citações, especialmente quando uma fonte apresenta uma **opinião normativa** e a outra traz um experimento.
 - Conjunto novo e cego de mais de 100 casos, para medir se as heurísticas aumentam falsos bloqueios e se o modelo realmente generaliza.
 - Harmonização do Worker remoto, migrações e política de publicação antes de permitir escrita.
+
+## Diagnóstico confirmado de duas tentativas diferentes — 2026-11-02
+
+Diagnóstico real compartilhado pelo operador para `research:preview`:
+
+| Tentativa | Validação que falhou | Comprimento de overview |
+| --- | --- | ---: |
+| 1 | `Factual grounding: malformed use of benéfica in uncertainties` | 195 caracteres |
+| 2 | `Invalid overview (length, URL or control character)` | 135 caracteres |
+
+As duas saídas não tinham a **mesma** causa. A recuperação anterior requeria duas falhas iguais: rejeitar a prévia foi correto segundo a política em vigor. O texto completo de `uncertainties` não foi apresentado; o erro de gramática foi reportado pelo código, mas o trecho específico não foi independentemente revisado. O primeiro overview ainda continha `a MIT` e uma inferência editorial de progresso não demonstrado. O segundo usava `A CLR-Bench`. Nenhum desses overviews rejeitados deve ser publicado.
+
+**Alterações posteriores ao log, pendentes da suíte local:**
+- Apenas no modo **preview**, após exatamente duas tentativas, uma rejeição por uso de `benéfica` em `uncertainties` ou por artigo incorreto de entidade científica em `overview` pode preceder um **overview completo mas curto**. Apenas os campos da segunda saída são usados; o overview é reconstruído exclusivamente de fatos previamente vinculados às fontes e tudo passa novamente por `composePost` + revisão completa pelo modelo. O hash e a aprovação humana continuam necessários antes de publicar.
+- Não se aplica quando o segundo overview traz URL, caracteres de controle, texto truncado, JSON inválido ou outro erro, nem se outra parte da segunda saída falhar.
+- Sínteses com tamanho publicável, títulos e demais campos não podem usar `a MIT`, `da MIT` ou `a CLR-Bench`; o validador bloqueia, sem reescrita automática. Sínteses curtas com erro de artigo continuam proibidas de publicação e somente podem ser **inteiramente substituídas** no fluxo restrito de recuperação.
+- Prompts das duas tentativas passaram a orientar explicitamente `o MIT` e `o CLR-Bench`, sem fabricar uma relação causal ou sucesso conjunto entre notícias independentes.
+- Testes cobrem a sequência real, a variante de erro de artigo, recuperação somente na prévia, revalidação do título, bloqueio de URL/truncamento/segunda falha, e regras gramaticais.
+
+**Não solucionado:** a inferência `ambas as iniciativas demonstram progresso` pode ser semanticamente insustentável mesmo com vocabulário gramaticalmente correto. A revisão por IA continua não independente; somente o exame humano das fontes completas pode liberar uma pesquisa. Os 217 testes do último log (216 pass, 1 skip) são anteriores a estas mudanças. O Worker remoto continua sem idempotência confirmada.
