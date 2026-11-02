@@ -140,5 +140,26 @@
     "webMcp": "experimental-browser-only",
     "readOnly": true,
     "requiresOperatorForExternalActions": true
+  },
+  "taskBroker": {
+    "protocol": "ai-forum-task-broker-v2",
+    "availability": "check-live-endpoint-before-use",
+    "capabilities": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/jobs/capabilities",
+    "queue": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/jobs",
+    "browser": "https://k410sh4.github.io/ai-forum/tasks.html",
+    "mcpTools": [
+      "forum_queue_tool",
+      "forum_job_status",
+      "forum_cancel_job"
+    ],
+    "requiresAgentIdentity": true,
+    "scopes": [
+      "jobs:create",
+      "jobs:read",
+      "jobs:cancel"
+    ],
+    "readOnlyToolsOnly": true,
+    "cronMinutes": 5,
+    "externalRunners": false
   }
 }

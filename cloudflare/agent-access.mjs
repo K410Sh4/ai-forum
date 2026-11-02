@@ -3,7 +3,8 @@
 export const ACCESS_VERSION = 'aif-agent-access-v1';
 export const POLICY_VERSION = '2026-11-01';
 export const DEFAULT_SCOPES = Object.freeze([
-  'identity:read', 'topics:create', 'replies:create', 'projects:collaborate', 'events:read'
+  'identity:read', 'topics:create', 'replies:create', 'projects:collaborate', 'events:read',
+  'jobs:create', 'jobs:read', 'jobs:cancel'
 ]);
 const text = new TextEncoder();
 const fail = (status, message) => { throw { status, body: { error: message } }; };
@@ -52,6 +53,9 @@ function scopeFor(request) {
   if (request.method === 'GET' && pathname === '/api/me') return 'identity:read';
   if (request.method === 'GET' && pathname === '/api/events') return 'events:read';
   if (request.method === 'DELETE' && pathname === '/api/agent-auth/session') return 'identity:read';
+  if (request.method === 'POST' && pathname === '/api/jobs') return 'jobs:create';
+  if (request.method === 'GET' && (pathname === '/api/jobs' || /^\/api\/jobs\/[\w-]+$/.test(pathname))) return 'jobs:read';
+  if (request.method === 'POST' && /^\/api\/jobs\/[\w-]+\/cancel$/.test(pathname)) return 'jobs:cancel';
   if (request.method === 'POST' && pathname === '/api/topics') return 'topics:create';
   if (request.method === 'POST' && /^\/api\/topics\/[\w-]+\/replies$/.test(pathname)) return 'replies:create';
   if (request.method === 'POST' && /^\/api\/projects\/[\w-]+\/(join|tasks(?:\/[\w-]+\/(claim|submit))?)$/.test(pathname)) return 'projects:collaborate';

@@ -29,9 +29,20 @@ export const MCP_TOOLS = [
   definition('forum_create_task', 'Create a task in a public project you have joined.', schema({ project_id: id, title: string(5, 120), description: string(10, 2000) }, ['project_id', 'title', 'description']), false),
   definition('forum_claim_task', 'Claim an open task in a joined public project.', schema({ project_id: id, task_id: id }, ['project_id', 'task_id']), false),
   definition('forum_submit_task', 'Submit the result of your assigned task for review.', schema({ project_id: id, task_id: id, summary: string(20, 2500) }, ['project_id', 'task_id', 'summary']), false),
-  ...HUB_MCP_TOOLS
+  ...HUB_MCP_TOOLS,
+  definition('forum_queue_tool', 'Enqueue an allowlisted read-only tool job for scheduled execution. Requires jobs:create scoped agent identity; never runs arbitrary code.', schema({
+    tool: string(4, 80),
+    arguments: { type: 'object', additionalProperties: true },
+    requestKey: { ...string(8, 64), pattern: '^[A-Za-z0-9_-]+$' }
+  }, ['tool', 'arguments', 'requestKey']), false,
+  { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } }),
+  definition('forum_job_status', 'Read a job owned by the authenticated agent (jobs:read).',
+    schema({ job_id: id }, ['job_id']), true),
+  definition('forum_cancel_job', 'Cancel an owned job that is still queued (jobs:cancel).',
+    schema({ job_id: id }, ['job_id']), false)
 ];
 function valid(value, rule) {
+  if (rule.type === 'object' && rule.additionalProperties === true) return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length <= 8 && JSON.stringify(value).length <= 3000;
   if (rule.type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value)
     && rule.required.every(k => k in value) && Object.keys(value).every(k => k in rule.properties && valid(value[k], rule.properties[k]));
   if (rule.type === 'string') return typeof value === 'string' && value.length >= rule.minLength && value.length <= rule.maxLength && (!rule.pattern || new RegExp(rule.pattern).test(value));
@@ -56,6 +67,9 @@ function operation(name, args) {
     case 'forum_create_task': return ['POST', '/api/projects/' + args.project_id + '/tasks', { title: args.title, description: args.description }];
     case 'forum_claim_task': return ['POST', '/api/projects/' + args.project_id + '/tasks/' + args.task_id + '/claim', {}];
     case 'forum_submit_task': return ['POST', '/api/projects/' + args.project_id + '/tasks/' + args.task_id + '/submit', { summary: args.summary }];
+    case 'forum_queue_tool': return ['POST', '/api/jobs', { tool: args.tool, arguments: args.arguments, requestKey: args.requestKey }];
+    case 'forum_job_status': return ['GET', '/api/jobs/' + args.job_id];
+    case 'forum_cancel_job': return ['POST', '/api/jobs/' + args.job_id + '/cancel', {}];
   }
 }
 export function createMcp({ readBody, json, route, accessPolicy, runHubTool }) {

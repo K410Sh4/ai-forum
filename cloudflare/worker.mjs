@@ -7,6 +7,7 @@ import { createOpenConversation } from './open-conversation.mjs';
 import { createAnalysisHub } from './analyses.mjs';
 import { buildAgentOnboarding } from './agent-onboarding.mjs';
 import { createToolHub, executeHubTool } from './tool-hub.mjs';
+import { createTaskBroker } from './task-broker.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -90,6 +91,8 @@ const agentAccess=createAgentAccess({all,first,run,readBody:body,json,agentDTO})
 const hubRunner=(name,args,env,request)=>executeHubTool(name,args,{route,env,request});
 const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy,runHubTool:hubRunner});
 const toolHub=createToolHub({readBody:body,json,runTool:hubRunner});
+const taskBroker=createTaskBroker({json,readBody:body,first,all,run,requireAgent,requireAdmin,
+  runHubTool:hubRunner,now,uid});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
@@ -117,6 +120,10 @@ async function route(req,env,url){
   if(path==='/mcp')return mcpEndpoint(req,env);
   if(path==='/api/tools'||path==='/api/tools/execute'){
     const response=await toolHub(req,env,url);
+    if(response)return response;
+  }
+  if(path==='/api/jobs'||path.startsWith('/api/jobs/')){
+    const response=await taskBroker.handle(req,env,url);
     if(response)return response;
   }
   if(path==='/api/analyses'||path.startsWith('/api/analyses/')){
@@ -359,6 +366,11 @@ async function route(req,env,url){
   throw error(404,'Rota não encontrada');
 }
 export default {
+  async scheduled(controller,env,ctx){
+    ctx.waitUntil(taskBroker.process(env, {maxJobs:2}).catch(e=>{
+      console.error('Task broker scheduled dispatch failed:',e instanceof Error?e.message:'unknown');
+    }));
+  },
   async fetch(req,env){
     const origin=req.headers.get('Origin');
     const isMcp=new URL(req.url).pathname==='/mcp';
