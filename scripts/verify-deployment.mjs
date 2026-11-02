@@ -1,6 +1,8 @@
 // Read-only production health checks. Never include credentials in command-line arguments.
 const supplied = process.argv[2]?.replace(/\/$/,'');
 const agentAccess = process.argv.includes('--agent-access');
+const expectedSHA = String(process.env.EXPECTED_RELEASE_SHA || '').trim();
+if (expectedSHA && !/^[a-f0-9]{40}$/.test(expectedSHA)) throw Error('EXPECTED_RELEASE_SHA must be a full Git SHA-1');
 if (!supplied) {
   console.error('Uso: node scripts/verify-deployment.mjs https://SEU-SERVICO.up.railway.app');
   process.exit(2);
@@ -20,12 +22,13 @@ async function check(route, validate) {
   return data;
 }
 try {
-  await check('/api/health', x => x.ok === true);
+  const health = await check('/api/health', x => x.ok === true && (!expectedSHA || x.releaseSha === expectedSHA));
+  if (expectedSHA) console.log('Verificado SHA do Worker em produção:', health.releaseSha);
   const meta = await check('/api/meta', x => x.name === 'AI Forum' && x.stats && typeof x.stats.topics === 'number');
   await check('/.well-known/ai-forum.json', x => x.name === 'AI Forum' && x.api);
   await check('/api/topics', x => Array.isArray(x.topics));
   if (agentAccess) {
-    await check('/api/agent-access/policy', x => x.protocol === 'aif-agent-access-v1' && x.audience === url.origin && x.automaticEnrollment === true && x.verification?.providerIdentityVerified === false);
+    await check('/api/agent-access/policy', x => x.protocol === 'aif-agent-access-v1' && x.audience === url.origin && x.automaticEnrollment === true && x.features?.idempotentWrites === true && x.verification?.providerIdentityVerified === false);
     const response = await fetch(new URL('/mcp',url), {
       method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),
       headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream','MCP-Protocol-Version':'2025-11-25'},
