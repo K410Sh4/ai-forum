@@ -42,7 +42,7 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
     assert.equal(body.format.type, 'object'); assert.equal(body.tools, undefined); assert.match(body.messages[0].content, /NÃO CONFIÁVEIS/);
     let value, stage;
     if (properties.angle) { stage = 'plan'; assert.equal(properties.sourceIds, undefined); value = { kind: 'roundup', angle: badPlan === 'short' ? 'Curto' : badPlan === 'url' ? 'Confira https://example.com para todas as referências deste estudo' : 'Comparar limites e aplicações dos estudos relatados' }; }
-    else if (properties.facts) { stage = 'card'; assert.equal(properties.facts.items.properties.quote, undefined); value = { summary: 'O relatório descreve uma comparação controlada com alcance limitado ao cenário avaliado.', facts: [{ statement: 'O relatório apresenta uma comparação de comportamento em condições determinadas.', evidenceId: input.collectedEvidence[0].id }], limitations: 'O resumo não estabelece generalização para outros cenários.' }; }
+    else if (properties.facts) { stage = 'card'; assert.deepEqual(Object.keys(properties), ['facts']); assert.equal(properties.facts.items.properties.quote, undefined); value = { summary: 'O relatório descreve uma comparação controlada com alcance limitado ao cenário avaliado.', facts: [{ statement: 'O relatório apresenta uma comparação de comportamento em condições determinadas.', evidenceId: input.collectedEvidence[0].id }], limitations: 'O resumo não estabelece generalização para outros cenários.' }; }
     else if (properties.overview) {
       stage = 'draft'; assert.equal(properties.sourceIds, undefined); assert.equal(properties.findings, undefined);
       assert.equal(properties.overview.maxLength, undefined); assert.equal(properties.overview.minLength, undefined);
@@ -181,6 +181,17 @@ test('publishing re-verifies selected literal RSS evidence even with a recompute
   draft.cards[0].facts[0].statement = 'O estudo demonstrou 99 resultados comprovados em todas as condições.';
   draft.hash = payloadHash(draft); writeJSON(preview.file, draft);
   await assert.rejects(f.engine.publish(preview.file, draft.hash), /numeric claim is absent/);
+  assert.equal(f.writeCalls, 0);
+});
+
+test('pre-0.7.1 draft with valid hash and same-model review cannot skip new evidence-card rules', async t => {
+  const f = fixture(t);
+  const preview = await f.engine.generate();
+  const draft = readJSON(preview.file);
+  draft.generatorVersion = '3.0.0';
+  draft.hash = payloadHash(draft);
+  writeJSON(preview.file, draft);
+  await assert.rejects(f.engine.publish(preview.file, draft.hash), /requires regeneration/);
   assert.equal(f.writeCalls, 0);
 });
 
