@@ -173,3 +173,22 @@ As duas saídas não tinham a **mesma** causa. A recuperação anterior requeria
 - Testes cobrem a sequência real, a variante de erro de artigo, recuperação somente na prévia, revalidação do título, bloqueio de URL/truncamento/segunda falha, e regras gramaticais.
 
 **Não solucionado:** a inferência `ambas as iniciativas demonstram progresso` pode ser semanticamente insustentável mesmo com vocabulário gramaticalmente correto. A revisão por IA continua não independente; somente o exame humano das fontes completas pode liberar uma pesquisa. Os 217 testes do último log (216 pass, 1 skip) são anteriores a estas mudanças. O Worker remoto continua sem idempotência confirmada.
+
+## Teste do operador — 2026-11-02, revisão ded97e3
+
+**Execução real no Windows:** `npm.cmd run check` confirmou 67 arquivos válidos. `npm.cmd test`: 232 testes, **230 aprovados, 1 falha, 1 ignorado (POSIX)**. A falha era no teste `a mixed fallback cannot hide an invalid newly generated title`, que esperava `draft: Invalid overview` quando o validador corretamente detectou primeiro `draft: Editorial Portuguese: incorrect article for scientific/institutional name in title`. **O bloqueio de um título inválido funcionou; o teste estava verificando a mensagem errada.** A expectativa foi corrigida sem alterar o código de produção.
+
+**Prévia real:** S1 precisou de duas tentativas após tentar vincular um método de exceções a um trecho não relacionado; a segunda passou. S2 teve duas tentativas rejeitadas por `Numeric fact is absent from its evidence quote`. Saídas reais:
+- `O MIT nomeou 2026 dois ex-alunos como bolsistas do Schmidt Sciences AI2050.` (`E1`);
+- `O MIT nomeou 2026 Schmidt Sciences AI2050 Fellows.` (`E1`).
+
+**Causa do bloqueio numérico:** a rotina `factualNumbers` trata `AI2050` como parte de um nome, não como uma quantidade `2050`; mas `2026` é uma afirmação numérica separada que não apareceu no trecho literal escolhido. A primeira tentativa também escreveu `dois`; sem o texto de `E1` no diagnóstico não é possível determinar se ele aparece ou não na citação selecionada. O validador bloqueou a aceitação das afirmações. O ano da publicação de uma notícia não deve ser inserido no fato como se fosse comprovado pelo trecho específico.
+
+**Correções posteriores, pendentes do novo teste Windows:**
+- Retorno do valor numérico realmente ausente no erro (`2026`, `2`, etc.; lista limitada e derivada por parsing, sem texto arbitrário).
+- Retry orienta remover anos/dados de metadados sem presença em `evidenceId`, não transformar `AI2050` em ano/quantidade e só manter números e grupos quando presentes na mesma evidência.
+- Nome `AI2050` exige âncora literal adicional na citação escolhida: não é número, mas tampouco pode ser inventado.
+- Testes de regressão com o padrão real do Qwen, reconhecimento de números isolados, erro explícito, ausência de fonte para nome do programa e revisão local em duas tentativas.
+- Expectativa do teste anterior corrigida para a razão real de rejeição de título inválido.
+
+**Nenhum dado numérico passa a ser aceito sem evidência.** Não houve publicação, merge, nem deploy. Ainda pendem `npm.cmd run check`, `npm.cmd test`, `research:preview` no novo SHA, avaliação da qualidade do próximo rascunho, revisão humana e compatibilidade do Worker remoto.
