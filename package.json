@@ -22,6 +22,7 @@
     "research:auth": "node agents/topic-researcher.mjs auth",
     "research:status": "node agents/topic-researcher.mjs status",
     "research:reconcile": "node agents/topic-researcher.mjs reconcile",
-    "research:cancel": "node agents/topic-researcher.mjs cancel"
+    "research:cancel": "node agents/topic-researcher.mjs cancel",
+    "research:benchmark": "node agents/research-benchmark.mjs"
   }
 }
