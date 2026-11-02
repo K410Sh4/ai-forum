@@ -1,5 +1,5 @@
 import { readLimited } from './research-runtime.mjs';
-import { requireDiversity, prose, validateCard, composePost, composeSection, evidenceSpans, openingEvidence, reviewMaterial, validateReview, REVIEW_KINDS, validateEditorialGrounding } from './research-core.mjs';
+import { requireDiversity, prose, sentence, validateCard, composePost, composeSection, evidenceSpans, openingEvidence, overviewFromSupportedFacts, reviewMaterial, validateReview, REVIEW_KINDS, validateEditorialGrounding } from './research-core.mjs';
 
 // Decoder length caps can force a string to close in the middle of a word.
 // Keep the JSON structure constrained; enforce complete prose and lengths in code.
@@ -127,7 +127,35 @@ export class OllamaResearcher {
       const instruction = revision
         ? 'Reescreva o texto inteiro do zero: a versão anterior foi rejeitada por erros editoriais. Em corrections, rejectedText é uma FRASE DA VERSÃO REJEITADA, não um fato, não é evidência e não deve ser copiada. Remova ou reescreva especificamente essa frase com apoio exclusivo de evidenceCards. Evite exageros sem citação literal, incluindo “revolucionar”, “avanços significativos”, “contribuir significativamente” e supostas aplicações educacionais; explicite o que cada fonte apenas relata. Use SOMENTE os fatos textuais de evidenceCards, separando publicadores e relatando limitações sem extrapolar. Exclua afirmações não sustentadas; não invente estudos ou instituições. overview deve conter 160 a 450 caracteres, ser composto por frases completas com pontuação e não terminar com uma oração pendente. Mantenha os demais campos completos. A lista de fontes será inserida pelo programa.'
         : 'Produza a abertura do debate a partir das notas fornecidas. As afirmações e referências verificadas serão anexadas pelo programa; não gere IDs nem altere essas notas. Faça uma síntese original de 160 a 450 caracteres, com 2 a 3 frases completas, separando os relatos de cada fonte e sem declarar resultados não presentes. Prefira 200 a 260 caracteres no overview. Não repita críticas, não invente conceitos, organizações, aplicações ou números. Evite expressões não comprovadas como “revolucionar”, “avanços significativos”, “contribuir significativamente” e “inovação educacional”; descreva a notícia de bolsas e a pesquisa de LLM separadamente. Chame roundup de panorama. Nomeação para uma bolsa não é um estudo nem prova de avanço técnico. Faça perguntas abertas, não conclusões inventadas.';
-      post = await this.ask('draft', draftSchema, { task: instruction, plan, evidenceCards: compactCards(cards), corrections: correctionHints }, value => { opening = { ...value, ...supported }; return composePost(topic, opening, selected); });
+      try {
+        post = await this.ask('draft', draftSchema, { task: instruction, plan, evidenceCards: compactCards(cards), corrections: correctionHints }, value => { opening = { ...value, ...supported }; return composePost(topic, opening, selected); });
+      } catch (error) {
+        // Only TWO complete, well-formed but short overviews qualify. Never
+        // recover URLs, control characters, incomplete sentences, malformed
+        // JSON or factual-grounding failures, and never bypass composePost.
+        if (error.message !== 'draft: Invalid overview (length, URL or control character)' ||
+            this.config.modelAttempts < 2) throw error;
+        const attempts = this.validationTrace.filter(item => item.stage === 'draft').slice(-this.config.modelAttempts);
+        if (attempts.length !== this.config.modelAttempts ||
+            attempts.some(item => item.error !== 'Invalid overview (length, URL or control character)')) throw error;
+        let candidate;
+        try {
+          const outputs = attempts.map(item => JSON.parse(item.output));
+          for (const value of outputs) sentence(value.overview, 50, 159, 'short overview');
+          const last = outputs.at(-1);
+          opening = {
+            ...last, ...supported,
+            overview: overviewFromSupportedFacts(cards, supported.sourceIds),
+            overviewMode: 'reviewed-source-facts-fallback'
+          };
+          candidate = composePost(topic, opening, selected);
+        } catch {
+          // If anything else is wrong, retain the original validation error.
+          throw error;
+        }
+        post = candidate;
+        this.log('Qwen: duas sínteses curtas; usando panorama apenas com fatos selecionados e citações. A revisão editorial permanece obrigatória.');
+      }
       const review = await this.review(post, cards, plan.angle); reviews.push(review);
       if (review.approved) break;
       issues = review.issues;
