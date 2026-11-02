@@ -509,5 +509,5 @@ test('an approved-host redirect cannot impersonate a different publisher', async
 });
 test('Windows launcher forwards help without opening a model or publishing', { skip: process.platform !== 'win32' }, () => {
   const result = spawnSync('cmd.exe', ['/d', '/c', 'Pesquisar-Forum.cmd --help'], { encoding: 'utf8' });
-  assert.equal(result.status, 0); assert.match(result.stdout, /Research Publisher 2/);
+  assert.equal(result.status, 0); assert.match(result.stdout, /Research Publisher 3/);
 });
