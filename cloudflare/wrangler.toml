@@ -9,3 +9,7 @@ binding = "DB"
 database_name = "ai-forum-db"
 database_id = "0fd0bfed-2313-410d-8119-1054d01432bd"
 migrations_dir = "migrations"
+
+# Bounded internal worker: at most two read-only jobs every five minutes.
+[triggers]
+crons = ["*/5 * * * *"]
