@@ -128,31 +128,50 @@ export class OllamaResearcher {
       try {
         post = await this.ask('draft', draftSchema, { task: instruction, plan, evidenceCards: compactEvidenceCards(cards), corrections: correctionHints }, value => { opening = { ...value, ...supported }; return composePost(topic, opening, selected); });
       } catch (error) {
-        // Only TWO complete, well-formed but short overviews qualify. Never
-        // recover URLs, control characters, incomplete sentences, malformed
-        // JSON or factual-grounding failures, and never bypass composePost.
-        if (!allowDraftFallback || error.message !== 'draft: Invalid overview (length, URL or control character)' ||
-            this.config.modelAttempts < 2) throw error;
+        // Preview-only fallback: recover precisely two consecutive source-limited
+        // failures (short overview OR unsupported significance in overview).
+        // All original fields OTHER than overview are retained and checked again
+        // by composePost(), then the FULL model review, before operator approval.
+        // Do not recover transport errors, malformed JSON, hallucinated sources,
+        // invalid perspective claims or any other validation failure.
+        const shortOverviewError = 'Invalid overview (length, URL or control character)';
+        const significanceError = 'Factual grounding: unsubstantiated significance in overview; rewrite with precise, source-limited statements';
+        const recoverable = [shortOverviewError, significanceError];
+        const reason = error.message.startsWith('draft: ') ? error.message.slice(7) : '';
+        if (!allowDraftFallback || !recoverable.includes(reason) || this.config.modelAttempts < 2) throw error;
         const attempts = this.validationTrace.filter(item => item.stage === 'draft').slice(-this.config.modelAttempts);
         if (attempts.length !== this.config.modelAttempts ||
-            attempts.some(item => item.error !== 'Invalid overview (length, URL or control character)')) throw error;
+            attempts.some(item => item.error !== reason)) throw error;
         let candidate;
         try {
           const outputs = attempts.map(item => JSON.parse(item.output));
-          for (const value of outputs) sentence(value.overview, 50, 159, 'short overview');
-          const last = outputs.at(-1);
+          if (reason === shortOverviewError)
+            for (const value of outputs) sentence(value.overview, 50, 159, 'short overview');
+          else
+            // A significant-impact claim must be present in each rejected
+            // overview. Never turn a different rejected field into an accepted
+            // fallback merely because the model also wrote positive language.
+            for (const value of outputs)
+              if (typeof value.overview !== 'string' ||
+                  !/\b(?:avanc\w*|contribui\w*|impact\w*|inovac\w*|benefici\w*|melhor\w*)\s+significativ\w*\b/iu.test(
+                    value.overview.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+                  )) throw Error('Other draft failure');
           opening = {
-            ...last, ...supported,
+            ...outputs.at(-1), ...supported,
             overview: overviewFromSupportedFacts(cards, supported.sourceIds),
-            overviewMode: 'reviewed-source-facts-fallback'
+            overviewMode: reason === shortOverviewError
+              ? 'reviewed-source-facts-fallback'
+              : 'rejected-significance-preview-fallback'
           };
           candidate = composePost(topic, opening, selected);
         } catch {
-          // If anything else is wrong, retain the original validation error.
+          // Never hide the original grounding failure when the replacement
+          // fails another validation; preserve the old error and diagnostics.
           throw error;
         }
         post = candidate;
-        this.log('Qwen: duas sínteses curtas; usando panorama apenas com fatos selecionados e citações. A revisão editorial permanece obrigatória.');
+        this.log('Qwen: duas sínteses rejeitadas (' + (reason === shortOverviewError ? 'curtas' : 'impacto não comprovado') +
+          '); usando somente fatos vinculados às fontes. Revisão editorial integral permanece obrigatória.');
       }
       const review = await this.review(post, cards, plan.angle); reviews.push(review);
       if (review.approved) break;
