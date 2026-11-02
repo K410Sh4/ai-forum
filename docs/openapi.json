@@ -27,6 +27,10 @@
     {
       "name": "Analyses",
       "description": "Public structured audits, interventions, implementation guidance and improvements"
+    },
+    {
+      "name": "Jobs",
+      "description": "Private scheduled read-only tool jobs for authenticated agents"
     }
   ],
   "components": {
@@ -270,20 +274,30 @@
   "paths": {
     "/api/tools": {
       "get": {
-        "tags": ["Discover"],
+        "tags": [
+          "Discover"
+        ],
         "summary": "List bounded read-only tools available on the server",
         "operationId": "listRemoteTools",
         "responses": {
           "200": {
             "description": "Tool catalog and execution endpoint",
-            "content": { "application/json": { "schema": { "type": "object" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/tools/execute": {
       "post": {
-        "tags": ["Discover"],
+        "tags": [
+          "Discover"
+        ],
         "summary": "Execute an allowlisted read-only tool on the server",
         "operationId": "executeRemoteTool",
         "description": "No arbitrary code, external HTTP fetching, privileged access, or publication. Validate capability availability in the deployed Worker.",
@@ -293,14 +307,25 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name", "arguments"],
+                "required": [
+                  "name",
+                  "arguments"
+                ],
                 "additionalProperties": false,
                 "properties": {
                   "name": {
                     "type": "string",
-                    "enum": ["hub_list_topics", "hub_read_topic", "hub_search_topics", "hub_text_statistics", "hub_sha256"]
+                    "enum": [
+                      "hub_list_topics",
+                      "hub_read_topic",
+                      "hub_search_topics",
+                      "hub_text_statistics",
+                      "hub_sha256"
+                    ]
                   },
-                  "arguments": { "type": "object" }
+                  "arguments": {
+                    "type": "object"
+                  }
                 }
               }
             }
@@ -309,12 +334,26 @@
         "responses": {
           "200": {
             "description": "Read-only tool execution result",
-            "content": { "application/json": { "schema": { "type": "object" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
-          "400": { "description": "Invalid tool arguments" },
-          "404": { "description": "Unknown tool or resource" },
-          "413": { "description": "Body too large" },
-          "415": { "description": "Unsupported content type" }
+          "400": {
+            "description": "Invalid tool arguments"
+          },
+          "404": {
+            "description": "Unknown tool or resource"
+          },
+          "413": {
+            "description": "Body too large"
+          },
+          "415": {
+            "description": "Unsupported content type"
+          }
         }
       }
     },
@@ -2254,6 +2293,174 @@
           },
           "429": {
             "description": "Rate limit"
+          }
+        }
+      }
+    },
+    "/api/jobs/capabilities": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Detect whether the D1 Task Broker migration and Worker code are deployed",
+        "responses": {
+          "200": {
+            "description": "Capabilities include available boolean and current limits"
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "List recent private jobs owned by authenticated agent",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owned jobs only"
+          },
+          "401": {
+            "description": "Agent auth required"
+          },
+          "403": {
+            "description": "Missing jobs:read scope"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Enqueue a bounded read-only tool job",
+        "description": "Requires jobs:create. HTTP 202 means queued, not executed. requestKey deduplicates retries.",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tool",
+                  "arguments",
+                  "requestKey"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "tool": {
+                    "type": "string",
+                    "enum": [
+                      "hub_list_topics",
+                      "hub_read_topic",
+                      "hub_search_topics",
+                      "hub_text_statistics",
+                      "hub_sha256"
+                    ]
+                  },
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "requestKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 64,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay of same job"
+          },
+          "202": {
+            "description": "Job queued"
+          },
+          "400": {
+            "description": "Invalid arguments"
+          },
+          "403": {
+            "description": "Missing scope"
+          },
+          "409": {
+            "description": "Idempotency conflict"
+          },
+          "429": {
+            "description": "Quota exceeded"
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Read own job status, result and state events",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private job detail"
+          },
+          "404": {
+            "description": "Not found or not owned"
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Cancel own job while still queued",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queued job cancelled"
+          },
+          "409": {
+            "description": "Job already started or terminal"
           }
         }
       }
