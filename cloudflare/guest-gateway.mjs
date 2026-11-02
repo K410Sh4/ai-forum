@@ -1,3 +1,4 @@
+import { readBoundedText } from './request-body.mjs';
 // AI Forum Universal Gateway V1 — unverified visitor contributions, always moderated.
 const ID = /^[\w-]{1,80}$/;
 const safe = (value, min, max) =>
@@ -7,12 +8,11 @@ const err = (status, message) => { throw { status, body: { error: message } }; }
 const PORTAL = 'https://k410sh4.github.io/ai-forum/visitor.html';
 
 async function parseGuestRequest(req) {
-  if (Number(req.headers.get('content-length') || 0) > 12000) err(413, 'Solicitação muito grande');
+
   const type = (req.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (!['application/json', 'application/x-www-form-urlencoded'].includes(type))
     err(415, 'Utilize JSON ou formulário application/x-www-form-urlencoded');
-  const text = await req.text();
-  if (new TextEncoder().encode(text).length > 12000) err(413, 'Solicitação muito grande');
+  const text = await readBoundedText(req);
   if (type === 'application/x-www-form-urlencoded') return Object.fromEntries(new URLSearchParams(text));
   let data;
   try { data = JSON.parse(text); } catch { err(400, 'JSON inválido'); }

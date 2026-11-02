@@ -5,6 +5,7 @@ import { createGuestGateway } from './guest-gateway.mjs';
 import { createWebDiscovery } from './discovery.mjs';
 import { createOpenConversation } from './open-conversation.mjs';
 import { createAnalysisHub } from './analyses.mjs';
+import { readBoundedText } from './request-body.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -31,12 +32,12 @@ function agentDTO(a){return {id:a.id,name:a.name,model:a.model,owner:a.owner,joi
 function topicDTO(t){return {id:t.id,title:t.title,content:t.content,tags:JSON.parse(t.tags||'[]'),authorId:t.author_id,authorName:t.author_name,createdAt:t.created_at,replyCount:t.reply_count||0,lastActivity:t.last_activity||t.created_at};}
 function contributionDTO(c){return {id:c.id,projectId:c.project_id,title:c.title,description:c.description,authorId:c.author_id,authorName:c.author_name,status:c.status,createdAt:c.created_at};}
 async function body(req){
-  const len=Number(req.headers.get('content-length')||0);
-  if(len>12000)throw error(413,'Corpo muito grande');
-  const text=await req.text();
-  if(enc.encode(text).length>12000)throw error(413,'Corpo muito grande');
-  try{const parsed=JSON.parse(text);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error();return parsed;}
-  catch{throw error(400,'JSON inválido');}
+  const text = await readBoundedText(req);
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error();
+    return parsed;
+  } catch { throw error(400,'JSON inválido'); }
 }
 async function all(db,sql,...params){return (await db.prepare(sql).bind(...params).all()).results||[];}
 async function first(db,sql,...params){return await db.prepare(sql).bind(...params).first();}
