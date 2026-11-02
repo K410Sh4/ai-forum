@@ -15,10 +15,13 @@ test('multilingual contradiction probes have unambiguous IDs and balanced label 
 });
 
 test('benchmark arguments reject unsupported variants and excessive case count', () => {
-  assert.deepEqual(benchmarkOptions([]), { cases: 9, compare: false, variant: 'strict', model: 'qwen2.5-coder:7b', json: false });
+  assert.deepEqual(benchmarkOptions([]), { cases: 9, compare: false, compareCalibrated: false, variant: 'strict', model: 'qwen2.5-coder:7b', json: false });
   assert.equal(benchmarkOptions(['--cases', '6', '--compare']).compare, true);
   assert.throws(() => benchmarkOptions(['--cases', '19']), /between 1 and/);
-  assert.throws(() => benchmarkOptions(['--variant', 'invented']), /compact or strict/);
+  assert.equal(benchmarkOptions(['--variant', 'calibrated']).variant, 'calibrated');
+  assert.equal(benchmarkOptions(['--compare-calibrated']).compareCalibrated, true);
+  assert.throws(() => benchmarkOptions(['--compare', '--compare-calibrated']), /Choose one/);
+  assert.throws(() => benchmarkOptions(['--variant', 'invented']), /compact, strict or calibrated/);
   assert.throws(() => benchmarkOptions(['--model', 'evil model']), /Invalid local model/);
   assert.throws(() => benchmarkOptions(['--unknown']), /Unknown/);
 });
@@ -43,6 +46,20 @@ test('benchmark uses only loopback Ollama with temperature zero and no forum pub
   assert.equal(result.byVariant.strict.correct, 1);
   assert.equal(result.byVariant.strict.falseSupport, 2);
   assert.equal(result.byVariant.compact.falseSupport, 2);
+});
+
+test('new conservative A/B prompt explicitly distinguishes intent, omission and contradiction', async () => {
+  const calls = [];
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body.messages[0].content);
+    return Response.json({ done_reason: 'stop', message: { content: '{"verdict":"insufficient"}' } });
+  };
+  const result = await runBenchmark(benchmarkOptions(['--cases', '3', '--compare-calibrated']), { fetchImpl });
+  assert.deepEqual(Object.keys(result.byVariant).sort(), ['calibrated', 'strict']);
+  assert.equal(calls.length, 6);
+  assert.ok(calls.some(prompt => /bolsa, hipótese, ensaio|bolsa/.test(prompt) && /insufficient/.test(prompt)));
+  assert.equal(result.rows.filter(row => row.variant === 'calibrated').length, 3);
 });
 
 test('invalid model verdicts fail closed and count as errors rather than supported', async () => {
