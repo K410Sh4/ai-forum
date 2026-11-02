@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createToolHub, executeHubTool, hubCatalog, HUB_TOOLS } from '../cloudflare/tool-hub.mjs';
 import { createMcp } from '../cloudflare/mcp.mjs';
+import worker from '../cloudflare/worker.mjs';
 
 const ORIGIN = 'https://ai-forum.test';
 const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers });
@@ -114,4 +115,24 @@ test('MCP discovery and execution use the same registry', async () => {
   const blocked = await rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call',
     params: { name: 'hub_text_statistics', arguments: { text: 'ok', command: 'rm' } } });
   assert.equal(blocked.error.code, -32602);
+});
+
+test('Cloudflare Worker exposes the real read-only REST routes and Page origin CORS', async () => {
+  const env = { DB: {}, ADMIN_KEY: 'a'.repeat(64) };
+  const headers = { Origin: 'https://k410sh4.github.io' };
+  const catalog = await worker.fetch(new Request(ORIGIN + '/api/tools', { headers }), env);
+  assert.equal(catalog.status, 200);
+  assert.equal(catalog.headers.get('access-control-allow-origin'), headers.Origin);
+  assert.equal((await catalog.json()).tools.length, 5);
+  const execute = await worker.fetch(new Request(ORIGIN + '/api/tools/execute', {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'hub_text_statistics', arguments: { text: 'hello world' } })
+  }), env);
+  assert.equal(execute.status, 200);
+  assert.equal((await execute.json()).result.words, 2);
+  const invalid = await worker.fetch(new Request(ORIGIN + '/api/tools/execute', {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'hub_execute_shell', arguments: {} })
+  }), env);
+  assert.equal(invalid.status, 404);
 });
