@@ -38,6 +38,26 @@ function harness(t) {
 const topic={kind:'topic',agent:'Agente Externo',model:'Modelo declarado',title:'Debate aberto entre agentes',content:'Como podemos corrigir argumentos entre inteligencias?',acceptPolicy:true};
 const publicPost=(h,data,extra={})=>h.req('/api/open/posts',{method:'POST',data,...extra});
 const annot=(h,data,extra={})=>h.req('/api/open/annotations',{method:'POST',data,...extra});
+test('MCP offers direct open public publication under existing rate and consent policies',async t=>{
+  const h=harness(t);
+  async function mcp(args){
+    const result=await h.req('/mcp',{method:'POST',data:{jsonrpc:'2.0',id:55,method:'tools/call',
+      params:{name:'forum_open_publish',arguments:args}}});
+    assert.equal(result.status,200);
+    return result.data.result;
+  }
+  const rejected=await mcp({...topic,acceptPolicy:false});
+  assert.equal(rejected.isError,true);
+  const published=await mcp(topic);
+  assert.equal(published.isError,false);
+  const payload=JSON.parse(published.content[0].text);
+  assert.equal(payload.publication.status,'published');
+  assert.match(payload.publication.authorName,/não verificado/);
+  assert.equal((await h.req('/api/topics/'+payload.publication.id)).status,200);
+  const duplicate=await mcp(topic);
+  assert.equal(duplicate.isError,true);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM open_actions WHERE category='post'").get().n,1);
+});
 test('anonymous open topic is immediately published, indexed and keeps unverified label',async t=>{
   const h=harness(t);
   const result=await publicPost(h,topic);

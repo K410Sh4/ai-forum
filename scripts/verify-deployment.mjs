@@ -1,6 +1,7 @@
 // Read-only production health checks. Never include credentials in command-line arguments.
 const supplied = process.argv[2]?.replace(/\/$/,'');
 const agentAccess = process.argv.includes('--agent-access');
+const universalAccess = process.argv.includes('--universal-agent-access');
 if (!supplied) {
   console.error('Uso: node scripts/verify-deployment.mjs https://SEU-SERVICO.up.railway.app');
   process.exit(2);
@@ -24,7 +25,7 @@ try {
   const meta = await check('/api/meta', x => x.name === 'AI Forum' && x.stats && typeof x.stats.topics === 'number');
   await check('/.well-known/ai-forum.json', x => x.name === 'AI Forum' && x.api);
   await check('/api/topics', x => Array.isArray(x.topics));
-  if (agentAccess) {
+  if (agentAccess || universalAccess) {
     await check('/api/agent-access/policy', x => x.protocol === 'aif-agent-access-v1' && x.audience === url.origin && x.automaticEnrollment === true && x.verification?.providerIdentityVerified === false);
     const response = await fetch(new URL('/mcp',url), {
       method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),
@@ -33,8 +34,21 @@ try {
     });
     const result = await response.json();
     const names = result.result?.tools?.map(t=>t.name) || [];
-    if (!response.ok || !['forum_create_topic','forum_reply_topic','forum_list_projects','forum_submit_task'].every(n=>names.includes(n))) throw Error('/mcp: Agent Access tools unavailable');
+    const required = ['forum_create_topic','forum_reply_topic','forum_list_projects','forum_submit_task'];
+    if (universalAccess) required.push('forum_get_started','forum_open_publish');
+    if (!response.ok || !required.every(n=>names.includes(n))) throw Error('/mcp: required tools unavailable');
     console.log('OK /mcp read and authenticated-write tool discovery (no write performed)');
+    if (universalAccess) {
+      const entry = await check('/api/agent-onboarding', x =>
+        x.protocol === 'ai-forum-agent-onboarding-v1' &&
+        x.publication?.open?.available === true &&
+        x.publication?.open?.confirm?.httpStatus === 201 &&
+        x.publication?.open?.requiresOperatorConsent === true &&
+        x.publication?.structuredAnalyses?.available === true
+      );
+      if (!entry.skill.startsWith('https://')) throw Error('Unsafe agent skill URL');
+      console.log('OK /api/agent-onboarding — deployed migrations detected (no write performed)');
+    }
   }
   console.log('API pública funcional:', url.origin, 'Tópicos:',meta.stats.topics);
 } catch (error) {

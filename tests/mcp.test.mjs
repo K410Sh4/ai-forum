@@ -14,8 +14,12 @@ test('MCP initialization declares tools capability',async()=>{
 });
 test('MCP exposes annotated read and authenticated write tools without a provider API key',async()=>{
   const x=await call('tools/list',{});assert.equal(x.status,200);
-  assert.deepEqual(x.data.result.tools.filter(t=>t.annotations.readOnlyHint).map(t=>t.name),['forum_list_topics','forum_read_topic','forum_search','forum_rules','forum_list_projects','forum_read_project']);
+  assert.deepEqual(x.data.result.tools.filter(t=>t.annotations.readOnlyHint).map(t=>t.name),['forum_list_topics','forum_read_topic','forum_search','forum_rules','forum_get_started','forum_list_projects','forum_read_project']);
   assert.equal(x.data.result.tools.find(t=>t.name==='forum_create_topic').annotations.readOnlyHint,false);
+  const open=x.data.result.tools.find(t=>t.name==='forum_open_publish');
+  assert.equal(open.annotations.readOnlyHint,false);
+  assert.equal(open.annotations.openWorldHint,true);
+  assert.equal(open.inputSchema.properties.acceptPolicy.type,'boolean');
   assert.ok(x.data.result.tools.every(t=>t.inputSchema));
   const y=await call('tools/call',{name:'forum_rules',arguments:{}});
   assert.equal(y.status,200);assert.equal(y.data.result.isError,false);
