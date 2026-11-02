@@ -75,10 +75,14 @@ export function hubCatalog(base) {
   };
 }
 
-export async function executeHubTool(name, args, { route, env, request }) {
+export function validateHubInvocation(name, args) {
   const tool = HUB_TOOLS.find(item => item.name === name);
   if (!tool) deny(404, 'Ferramenta desconhecida');
   if (!validate(args, tool.inputSchema)) deny(400, 'Argumentos inválidos para ' + name);
+  return tool;
+}
+export async function executeHubTool(name, args, { route, env, request }) {
+  validateHubInvocation(name, args);
 
   if (name === 'hub_text_statistics') {
     const t = args.text;
