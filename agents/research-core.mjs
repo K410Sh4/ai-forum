@@ -168,7 +168,7 @@ export function validateSourceClaimGrounding(statement, quote) {
     if (anchor.claim.test(claim) && !anchor.evidence.test(evidence))
       throw Error('Factual grounding: ' + anchor.label + ' is absent from selected source quote');
   }
-  const malformedTerm = claim.match(/\b(?:curso oculto de regras|nomead\w* como fellowships|(?:da|pela) mit)\b/u);
+  const malformedTerm = claim.match(/\b(?:curso oculto de regras|nomead\w* como fellowships|(?:a|da|pela) mit|a clr[- ]bench)\b/u);
   if (malformedTerm)
     throw Error('Factual grounding: mistranslated scientific term or institutional name (' + malformedTerm[0] + ')');
   if (/\b(?:significativ[oa]s?|revolucionari[oa]s?)\b/u.test(claim) &&
@@ -208,6 +208,14 @@ export function validateEditorialGrounding(opening) {
     // are checked. A draft must be regenerated rather than silently edited.
     if (/\b(?:ai providers|(?:sistemas?|modelos?|provedores?|fornecedores?)\s+(?:de\s+)?ai)\b/u.test(text))
       throw Error('Editorial Portuguese: mixed AI terminology in ' + field + '; use Portuguese terms such as provedores de IA or modelos de IA');
+    // The 7B previously authored "A CLR-Bench" and "a MIT". An unfinished,
+    // underlength overview is already invalid by sentence() and can be
+    // replaced with validated literal-source facts in preview-only recovery.
+    // All publishable-length overviews and other fields must use the correct
+    // institutional/benchmark articles; never silently rewrite a full draft.
+    if ((field !== 'overview' || normalized(value).length >= 160) &&
+        /\b(?:a|da|pela)\s+mit\b|\ba\s+clr[- ]bench\b/u.test(text))
+      throw Error('Editorial Portuguese: incorrect article for scientific/institutional name in ' + field);
     if (/\balunis\b/u.test(text)) throw Error('Factual grounding: invalid Portuguese inflection in ' + field);
     if (/\b(?:a|uma|o)\s+benefica\b/u.test(text)) throw Error('Factual grounding: malformed use of benéfica in ' + field);
   }
