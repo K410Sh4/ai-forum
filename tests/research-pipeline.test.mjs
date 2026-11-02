@@ -25,7 +25,7 @@ test('runtime diagnostics report missing capabilities before any network request
 const excerpt = 'Researchers reported a controlled comparison of model behavior under specified conditions. The report does not establish general performance outside the evaluated setting.';
 const configValue = () => ({ publishers: [{ id: 'first', hosts: ['first.example', 'science.first.example'] }, { id: 'second', hosts: ['second.example'] }], allowedFeedHosts: ['first.example', 'second.example'], sourcesPerPost: 2, feedCacheMinutes: 0, topics: [{ id: 'ai-research', label: 'Pesquisa de agentes e métodos', tag: 'inteligencia-artificial', feeds: ['https://first.example/feed', 'https://second.example/feed'] }] });
 function xml(host) { return '<rss><channel><item><title>Research update ' + host + '</title><link>https://' + host + '/paper</link><description><![CDATA[' + excerpt + ']]></description><pubDate>' + new Date(NOW - 86400000).toUTCString() + '</pubDate></item></channel></rss>'; }
-function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, criticRejects = 0, criticAdvice = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
+function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', brokenDrafts = 0, shortOverviews = 0, urlOverviews = 0, criticRejects = 0, criticAdvice = false, criticOnlyQuestions = false, criticMixedBlockers = false, criticReason = 'A afirmação apresentada extrapola o alcance dos trechos fornecidos.', idempotent = true, loseReceiptAt = -1 } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aif-research-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   let now = NOW, criticCalls = 0, writeCalls = 0, draftCalls = 0;
@@ -57,7 +57,11 @@ function fixture(t, { depth = 'balanced', invalidModel = false, badPlan = '', br
     } else {
       stage = 'review'; const reject = criticCalls++ < criticRejects;
       assert.equal(properties.approved, undefined);
-      value = { findings: reject ? [{ kind: 'unsupported-claim', claimId: input.material[0].id, reason: criticReason }] : criticAdvice ? [{ kind: 'missing-detail', claimId: input.material[0].id, reason: 'O resumo não apresenta os nomes dos pesquisadores nem métodos completos.' }] : [], note: 'Revisão interna baseada apenas nas evidências fornecidas.' };
+      const questionTarget = input.material.find(part => part.text.startsWith('PERGUNTAS ABERTAS\\n'));
+      value = { findings: reject ? [
+        { kind: 'unsupported-claim', claimId: criticOnlyQuestions ? questionTarget?.id : input.material[0].id, reason: criticReason },
+        ...(criticMixedBlockers ? [{ kind: 'unsupported-claim', claimId: input.material[0].id, reason: criticReason }] : [])
+      ] : criticAdvice ? [{ kind: 'missing-detail', claimId: input.material[0].id, reason: 'O resumo não apresenta os nomes dos pesquisadores nem métodos completos.' }] : [], note: 'Revisão interna baseada apenas nas evidências fornecidas.' };
     }
     calls.push({ stage, input, prompt });
     return Response.json({ message: { content: invalidModel ? '{invalid' : JSON.stringify(value) }, done: true, done_reason: 'stop', prompt_eval_count: 200, eval_count: 150, eval_duration: 1e9 });
@@ -274,6 +278,33 @@ test('editorial rejection gets one revision, then fails closed', async t => {
   assert.equal(report.status, 'rejected'); assert.equal(report.attempts.length, 2); assert.equal(report.attempts[0].review.approved, false);
   assert.ok(fs.existsSync(reportFile.replace(/\.json$/, '.md')));
   await assert.rejects(f.engine.publish(reportFile, 'a'.repeat(64)), /hash|format/i); assert.equal(f.writeCalls, 0);
+});
+
+test('two persistent question-only review failures trigger source-bounded repair and a third full review', async t => {
+  const f = fixture(t, { criticRejects: 2, criticOnlyQuestions: true });
+  const preview = await f.engine.generate({ auto: false, depth: 'quick' });
+  assert.equal(preview.status, 'draft');
+  const result = readJSON(preview.file);
+  assert.equal(result.editorial.opening.questionsMode, 'source-bounded-repair');
+  assert.match(result.post.content, /Que limitações precisam ser esclarecidas/);
+  assert.match(result.post.content, /relato da fonte S1/);
+  assert.equal(f.calls.filter(call => call.stage === 'draft').length, 2);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 3);
+  assert.equal(f.writeCalls, 0);
+});
+
+test('repaired questions still fail closed when the new editorial review rejects them', async t => {
+  const f = fixture(t, { criticRejects: 3, criticOnlyQuestions: true });
+  await assert.rejects(f.engine.generate({ auto: false }), /Editorial review rejected source-bounded questions/);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 3);
+  assert.equal(f.writeCalls, 0);
+});
+
+test('mixed factual and question defects never trigger question-only recovery', async t => {
+  const f = fixture(t, { criticRejects: 2, criticOnlyQuestions: true, criticMixedBlockers: true });
+  await assert.rejects(f.engine.generate({ auto: false }), /Editorial review rejected the opening/);
+  assert.equal(f.calls.filter(call => call.stage === 'review').length, 2);
+  assert.equal(f.writeCalls, 0);
 });
 
 test('critic hallucinations never become evidence or text instructions for the next draft', async t => {
