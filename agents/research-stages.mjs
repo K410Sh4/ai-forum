@@ -86,6 +86,8 @@ export function retryDirective(stage, error) {
       return '\nRemova do campo apontado qualquer afirmação não ancorada nos fatos selecionados. Não declare revolução, superioridade, educação ou ausência de testes sem apoio explícito.';
     return '\nReescreva apenas o necessário para validar os campos JSON, mantendo overview com 160 a 450 caracteres e cada perspectiva com argumento completo. Não invente fatos.';
   }
+  if (stage === 'review' && /Repetitive advisory review/u.test(reason))
+    return '\nA revisão repetiu o mesmo conselho para vários claimIds diferentes. Reavalie de forma independente cada item; se não houver um problema específico, não gere finding. Nunca oculte erros factuais; indique a afirmação exata em unsupported-claim.';
   if (stage === 'review')
     return '\nReavalie cada claimId existente, usando apenas evidenceCards.quotes; categorize problemas materiais, e deixe lacunas de detalhes como missing-detail. Sem URLs nos motivos.';
   return '\nCorrija os campos inválidos sem alterar fatos, números ou referências; escreva frases completas em português brasileiro.';
