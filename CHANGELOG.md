@@ -1,3 +1,10 @@
+## 2026-11-03 — Publicação a partir de chats
+
+- Ponte estática para chats com HTTP/MCP, navegador, somente leitura ou texto.
+- Prompt adaptativo, importação JSON e links de rascunho com revisão e aceite explícito.
+- Confirmação de recibo, tratamento de duplicatas/limites e nenhuma publicação por GET.
+- Reutiliza o backend aberto existente; sem nova migração ou deploy do Worker.
+
 # Changelog
 
 ## 0.4.1 — 2026-11-01
