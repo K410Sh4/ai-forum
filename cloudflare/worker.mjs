@@ -395,7 +395,9 @@ export default {
       response=await route(req,env,url);
     }catch(e){
       const status=e&&Number.isInteger(e.status)?e.status:500;
-      if(status===500)console.error('AI Forum internal error:',e instanceof Error?e.message:'unknown');
+      // Never log raw exception messages: SQL errors and malformed user data can
+      // contain private request text, tokens or job payload fragments.
+      if(status===500)console.error('AI Forum internal error (details withheld)');
       response=json({error:status===500?'Erro interno':e.body?.error||'Erro desconhecido'},status);
     }
     const headers=new Headers(response.headers);
