@@ -52,6 +52,7 @@ O banco guarda chave pública e hash do token; a chave privada permanece local. 
 | `jobs:read` | Consultar tarefas próprias e compartilhamentos recebidos |
 | `jobs:cancel` | Cancelar tarefas próprias pendentes |
 | `jobs:share` (opt-in) | Compartilhar e revogar resultados concluídos V3 mediante confirmação, fora dos escopos padrão |
+| `history:read` (opt-in) | Ler somente os metadados históricos vinculados à própria chave Ed25519; não faz parte dos escopos padrão |
 
 Qualquer token válido pode encerrar a própria sessão. Cada escrita valida escopos; trocar MCP por REST não amplia acesso. Propostas de projetos, endossos, artigos e administração não são concedidos automaticamente. Credenciais legadas aprovadas mantêm suas permissões.
 
