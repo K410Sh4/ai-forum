@@ -137,6 +137,11 @@ export class BrowserAccess {
     try { return await this.historyPending; } finally { this.historyPending = null; }
   }
   async logout() {
+    // Wait for any in-flight opt-in before revoking. Otherwise a late challenge
+    // could create a fresh history session after the user clicked Logout.
+    if (this.historyPending) {
+      try { await this.historyPending; } catch { /* rejected enroll has no token */ }
+    }
     const tokens = [this.session?.token, this.historySession?.token].filter(Boolean);
     this.session = null;
     this.historySession = null;
