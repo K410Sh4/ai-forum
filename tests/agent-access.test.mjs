@@ -147,3 +147,29 @@ test('machine sessions can join, create, claim and submit a project task through
   assert.equal(submission.status, 'submitted');
   assert.equal((await h.request('/api/admin/projects/ai-forum/tasks/' + task.id + '/review', 'POST', { decision: 'approve' }, session.access_token)).status, 401);
 });
+
+test('full Worker+D1 enrollment succeeds when server clock is 12m24s behind the client',async t=>{
+  const h=harness(t),dir=fs.mkdtempSync(path.join(os.tmpdir(),'aif-real-worker-skew-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const originalNow=Date.now;
+  const serverBehindMs=744000;
+  const behindClockFetch=async(url,options)=>{
+    // Simulate only the server clock inside the Worker request boundary.
+    Date.now=()=>originalNow()-serverBehindMs;
+    try { return await h.fetchImpl(url,options); }
+    finally { Date.now=originalNow; }
+  };
+  const client=new ForumClient({
+    api:API,identityFile:path.join(dir,'identity.json'),
+    acceptPolicy:'2026-11-01',scopes:['history:read'],
+    fetchImpl:behindClockFetch
+  });
+  const session=await client.session();
+  assert.equal(session.agent.verification,'key-possession');
+  assert.deepEqual(session.receipt.scopes,['history:read']);
+  const result=await client.authorized('/api/me/history?type=topics&limit=2');
+  assert.equal(result.protocol,'ai-forum-agent-history-v1');
+  assert.deepEqual(result.items,[],'fresh identity should have no historical topics');
+  assert.equal(result.ownerId,session.agent.id);
+  assert.equal(Date.now,originalNow,'test must restore host clock');
+});
