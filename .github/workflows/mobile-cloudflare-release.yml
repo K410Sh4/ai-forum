@@ -1,0 +1,125 @@
+name: Cloudflare AI Forum - publicar pelo celular (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Digite DEPLOY para publicar em producao'
+        required: true
+        type: string
+      backup_acknowledgement:
+        description: 'Confirmo que baixarei e guardarei o backup D1 criptografado'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-forum-cloudflare-prod
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: ${{ github.repository == 'K410Sh4/ai-forum' && github.ref == 'refs/heads/main' && github.actor == 'K410Sh4' && inputs.confirmation == 'DEPLOY' && inputs.backup_acknowledgement == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check source and run all tests without production credentials
+        run: npm run check && npm test
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_BACKUP_PASSPHRASE: ${{ secrets.D1_BACKUP_PASSPHRASE }}
+      API_URL: https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check secrets are configured (do not print them)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${#CLOUDFLARE_API_TOKEN}" -ge 20 || { echo '::error::Configure CLOUDFLARE_API_TOKEN no GitHub Secrets'; exit 1; }
+          test "${#CLOUDFLARE_ACCOUNT_ID}" -ge 10 || { echo '::error::Configure CLOUDFLARE_ACCOUNT_ID no GitHub Secrets'; exit 1; }
+          test "${#D1_BACKUP_PASSPHRASE}" -ge 24 || { echo '::error::Configure D1_BACKUP_PASSPHRASE (24+ caracteres)'; exit 1; }
+      - name: Install pinned Wrangler
+        run: npm ci --prefix cloudflare
+      - name: Export and encrypt remote D1 (before any changes)
+        id: encrypted_backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          directory="$RUNNER_TEMP/d1-encrypted-backup"
+          mkdir -p "$directory"
+          plaintext="$RUNNER_TEMP/ai-forum-d1.sql"
+          verification="$RUNNER_TEMP/ai-forum-d1-verify.sql"
+          archive="$directory/ai-forum-d1-${GITHUB_RUN_ID}-${GITHUB_SHA}.sql.enc"
+          trap 'rm -f "$plaintext" "$verification"' EXIT
+          (
+            cd cloudflare
+            npm exec -- wrangler d1 export ai-forum-db --remote --skip-confirmation --output "$plaintext"
+          )
+          test -s "$plaintext" || { echo '::error::Backup D1 vazio; deploy bloqueado'; exit 1; }
+          grep -Eiq 'CREATE TABLE|INSERT INTO' "$plaintext" || { echo '::error::Backup D1 nao contem SQL esperado'; exit 1; }
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 300000 -in "$plaintext" -out "$archive" -pass env:D1_BACKUP_PASSPHRASE
+          openssl enc -d -aes-256-cbc -salt -pbkdf2 -iter 300000 -in "$archive" -out "$verification" -pass env:D1_BACKUP_PASSPHRASE
+          cmp -s "$plaintext" "$verification" || { echo '::error::Backup criptografado nao foi validado'; exit 1; }
+          (cd "$directory" && sha256sum "$(basename "$archive")" > SHA256SUMS.txt)
+          echo "backup_directory=$directory" >> "$GITHUB_OUTPUT"
+          echo 'Backup remoto exportado, criptografado e validado; nenhuma mutacao D1 realizada.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Store encrypted backup as a private workflow artifact before deploying
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-encrypted-${{ github.run_id }}
+          path: ${{ steps.encrypted_backup.outputs.backup_directory }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Apply D1 migrations and deploy Worker
+        working-directory: cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm exec -- wrangler d1 migrations apply ai-forum-db --remote --yes
+          npm exec -- wrangler deploy
+      - name: Verify production REST and MCP without posting content
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-deployment.mjs "$API_URL" --agent-access --universal-agent-access --task-broker --agent-network --agent-history
+          node --input-type=module -e "
+            const response = await fetch(process.env.API_URL + '/api/reputation', {
+              signal: AbortSignal.timeout(10000)
+            });
+            if (!response.ok) throw Error('HTTP ' + response.status);
+            const body = await response.json();
+            if (body.protocol !== 'ai-forum-consultative-reputation-v4' ||
+                body.advisoryOnly !== true || body.grantsPermissions !== false ||
+                !Array.isArray(body.scores)) {
+              throw Error('Reputation V4 is not active');
+            }
+            console.log('OK advisory reputation V4 available');
+          "
+      - name: Report backup retention and post-deploy verification
+        if: success()
+        shell: bash
+        run: |
+          echo '### AI Forum deploy verificado' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Worker V4 ativo. Nenhum topico, trabalho ou compartilhamento de teste foi publicado.' >> "$GITHUB_STEP_SUMMARY"
+          echo '**IMPORTANTE:** baixe o artefato D1 criptografado desta execucao e guarde em armazenamento privado permanente. O arquivo do GitHub expira em 30 dias; para recuperar e necessario conservar a frase secreta configurada no GitHub.' >> "$GITHUB_STEP_SUMMARY"
