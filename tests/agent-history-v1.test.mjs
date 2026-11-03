@@ -195,3 +195,89 @@ test('history-only session cannot acquire unrelated identity or publishing permi
   assert.equal((await h.req('/api/topics',token,'POST')).status,403);
   assert.equal((await h.req('/api/jobs',token,'POST')).status,403);
 });
+
+
+test('revocation after auth but before SELECT or before response rejects within TTL',async t=>{
+  for(const phase of ['before-select','after-select']){
+    const h=harness(t),validUntil=h.sql.prepare("SELECT expires_at AS time FROM agent_sessions WHERE id='history-session-A'").get().time;
+    assert.ok(validUntil>Date.now()+60_000,'test session should still be inside TTL');
+    const original=h.env.DB.prepare.bind(h.env.DB);
+    let intercepted=false;
+    h.env.DB.prepare=(sql)=>{
+      const operation=original(sql);
+      if(!sql.includes('FROM topics')||!sql.includes('ORDER BY created_at'))return operation;
+      return {bind(...args){
+        const bound=operation.bind(...args);
+        return {...bound,async all(){
+          if(phase==='before-select')
+            h.sql.prepare("UPDATE agent_sessions SET revoked_at=? WHERE id='history-session-A'").run(Date.now());
+          const result=await bound.all();
+          if(phase==='after-select')
+            h.sql.prepare("UPDATE agent_sessions SET revoked_at=? WHERE id='history-session-A'").run(Date.now());
+          intercepted=true;
+          return result;
+        }};
+      }};
+    };
+    const r=await h.req('/api/me/history?type=topics',h.tokens.A);
+    assert.equal(r.status,401,phase+': must not disclose data');
+    assert.equal(intercepted,true,phase+': read path did not execute');
+    assert.deepEqual(Object.keys(r.data),['error']);
+    assert.ok(!JSON.stringify(r.data).includes('topic-A'));
+  }
+});
+test('401 and 403 do not expose whether any agent exists or owns a record',async t=>{
+  const h=harness(t);
+  const invalid=await h.req('/api/me/history','aifs_completely_invalid_session');
+  h.sql.prepare("UPDATE agent_sessions SET revoked_at=? WHERE id='history-session-A'").run(Date.now());
+  const revoked=await h.req('/api/me/history',h.tokens.A);
+  assert.equal(invalid.status,401);assert.equal(revoked.status,401);
+  assert.deepEqual(invalid.data,revoked.data);
+  for(const token of [h.tokens.missingScope,h.tokens.legacy]){
+    const denied=await h.req('/api/me/history?type=shares-received',token);
+    assert.equal(denied.status,403);
+    assert.deepEqual(Object.keys(denied.data),['error']);
+    assert.ok(!JSON.stringify(denied.data).includes('key_A'));
+    assert.ok(!JSON.stringify(denied.data).includes('key_B'));
+  }
+});
+test('internal SQL errors yield generic 500 without serializing private job payloads',async t=>{
+  const h=harness(t),db=h.env.DB;
+  const original=db.prepare.bind(db);
+  db.prepare=(sql)=>{
+    if(sql.includes('FROM tool_jobs')&&sql.includes('ORDER BY created_at'))
+      throw Error('SECRET_PRIVATE_JOB_ARGUMENT,SECRET_PRIVATE_RESULT,SECRET_REQUEST_KEY');
+    return original(sql);
+  };
+  const actual=await h.req('/api/me/history?type=jobs',h.tokens.A);
+  assert.equal(actual.status,500);
+  assert.deepEqual(actual.data,{error:'Erro interno'});
+  assert.doesNotMatch(JSON.stringify(actual.data),/SECRET_|key_A|job-A|stack/i);
+});
+test('item JSON keys are exact per history type; errors never mix types',async t=>{
+  const h=harness(t),matrix=[
+    ['topics',['id','createdAt','title','visibility']],
+    ['replies',['id','createdAt','topicId','visibility']],
+    ['annotations',['id','createdAt','topicId','targetKind','targetId','kind','visibility']],
+    ['jobs',['id','createdAt','tool','status','finishedAt']],
+    ['shares-sent',['id','createdAt','jobId','otherAgentId','expiresAt','revokedAt']]
+  ];
+  for(const [type,fields] of matrix){
+    const page=await h.req('/api/me/history?type='+type,h.tokens.A);
+    assert.equal(page.status,200);
+    assert.equal(page.data.items.length,1);
+    assert.deepEqual(Object.keys(page.data.items[0]).sort(),fields.sort(),type+' schema drift');
+  }
+});
+test('readiness fails closed when any migration 0009 owner index is absent',async t=>{
+  const h=harness(t);
+  h.sql.exec('DROP INDEX history_shares_recipient_recent');
+  const capabilities=await h.req('/api/me/history/capabilities');
+  assert.equal(capabilities.status,200);
+  assert.equal(capabilities.data.available,false);
+  const history=await h.req('/api/me/history',h.tokens.A);
+  assert.equal(history.status,503);
+  const onboarding=await h.req('/api/agent-onboarding');
+  assert.equal(onboarding.status,200);
+  assert.equal(onboarding.data.history.available,false);
+});
