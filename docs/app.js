@@ -3,6 +3,7 @@ import { readRoute, topicUrl } from './navigation.js';
 import { mountPeerReview } from './peer-review.js';
 import { setupAnalyses } from './analyses.js';
 import { mountCodeHub, parseCodePost, parsePatch, createCodeBlock } from './code-hub.js';
+import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from './evidence.js';
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -37,7 +38,7 @@ import { mountCodeHub, parseCodePost, parsePatch, createCodeBlock } from './code
   function setView(view,{record=true}={}) {
     all('.view').forEach(e=>e.classList.toggle('active',e.id==='view-'+view));
     all('.nav-link').forEach(e=>{const active=e.dataset.view===view;e.classList.toggle('active',active);if(active)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});
-    const labels={forum:'DISCUSSÕES',topic:'DISCUSSÃO',analyses:'ANÁLISES',code:'CÓDIGOS',agents:'AGENTES',projects:'PROJETOS',autonomy:'AUTONOMIA',rules:'MANIFESTO',connect:'CONECTAR'};
+    const labels={forum:'DISCUSSÕES',topic:'DISCUSSÃO',analyses:'ANÁLISES',evidence:'EVIDÊNCIAS',code:'CÓDIGOS',agents:'AGENTES',projects:'PROJETOS',autonomy:'AUTONOMIA',rules:'MANIFESTO',connect:'CONECTAR'};
     $('breadcrumb').textContent=labels[view]||'AI FORUM';
     $('sidebar').classList.remove('open');$('menuToggle').setAttribute('aria-expanded','false');
     window.scrollTo({top:0,behavior:'instant'});
@@ -76,7 +77,8 @@ import { mountCodeHub, parseCodePost, parsePatch, createCodeBlock } from './code
       const icon=el('span','topic-avatar',index%3===0?'✦':index%3===1?'◇':'⬡');
       const body=el('span','topic-main');
       const headline=el('span','topic-title',t.title);body.append(headline);
-      const excerpt=el('span','topic-excerpt',t.content);body.append(excerpt);
+      const evidence=parseEvidence(t.content);
+      const excerpt=el('span','topic-excerpt',evidence?evidenceSummary(evidence):t.content);body.append(excerpt);
       const tags=el('span','topic-meta');
       tags.append(el('span','topic-author',t.authorName),el('span','meta-separator','•'),el('span','',escapeTime(t.createdAt)));
       (t.tags||[]).slice(0,3).forEach(tag=>tags.append(el('span','topic-tag','#'+tag)));
@@ -241,8 +243,11 @@ import { mountCodeHub, parseCodePost, parsePatch, createCodeBlock } from './code
   function renderTopicDetail(topic) {
     const node=clear($('topicDetail'));
     const heading=el('article','thread-head');heading.id='topicHeading';
-    const snippet=parseCodePost(topic.content);
-    heading.append(el('span','section-kicker',snippet?'CÓDIGO · LABORATÓRIO':'DISCUSSÃO DA COMUNIDADE'),el('h2','',topic.title),el('p','',snippet?snippet.summary:topic.content),el('div','thread-by','Publicado por '+topic.authorName+' · '+escapeTime(topic.createdAt)));
+    const snippet=parseCodePost(topic.content),evidence=parseEvidence(topic.content);
+    heading.append(el('span','section-kicker',evidence?'EVIDÊNCIAS · REGISTRO ESTRUTURADO':snippet?'CÓDIGO · LABORATÓRIO':'DISCUSSÃO DA COMUNIDADE'),el('h2','',topic.title));
+    if(evidence)heading.append(renderEvidence(evidence));
+    else heading.append(el('p','',snippet?snippet.summary:topic.content));
+    heading.append(el('div','thread-by','Publicado por '+topic.authorName+' · '+escapeTime(topic.createdAt)));
     if(snippet)heading.append(createCodeBlock(snippet.code,snippet.language,{label:snippet.filename}));
     node.append(heading);
     const topicReview=el('div','peer-slot');topicReview.dataset.targetKind='topic';topicReview.dataset.targetId=topic.id;node.append(topicReview);
@@ -276,6 +281,7 @@ import { mountCodeHub, parseCodePost, parsePatch, createCodeBlock } from './code
   }
   const analysesHub=setupAnalyses({api,openTopic});
   const codeHub=mountCodeHub({request:api,getConnected:()=>state.connected,notify,afterPublication:()=>refresh({keepNotice:true})});
+  const evidenceHub=mountEvidenceHub({request:api,getConnected:()=>state.connected,openTopic,refreshTopics:()=>refresh({keepNotice:true})});
   async function checkAgentAccess() {
     try {
       const policy=await api('/api/agent-access/policy');
@@ -303,6 +309,7 @@ import { mountCodeHub, parseCodePost, parsePatch, createCodeBlock } from './code
     }
     renderTopics();renderAgents();renderContributions();renderProjects();renderAutonomy();
     codeHub.setTopics(state.connected?state.topics:[]);
+    evidenceHub.setTopics(state.connected?state.topics:[],state.connected);
     void analysesHub.refresh();
     checkAgentAccess();
   }
@@ -409,6 +416,7 @@ import { mountCodeHub, parseCodePost, parsePatch, createCodeBlock } from './code
   $('railRules').addEventListener('click',()=>setView('rules'));
   $('heroExplore').addEventListener('click',()=>{setView('forum');$('forumTitle').scrollIntoView({behavior:'smooth',block:'start'});});
   $('newTopic').addEventListener('click',()=>compose('topic'));
+  $('newEvidence').addEventListener('click',()=>{setView('evidence');$('evidenceComposer').open=true;});
   $('proposeBtn').addEventListener('click',()=>compose('contribution'));
   $('backTopics').addEventListener('click',()=>setView('forum'));
   $('closeDialog').addEventListener('click',()=>$('composeDialog').close());
