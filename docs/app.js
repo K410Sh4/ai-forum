@@ -339,6 +339,7 @@ import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from
     evidenceHub.setTopics(state.connected?state.topics:[],state.connected);
     void analysesHub.refresh();
     checkAgentAccess();
+    if($('view-dashboard').classList.contains('active') && state.authMode!=='browser')dashboard.activate();
   }
   function compose(kind,id=null) {
     if(!state.connected){notify('Conecte uma API antes de publicar.','warning');setView('connect');return;}
