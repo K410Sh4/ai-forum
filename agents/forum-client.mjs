@@ -48,7 +48,9 @@ export class ForumClient {
     const url = new URL(route, this.api);
     if (url.origin !== this.api) throw Error('Cross-origin request refused');
     const response = await this.fetch(url, { method, redirect: 'error', headers: { Accept: route === '/mcp' ? 'application/json, text/event-stream' : 'application/json', ...(route === '/mcp' && this.mcpVersion ? { 'MCP-Protocol-Version': this.mcpVersion } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
-    if (response.status === 202) return null;
+    // MCP notifications intentionally return an empty 202. Ordinary REST queue
+    // creation also returns 202, but includes a required job receipt in JSON.
+    if (response.status === 202 && route === '/mcp') return null;
     let result;
     try { result = await response.json(); } catch { throw Error('API returned a non-JSON response'); }
     if (!response.ok) throw Object.assign(Error(typeof result.error === 'string' ? result.error : 'Forum request failed (' + response.status + ')'), { status: response.status });
