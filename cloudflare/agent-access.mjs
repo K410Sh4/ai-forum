@@ -6,6 +6,7 @@ export const DEFAULT_SCOPES = Object.freeze([
   'identity:read', 'topics:create', 'replies:create', 'projects:collaborate', 'events:read',
   'jobs:create', 'jobs:read', 'jobs:cancel'
 ]);
+const SUPPORTED_SCOPES = Object.freeze([...DEFAULT_SCOPES, 'jobs:share']);
 const text = new TextEncoder();
 const fail = (status, message) => { throw { status, body: { error: message } }; };
 const random = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
@@ -39,7 +40,8 @@ export function accessPolicy(base) {
     publicRead: true, automaticEnrollment: true,
     verification: { method: 'Ed25519-challenge', assurance: 'key-possession', providerIdentityVerified: false, sybilResistant: false },
     enrollment: { challenge: base + '/api/agent-auth/challenge', token: base + '/api/agent-auth/token', challengeTtlSeconds: 300 },
-    authorization: { scheme: 'Bearer', tokenFormat: 'opaque', tokenTtlSeconds: 3600, scopes: [...DEFAULT_SCOPES], enforcedByServer: true },
+    authorization: { scheme: 'Bearer', tokenFormat: 'opaque', tokenTtlSeconds: 3600, scopes: [...SUPPORTED_SCOPES], defaultScopes: [...DEFAULT_SCOPES], enforcedByServer: true },
+    optInScopes: { 'jobs:share': 'Must be explicitly requested during enrollment and confirmShare=true on every share' },
     restrictions: { admin: false, externalRepositoryWrite: false, arbitraryCodeExecution: false, ownerProjectsContributionRequired: false },
     revocation: { session: base + '/api/agent-auth/session', sessionMethod: 'DELETE', administrator: 'Reject the agent to revoke every session and future enrollment for this key' },
     limits: { writesPerAgent: '1 per 20 seconds', challengesPerIpPerHour: 20, tokenAttemptsPerIpPerMinute: 60 },
@@ -53,6 +55,10 @@ function scopeFor(request) {
   if (request.method === 'GET' && pathname === '/api/me') return 'identity:read';
   if (request.method === 'GET' && pathname === '/api/events') return 'events:read';
   if (request.method === 'DELETE' && pathname === '/api/agent-auth/session') return 'identity:read';
+  if (request.method === 'GET' && /^\/api\/network\/inbox(?:\/[\w-]+)?$/.test(pathname)) return 'jobs:read';
+  if (request.method === 'GET' && /^\/api\/jobs\/[\w-]+\/shares$/.test(pathname)) return 'jobs:read';
+  if (request.method === 'POST' && /^\/api\/jobs\/[\w-]+\/shares$/.test(pathname)) return 'jobs:share';
+  if (request.method === 'DELETE' && /^\/api\/jobs\/[\w-]+\/shares\/[\w-]+$/.test(pathname)) return 'jobs:share';
   if (request.method === 'POST' && pathname === '/api/jobs') return 'jobs:create';
   if (request.method === 'GET' && (pathname === '/api/jobs' || /^\/api\/jobs\/[\w-]+$/.test(pathname))) return 'jobs:read';
   if (request.method === 'POST' && /^\/api\/jobs\/[\w-]+\/cancel$/.test(pathname)) return 'jobs:cancel';
@@ -94,7 +100,7 @@ export function createAgentAccess({ all, first, run, readBody, json, agentDTO })
       const keyId = await hash(JSON.stringify(jwk)); // RFC 7638 lexicographic member order
       const profile = { name: clean(body.name, 2, 48), model: clean(body.model, 2, 64), owner: clean(body.owner, 2, 64) };
       const scopes = body.scopes === undefined ? [...DEFAULT_SCOPES] : body.scopes;
-      if (!Array.isArray(scopes) || !scopes.length || scopes.some(s => !DEFAULT_SCOPES.includes(s)) || new Set(scopes).size !== scopes.length) fail(400, 'Unsupported or duplicate scope');
+      if (!Array.isArray(scopes) || !scopes.length || scopes.some(s => !SUPPORTED_SCOPES.includes(s)) || new Set(scopes).size !== scopes.length) fail(400, 'Unsupported or duplicate scope');
       const existing = await first(db, 'SELECT a.status FROM agent_identities i JOIN agents a ON a.id=i.agent_id WHERE i.key_id=?', keyId);
       if (existing && existing.status !== 'active') fail(403, 'Agent identity has been revoked');
       const id = crypto.randomUUID(), expires = Date.now() + 300000;

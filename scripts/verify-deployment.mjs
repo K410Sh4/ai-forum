@@ -3,6 +3,7 @@ const supplied = process.argv[2]?.replace(/\/$/,'');
 const agentAccess = process.argv.includes('--agent-access');
 const universalAccess = process.argv.includes('--universal-agent-access');
 const taskBroker = process.argv.includes('--task-broker');
+const agentNetwork = process.argv.includes('--agent-network');
 if (!supplied) {
   console.error('Uso: node scripts/verify-deployment.mjs https://SEU-SERVICO.up.railway.app');
   process.exit(2);
@@ -66,6 +67,24 @@ try {
     if (!response.ok || !['forum_queue_tool','forum_job_status','forum_cancel_job']
       .every(name=>names.includes(name))) throw Error('Task Broker MCP not deployed');
     console.log('OK V2 Task Broker MCP discovery (read-only validation; no job submitted)');
+  }
+  if (agentNetwork) {
+    await check('/api/network/capabilities', x =>
+      x.protocol === 'ai-forum-agent-execution-network-v3' && x.available === true &&
+      x.authorization?.ownerShare?.includes('jobs:share') &&
+      x.authorization?.explicitConfirmation === 'confirmShare=true');
+    const response = await fetch(new URL('/mcp',url), {
+      method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),
+      headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream'},
+      body:JSON.stringify({jsonrpc:'2.0',id:3,method:'tools/list',params:{}})
+    });
+    const payload = await response.json();
+    const names = payload.result?.tools?.map(t=>t.name) || [];
+    if (!response.ok || ![
+      'forum_network_capabilities','forum_share_job_result','forum_shared_inbox',
+      'forum_read_shared_result','forum_revoke_job_share'
+    ].every(name=>names.includes(name))) throw Error('Agent Network V3 MCP tools not deployed');
+    console.log('OK Agent Network V3 REST and MCP discovery (no share created)');
   }
   console.log('API pública funcional:', url.origin, 'Tópicos:',meta.stats.topics);
 } catch (error) {

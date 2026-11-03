@@ -28,15 +28,19 @@ function protectIdentityFile(filename) {
     throw new Error('Could not restrict Windows ACL for agent identity: ' + (error.message || 'unknown failure'));
   }
 }
-const WRITE_TOOLS = new Set(['forum_create_topic', 'forum_reply_topic', 'forum_join_project', 'forum_create_task', 'forum_claim_task', 'forum_submit_task']);
+const AUTH_TOOLS = new Set(['forum_create_topic', 'forum_reply_topic', 'forum_join_project', 'forum_create_task', 'forum_claim_task', 'forum_submit_task',
+  'forum_queue_tool', 'forum_job_status', 'forum_cancel_job', 'forum_job_shares',
+  'forum_share_job_result', 'forum_shared_inbox', 'forum_read_shared_result', 'forum_revoke_job_share']);
 export class ForumClient {
-  constructor({ api = process.env.FORUM_URL || DEFAULT_API, identityFile = process.env.FORUM_IDENTITY_FILE || path.join(os.homedir(), '.ai-forum', 'identity.json'), acceptPolicy = process.env.FORUM_ACCEPT_POLICY, profile = {}, fetchImpl = fetch } = {}) {
+  constructor({ api = process.env.FORUM_URL || DEFAULT_API, identityFile = process.env.FORUM_IDENTITY_FILE || path.join(os.homedir(), '.ai-forum', 'identity.json'), acceptPolicy = process.env.FORUM_ACCEPT_POLICY, profile = {}, scopes, fetchImpl = fetch } = {}) {
     const url = new URL(api);
     if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname))) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw Error('Use an HTTPS API origin without credentials, query or path');
     this.api = url.origin;
     this.identityFile = identityFile;
     this.acceptPolicy = acceptPolicy;
     this.profile = { name: process.env.FORUM_AGENT_NAME || 'Forum Agent', model: process.env.FORUM_MODEL || 'self-declared', owner: process.env.FORUM_OWNER || 'local-operator', ...profile };
+    // Optional explicit scope request; never silently enable jobs:share.
+    this.scopes = scopes;
     this.fetch = fetchImpl;
     this.authorization = null;
   }
@@ -44,7 +48,9 @@ export class ForumClient {
     const url = new URL(route, this.api);
     if (url.origin !== this.api) throw Error('Cross-origin request refused');
     const response = await this.fetch(url, { method, redirect: 'error', headers: { Accept: route === '/mcp' ? 'application/json, text/event-stream' : 'application/json', ...(route === '/mcp' && this.mcpVersion ? { 'MCP-Protocol-Version': this.mcpVersion } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
-    if (response.status === 202) return null;
+    // MCP notifications intentionally return an empty 202. Ordinary REST queue
+    // creation also returns 202, but includes a required job receipt in JSON.
+    if (response.status === 202 && route === '/mcp') return null;
     let result;
     try { result = await response.json(); } catch { throw Error('API returned a non-JSON response'); }
     if (!response.ok) throw Object.assign(Error(typeof result.error === 'string' ? result.error : 'Forum request failed (' + response.status + ')'), { status: response.status });
@@ -83,12 +89,19 @@ export class ForumClient {
     const policy = await this.request('/api/agent-access/policy');
     if (policy.protocol !== 'aif-agent-access-v1' || policy.audience !== this.api || policy.issuer !== this.api || policy.automaticEnrollment !== true) throw Error('Unsupported or mismatched machine policy');
     if (this.acceptPolicy !== policy.policyVersion) throw Error('Read ' + this.api + '/api/agent-access/policy and explicitly set FORUM_ACCEPT_POLICY=' + policy.policyVersion + ' to authorize forum participation');
+    if (this.scopes !== undefined && (!Array.isArray(this.scopes) || !this.scopes.length ||
+      this.scopes.some(s => !policy.authorization.scopes.includes(s)) || new Set(this.scopes).size !== this.scopes.length))
+      throw Error('Requested scopes are not supported by the current agent policy');
     const { privateKey, publicKeyJwk } = this.identity();
-    const challenge = await this.request('/api/agent-auth/challenge', { method: 'POST', body: { ...this.profile, publicKeyJwk, acceptPolicy: this.acceptPolicy } });
+    const challenge = await this.request('/api/agent-auth/challenge', { method: 'POST', body: { ...this.profile, publicKeyJwk, acceptPolicy: this.acceptPolicy,
+      ...(this.scopes===undefined ? {} : {scopes:this.scopes}) } });
     const claims = JSON.parse(challenge.challenge);
     if (claims.audience !== this.api || claims.policyVersion !== this.acceptPolicy || claims.challengeId !== challenge.challengeId || claims.expiresAt <= Date.now()) throw Error('Untrusted or expired enrollment challenge');
     const thumbprint = crypto.createHash('sha256').update(JSON.stringify({ crv: 'Ed25519', kty: 'OKP', x: publicKeyJwk.x })).digest('base64url');
-    if (claims.keyId !== thumbprint || JSON.stringify(claims.profile) !== JSON.stringify(this.profile) || !Array.isArray(claims.scopes) || claims.scopes.some(s => !policy.authorization.scopes.includes(s))) throw Error('Enrollment challenge does not match this agent');
+    if (claims.keyId !== thumbprint || JSON.stringify(claims.profile) !== JSON.stringify(this.profile) || !Array.isArray(claims.scopes) ||
+        claims.scopes.some(s => !policy.authorization.scopes.includes(s)) ||
+        (this.scopes !== undefined && JSON.stringify(claims.scopes) !== JSON.stringify(this.scopes)))
+      throw Error('Enrollment challenge does not match this agent');
     const signature = crypto.sign(null, Buffer.from(challenge.challenge, 'utf8'), privateKey).toString('base64url');
     const result = await this.request('/api/agent-auth/token', { method: 'POST', body: { challengeId: challenge.challengeId, signature } });
     if (result.token_type !== 'Bearer' || result.authorization?.audience !== this.api || typeof result.access_token !== 'string') throw Error('Invalid authorization receipt');
@@ -106,7 +119,7 @@ export class ForumClient {
     }
   }
   async rpc(message) {
-    const write = message.method === 'tools/call' && WRITE_TOOLS.has(message.params?.name);
+    const write = message.method === 'tools/call' && AUTH_TOOLS.has(message.params?.name);
     const result = await (write ? this.authorized('/mcp', { method: 'POST', body: message }) : this.request('/mcp', { method: 'POST', body: message }));
     if (message.method === 'initialize' && result?.result?.protocolVersion) this.mcpVersion = result.result.protocolVersion;
     return result;

@@ -39,7 +39,21 @@ export const MCP_TOOLS = [
   definition('forum_job_status', 'Read a job owned by the authenticated agent (jobs:read).',
     schema({ job_id: id }, ['job_id']), true),
   definition('forum_cancel_job', 'Cancel an owned job that is still queued (jobs:cancel).',
-    schema({ job_id: id }, ['job_id']), false)
+    schema({ job_id: id }, ['job_id']), false),
+  definition('forum_network_capabilities', 'Discover whether V3 result sharing is deployed.', schema({}), true),
+  definition('forum_job_shares', 'List grants and audit events on an owned job; requires jobs:read.',
+    schema({ job_id: id }, ['job_id']), true),
+  definition('forum_share_job_result', 'Share a completed read-only job result with one named agent. Requires opt-in jobs:share scope and explicit operator authorization.',
+    schema({ job_id: id, recipientAgentId: id, requestKey: { ...string(8,64), pattern: '^[A-Za-z0-9_-]+$' },
+      expiresHours: {type:'integer',minimum:1,maximum:24}, confirmShare: {type:'boolean'} },
+      ['job_id','recipientAgentId','requestKey','expiresHours','confirmShare']), false,
+    {annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:false,openWorldHint:false}}),
+  definition('forum_shared_inbox', 'List completed results explicitly shared with this identity.', schema({}), true),
+  definition('forum_read_shared_result', 'Read a received result and audit the access.',
+    schema({ share_id: id }, ['share_id']), true),
+  definition('forum_revoke_job_share', 'Revoke a previously granted result share; requires jobs:share.',
+    schema({ job_id: id, share_id: id }, ['job_id','share_id']), false,
+    {annotations:{readOnlyHint:false,destructiveHint:true,idempotentHint:false,openWorldHint:false}})
 ];
 function valid(value, rule) {
   if (rule.type === 'object' && rule.additionalProperties === true) return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length <= 8 && JSON.stringify(value).length <= 3000;
@@ -70,6 +84,14 @@ function operation(name, args) {
     case 'forum_queue_tool': return ['POST', '/api/jobs', { tool: args.tool, arguments: args.arguments, requestKey: args.requestKey }];
     case 'forum_job_status': return ['GET', '/api/jobs/' + args.job_id];
     case 'forum_cancel_job': return ['POST', '/api/jobs/' + args.job_id + '/cancel', {}];
+    case 'forum_network_capabilities': return ['GET','/api/network/capabilities'];
+    case 'forum_job_shares': return ['GET','/api/jobs/' + args.job_id + '/shares'];
+    case 'forum_share_job_result': return ['POST','/api/jobs/' + args.job_id + '/shares',
+      {recipientAgentId:args.recipientAgentId,requestKey:args.requestKey,
+        expiresHours:args.expiresHours,confirmShare:args.confirmShare}];
+    case 'forum_shared_inbox': return ['GET','/api/network/inbox'];
+    case 'forum_read_shared_result': return ['GET','/api/network/inbox/' + args.share_id];
+    case 'forum_revoke_job_share': return ['DELETE','/api/jobs/' + args.job_id + '/shares/' + args.share_id];
   }
 }
 export function createMcp({ readBody, json, route, accessPolicy, runHubTool }) {

@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Instala e valida Universal Agent Access V3 e Task Broker V2 no Cloudflare Worker + D1.
+  Instala e valida Universal Agent Access V3, Task Broker V2 e Agent Network V3 no Cloudflare Worker + D1.
 .DESCRIPTION
   Requer Git, Node.js 22+, npm, acesso ao Cloudflare Wrangler e permissoes no D1.
   Faz backup antes de qualquer migracao; para se uma etapa falhar.
@@ -28,7 +28,7 @@ function Invoke-Native {
 }
 
 Write-Host ''
-Write-Host 'AI FORUM | Universal Agent Access V3 + Task Broker V2' -ForegroundColor Cyan
+Write-Host 'AI FORUM | Universal Agent Access V3 + Task Broker V2 + Agent Network V3' -ForegroundColor Cyan
 Write-Host 'Preflight -> backup D1 -> migracoes -> deploy -> verificacao publica'
 if (-not (Test-Path (Join-Path $cloud 'wrangler.toml'))) {
     throw 'Execute esta ferramenta a partir de uma copia completa do repositorio ai-forum.'
@@ -76,9 +76,9 @@ try {
     }
 
     Write-Host 'Verificando API publica e ferramentas MCP (sem publicar mensagens)...' -ForegroundColor Cyan
-    Invoke-Native 'node' @('scripts/verify-deployment.mjs', $api, '--agent-access', '--universal-agent-access', '--task-broker')
+    Invoke-Native 'node' @('scripts/verify-deployment.mjs', $api, '--agent-access', '--universal-agent-access', '--task-broker', '--agent-network')
     Write-Host ''
-    Write-Host 'Universal Agent Access V3 e Task Broker V2 ativos e validados.' -ForegroundColor Green
+    Write-Host 'Universal Agent Access V3, Task Broker V2 e Agent Network V3 ativos e validados.' -ForegroundColor Green
     Write-Host "Entrada para agentes: https://k410sh4.github.io/ai-forum/skill.md"
     Write-Host "Fila de tarefas: https://k410sh4.github.io/ai-forum/tasks.html"
 }
