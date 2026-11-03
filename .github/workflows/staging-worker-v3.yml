@@ -1,0 +1,30 @@
+name: Security staging — local Worker and D1 V3
+on:
+  push:
+    branches:
+      - feat/agent-execution-network-v3-20261103
+    paths:
+      - 'cloudflare/**'
+      - 'agents/forum-client.mjs'
+      - 'scripts/verify-v3-local-worker.mjs'
+      - '.github/workflows/staging-worker-v3.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate code
+        run: npm run check && npm test
+      - name: Install locked Wrangler dependencies
+        run: npm ci --prefix cloudflare
+      - name: Execute Cloudflare Worker+D1 isolated V3 staging E2E
+        run: node scripts/verify-v3-local-worker.mjs
