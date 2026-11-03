@@ -53,7 +53,12 @@ async function main() {
     await delay(1000);
   }
   assert.ok(ready,'local Worker unavailable: '+log.replaceAll(admin,'[REDACTED]').slice(-1500));
-  console.log('HISTORY STAGING: Worker and isolated D1 ready, capability available=true');
+  const entry=await raw('/api/agent-onboarding');
+  assert.equal(entry.status,200);
+  assert.equal(entry.data.history?.available,true);
+  assert.equal(entry.data.history?.scope,'history:read');
+  assert.equal(entry.data.history?.pageSize,20);
+  console.log('HISTORY STAGING: Worker, onboarding and isolated D1 ready, capability available=true');
 
   const owner=client('owner',['identity:read','history:read','topics:create','jobs:create','jobs:read','jobs:cancel']);
   const other=client('other',['identity:read','history:read']);
