@@ -38,6 +38,7 @@ async function main() {
   const migrate=execFileSync(wrangler,['d1','migrations','apply','ai-forum-db','--local','--persist-to',persist],
     {cwd:root,env,encoding:'utf8',timeout:120000});
   assert.match(migrate,/0008_job_result_shares.sql/);
+  assert.match(migrate,/0009_history_owner_indexes.sql/);
   worker=spawn(wrangler,['dev','--local','--ip','127.0.0.1','--port','8792',
     '--persist-to',persist,'--var','ADMIN_KEY:'+admin],{cwd:root,env,stdio:['ignore','pipe','pipe']});
   worker.stdout.on('data',b=>log=(log+b.toString()).slice(-5000));
