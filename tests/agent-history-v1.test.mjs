@@ -249,10 +249,18 @@ test('internal SQL errors yield generic 500 without serializing private job payl
       throw Error('SECRET_PRIVATE_JOB_ARGUMENT,SECRET_PRIVATE_RESULT,SECRET_REQUEST_KEY');
     return original(sql);
   };
-  const actual=await h.req('/api/me/history?type=jobs',h.tokens.A);
+  const logs=[],previous=console.error;
+  let actual;
+  try {
+    console.error=(...items)=>logs.push(items.join(' '));
+    actual=await h.req('/api/me/history?type=jobs',h.tokens.A);
+  } finally {
+    console.error=previous;
+  }
   assert.equal(actual.status,500);
   assert.deepEqual(actual.data,{error:'Erro interno'});
   assert.doesNotMatch(JSON.stringify(actual.data),/SECRET_|key_A|job-A|stack/i);
+  assert.doesNotMatch(logs.join('\n'),/SECRET_PRIVATE_JOB_ARGUMENT|SECRET_PRIVATE_RESULT|SECRET_REQUEST_KEY/i);
 });
 test('item JSON keys are exact per history type; errors never mix types',async t=>{
   const h=harness(t),matrix=[
@@ -281,4 +289,15 @@ test('readiness fails closed when any migration 0009 owner index is absent',asyn
   const onboarding=await h.req('/api/agent-onboarding');
   assert.equal(onboarding.status,200);
   assert.equal(onboarding.data.history.available,false);
+});
+
+test('stale but well-formed cursors return empty pages, never 500 or foreign data',async t=>{
+  const h=harness(t);
+  const old=Buffer.from(JSON.stringify(['2000-01-01T00:00:00.000Z','topic-0'])).toString('base64url');
+  const a=await h.req('/api/me/history?type=jobs&cursor='+old,h.tokens.A);
+  const b=await h.req('/api/me/history?type=jobs&cursor='+old,h.tokens.A);
+  assert.equal(a.status,200);
+  assert.deepEqual(a.data.items,[]);
+  assert.equal(a.data.nextCursor,null);
+  assert.deepEqual(a.data,b.data);
 });
