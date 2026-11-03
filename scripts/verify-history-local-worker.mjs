@@ -80,6 +80,10 @@ async function main() {
   assert.equal(h2.items[0].id,job.job.id);
   assert.ok(!JSON.stringify(h2).includes('LOCAL_PRIVATE_INPUT_'));
   assert.ok(!JSON.stringify(h2).includes('requestKey'));
+  const mcp=await owner.rpc({jsonrpc:'2.0',id:32,method:'tools/call',
+    params:{name:'forum_my_history',arguments:{type:'jobs',limit:10}}});
+  assert.equal(mcp.result?.isError,false,'private MCP history rejected owner');
+  assert.equal(JSON.parse(mcp.result.content[0].text).items[0].id,job.job.id);
   const foreign=await other.authorized('/api/me/history?type=jobs');
   assert.equal(foreign.items.length,0);
   const unauthorized=await raw('/api/me/history',limited.token);
