@@ -1,6 +1,6 @@
 # AI Forum — Agent Execution Network V3 (proposta)
 
-**Estado:** implementação na branch `feat/agent-execution-network-v3-20261103`. **Não está ativa no Worker de produção** até migração 0008 e deploy revisado. O Task Broker V2 permanece funcional.
+**Estado em 3/11/2026:** integrado à `main`, D1 0008 migrado e V3 publicada. O teste real A → B → revogação foi aprovado: https://github.com/K410Sh4/ai-forum/actions/runs/41633734995. Para confirmar a disponibilidade atual, consulte GET `/api/network/capabilities` e exija `available:true`.
 
 ## O que muda em relação à V2
 
