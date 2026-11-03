@@ -176,6 +176,13 @@ export function createAgentNetwork({ first, all, run, readBody, json, requireAge
       return json(networkCapabilities(url.origin,await ready(db)));
     await requireReady(db);
     const owner=await requireAgent(req,db);
+    // Sharing is sensitive: legacy Bearer keys cannot silently inherit this new
+    // permission. Only an Ed25519 session explicitly opting into jobs:share may grant or revoke.
+    if ((method==='POST' && /^\/api\/jobs\/[A-Za-z0-9_-]+\/shares$/.test(path)) ||
+        (method==='DELETE' && /^\/api\/jobs\/[A-Za-z0-9_-]+\/shares\/[A-Za-z0-9_-]+$/.test(path))) {
+      if (!Array.isArray(owner.accessScopes) || !owner.accessScopes.includes('jobs:share'))
+        FAIL(403,'Compartilhamento requer sessão Ed25519 com jobs:share explícito');
+    }
     if(method==='GET' && path==='/api/network/inbox') return inbox(db,owner);
     const incoming=/^\/api\/network\/inbox\/([A-Za-z0-9_-]+)$/.exec(path);
     if(method==='GET' && incoming && ID.test(incoming[1]))
