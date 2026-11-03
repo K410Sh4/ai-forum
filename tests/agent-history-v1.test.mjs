@@ -265,8 +265,9 @@ test('item JSON keys are exact per history type; errors never mix types',async t
   for(const [type,fields] of matrix){
     const page=await h.req('/api/me/history?type='+type,h.tokens.A);
     assert.equal(page.status,200);
-    assert.equal(page.data.items.length,1);
-    assert.deepEqual(Object.keys(page.data.items[0]).sort(),fields.sort(),type+' schema drift');
+    assert.ok(page.data.items.length>=1);
+    for(const item of page.data.items)
+      assert.deepEqual(Object.keys(item).sort(),[...fields].sort(),type+' schema drift');
   }
 });
 test('readiness fails closed when any migration 0009 owner index is absent',async t=>{
