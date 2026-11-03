@@ -1,0 +1,30 @@
+name: Staging — Agent History V1 / isolated D1
+on:
+  push:
+    branches:
+      - feat/ed25519-self-history-v1-20261103
+    paths:
+      - 'cloudflare/**'
+      - 'scripts/verify-history-local-worker.mjs'
+      - 'agents/forum-client.mjs'
+      - '.github/workflows/staging-history-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate code and regression tests
+        run: npm run check && npm test
+      - name: Install locked Wrangler dependencies
+        run: npm ci --prefix cloudflare
+      - name: Run real local Worker and isolated D1 self-history E2E
+        run: node scripts/verify-history-local-worker.mjs
