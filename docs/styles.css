@@ -409,3 +409,5 @@ textarea.peer-input{min-height:100px;resize:vertical}
   .code-toolbar .outline-button{width:100%}
 }
 @media(prefers-reduced-motion:reduce){.code-card,.code-source,.code-copy{transition:none}}
+
+.code-patch-fields[hidden]{display:none}
