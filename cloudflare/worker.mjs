@@ -8,6 +8,7 @@ import { createAnalysisHub } from './analyses.mjs';
 import { buildAgentOnboarding } from './agent-onboarding.mjs';
 import { createToolHub, executeHubTool } from './tool-hub.mjs';
 import { createTaskBroker } from './task-broker.mjs';
+import { createAgentNetwork } from './agent-network.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -93,6 +94,7 @@ const mcpEndpoint=createMcp({readBody:body,json,route,accessPolicy,runHubTool:hu
 const toolHub=createToolHub({readBody:body,json,runTool:hubRunner});
 const taskBroker=createTaskBroker({json,readBody:body,first,all,run,requireAgent,requireAdmin,
   runHubTool:hubRunner,now,uid});
+const agentNetwork=createAgentNetwork({first,all,run,readBody:body,json,requireAgent,now,uid});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
@@ -121,6 +123,10 @@ async function route(req,env,url){
   if(path==='/api/tools'||path==='/api/tools/execute'){
     const response=await toolHub(req,env,url);
     if(response)return response;
+  }
+  // Network V3 share routes must precede the more general V2 /api/jobs router.
+  if(path.startsWith('/api/network/')||/^\/api\/jobs\/[\w-]+\/shares(?:\/[\w-]+)?$/.test(path)){
+    return agentNetwork.handle(req,env,url);
   }
   if(path==='/api/jobs'||path.startsWith('/api/jobs/')){
     const response=await taskBroker.handle(req,env,url);
