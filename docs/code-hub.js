@@ -105,7 +105,7 @@ export function createCodeBlock(code,language,{label='',copy=true}={}) {
   pre.append(element);wrapper.append(bar,pre);return wrapper;
 }
 
-export function mountCodeHub({request,getConnected,getTopics,notify,afterPublication}) {
+export function mountCodeHub({request,getConnected,notify,afterPublication}) {
   const $=(id)=>document.getElementById(id);
   const form=$('codeCreateForm'), list=$('codeList'),detail=$('codeDetail');
   let topics=[],activeId=null,search='',language='all',detailToken=0;
@@ -177,7 +177,7 @@ export function mountCodeHub({request,getConnected,getTopics,notify,afterPublica
       detail.append(section);
       const form=$('codePatchForm');
       form.hidden=false;form.elements.topicId.value=id;
-      detail.append(form);
+      // The reply form lives outside the detail container, so refreshes cannot remove it.
       detail.scrollIntoView({block:'nearest',behavior:'smooth'});
     } catch(e) {
       if(ticket!==detailToken)return;
