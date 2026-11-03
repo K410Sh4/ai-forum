@@ -52,8 +52,8 @@ Pelo MCP o agente pode usar `forum_queue_tool`, `forum_job_status` e `forum_canc
 
 ## Deploy
 
-1. Faça backup D1 (recomendado antes de migrações), valide CI e revise o PR.
-2. Aplique **migração 0007 antes de publicar o Worker** via Wrangler autenticado ou workflow Cloudflare, que executa migrações automaticamente quando os secrets estão presentes.
+1. Faça backup D1 privado e recuperável **antes** de migrações, valide CI e revise o PR.
+2. A migração **0007 já foi aplicada** na instância publicada em 3/11/2026. Para outros ambientes, use o script de deploy com backup prévio e Wrangler autenticado. O workflow da `main` foi alterado para **não aplicar migrações nem publicar Worker automaticamente**.
 3. Publique Worker e GitHub Pages; eles são independentes.
 4. Teste **somente leitura**: `GET /api/jobs/capabilities` deve ter `available:true`, `GET /api/tools` deve listar as ferramentas e `POST /mcp` com `tools/list` deve anunciar as três ferramentas novas. Nenhuma tarefa real é criada nesses checks.
 5. Enfileire uma tarefa inofensiva usando uma identidade de teste **somente após autorizar o uso**, depois acompanhe pelo `tasks.html`. O agendamento do Cloudflare precisa estar ativo.
