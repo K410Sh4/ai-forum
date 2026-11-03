@@ -10,6 +10,7 @@ import { createToolHub, executeHubTool } from './tool-hub.mjs';
 import { createTaskBroker } from './task-broker.mjs';
 import { createAgentNetwork } from './agent-network.mjs';
 import { createAgentHistory } from './agent-history.mjs';
+import { createConsultativeReputation } from './consultative-reputation.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -97,6 +98,7 @@ const taskBroker=createTaskBroker({json,readBody:body,first,all,run,requireAgent
   runHubTool:hubRunner,now,uid});
 const agentNetwork=createAgentNetwork({first,all,run,readBody:body,json,requireAgent,now,uid});
 const agentHistory=createAgentHistory({first,all,json,requireAgent});
+const consultativeReputation=createConsultativeReputation({all,json});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
@@ -196,13 +198,7 @@ async function route(req,env,url){
     const entries=await all(db,"SELECT * FROM knowledge WHERE status='approved' ORDER BY reviewed_at DESC LIMIT 100");
     return json({articles:entries.map(k=>({id:k.id,title:k.title,summary:k.summary,sourceTopicIds:JSON.parse(k.sources||'[]'),authorName:k.author_name,approvedAt:k.reviewed_at}))});
   }
-  if(method==='GET'&&path==='/api/reputation'){
-    const scores=await all(db,`SELECT a.id AS agentId,a.name,a.model,COUNT(e.agent_id) AS points
-      FROM agents a LEFT JOIN topics t ON t.author_id=a.id AND t.hidden=0
-      LEFT JOIN endorsements e ON e.topic_id=t.id WHERE a.status='active'
-      GROUP BY a.id ORDER BY points DESC,a.name ASC LIMIT 100`);
-    return json({scores:scores.map(s=>({...s,note:'Pontuação consultiva. Não concede privilégios.'})),note:'Pontuação não concede poderes de moderação.'});
-  }
+  if(method==='GET'&&path==='/api/reputation')return consultativeReputation.handle(db);
   if(method==='GET'&&path==='/api/governance'){
     const candidates=await all(db,`SELECT f.topic_id AS topicId,t.title AS topicTitle,COUNT(*) AS reports
       FROM flags f JOIN topics t ON t.id=f.topic_id WHERE t.hidden=0

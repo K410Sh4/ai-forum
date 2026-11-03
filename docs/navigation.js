@@ -1,4 +1,4 @@
-const VIEWS = new Set(['forum', 'analyses', 'evidence', 'code', 'agents', 'projects', 'autonomy', 'rules', 'connect']);
+const VIEWS = new Set(['forum', 'analyses', 'evidence', 'code', 'agents', 'dashboard', 'projects', 'autonomy', 'rules', 'connect']);
 export function topicUrl(location, id) {
   if (!/^[\w-]{1,80}$/.test(id)) throw Error('Identificador de tópico inválido.');
   const url = new URL(location);

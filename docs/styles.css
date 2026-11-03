@@ -181,7 +181,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:1200px){.right-rail{display:none}.content-grid{grid-template-columns:minmax(0,1fr)}.hero-art{right:0;width:37%;opacity:.72}.hero-copy{max-width:73%}}
 @media(max-width:900px){.shell{grid-template-columns:210px minmax(0,1fr)}.sidebar{padding-left:12px;padding-right:12px}.topbar{padding:0 22px}.hero-copy{padding-left:27px}.hero-art{opacity:.3}.hero-copy{max-width:100%}}
 @media(max-width:720px){
- .shell{display:block}.sidebar{position:fixed;top:0;left:0;width:min(285px,88vw);transform:translateX(-103%);transition:transform .22s;box-shadow:14px 0 50px #0006}.sidebar.open{transform:translateX(0)}
+ .shell{display:block}.sidebar{position:fixed;top:0;left:0;width:min(285px,88vw);transform:translateX(-103%);transition:transform .22s;overflow-y:auto;overscroll-behavior:contain;box-shadow:14px 0 50px #0006}.sidebar.open{transform:translateX(0)}
  .menu-toggle{display:block}.topbar{min-height:66px;padding:0 17px}.top-left{gap:12px}.top-breadcrumb{font-size:9px}.top-actions{gap:10px}.connection-state{font-size:0;gap:0}.connection-state .status-indicator{display:inline-block}.compact{min-height:37px;padding:0 10px;font-size:11px}
  .hero{margin:16px 14px 0;min-height:unset}.hero-copy{padding:28px 22px 30px}.hero-art{right:-30px;width:80%;opacity:.15}.hero h1{font-size:34px;letter-spacing:-1.5px}.hero-copy>p{font-size:12px}
  .metrics{margin:14px 14px 0}.metric{padding:15px 12px}.metric>span{font-size:8px;letter-spacing:.5px}.metric strong{font-size:24px}.metric small{font-size:9px}
@@ -474,3 +474,58 @@ textarea.peer-input{min-height:100px;resize:vertical}
   .evidence-card{padding:14px}
   .evidence-toolbar .outline-button{width:100%}
 }
+
+
+/* AI Forum V4 — private, task-based dashboard and transparent public reputation */
+.nav-private{margin-left:auto;font-size:8px;letter-spacing:.09em;border:1px solid #52677a;border-radius:5px;color:#c2d3e6;padding:2px 4px}
+.advisory-note{color:#aabbd0;font-size:12px;line-height:1.7;padding:11px 15px;border-left:3px solid #9bc5a5;background:#152333;margin:0 0 17px}
+.agent-card{min-width:0}
+.agent-metrics{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}
+.agent-metric{font-size:10px;font-weight:680;color:#d4e4f1;border:1px solid #3e5061;border-radius:6px;padding:5px 9px;background:#18283b}
+.agent-metric-muted{color:#a0b3c8}
+.private-chip{align-self:flex-start;color:#c2e7e0;border:1px solid #456d6a;background:#1d3939;border-radius:7px;padding:7px 10px;font-size:10px;font-weight:800;letter-spacing:.05em}
+.dashboard-intro{display:flex;justify-content:space-between;align-items:center;gap:18px;border:1px solid #3a5264;border-radius:14px;background:linear-gradient(120deg,#1b3033,#18253b);padding:20px;margin-bottom:15px}
+.dashboard-intro-copy{flex:1;min-width:0}
+.dashboard-intro strong{font-size:16px;color:#eff8fb}
+.dashboard-intro p{color:#afc3d4;font-size:12px;line-height:1.7;margin:8px 0 0}
+.dashboard-intro-actions{display:flex;gap:8px;flex-wrap:wrap}
+.dashboard-intro-actions button{min-height:42px}
+.dashboard-status{margin:13px 0;padding:12px 15px;border-radius:9px;border:1px solid #425671;background:#152338;font-size:12px;color:#cedaeb;overflow-wrap:anywhere}
+.dashboard-status[data-kind=error]{border-color:#895665;background:#34202b;color:#ffdadb}
+.dashboard-status[data-kind=warning]{border-color:#766344;background:#342e25;color:#edd9b1}
+.dashboard-status[data-kind=success]{border-color:#456a5d;background:#17352d;color:#cdecd9}
+.dashboard-identity{font-size:11px;color:#aebfd0;overflow-wrap:anywhere;margin:12px 0}
+.dashboard-types{display:flex;flex-wrap:wrap;gap:7px;padding:4px 0 13px}
+.dashboard-type{border:1px solid #38516b;border-radius:8px;background:#121d31;color:#b9cade;padding:10px 12px;font-size:12px;font-weight:700;min-height:42px}
+.dashboard-type:hover{background:#203449;color:#f4fbff}
+.dashboard-type.active{border-color:#9fca93;background:#253d35;color:#d6f9bd}
+.dashboard-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0 15px;font-size:11px;color:#9fb5c8}
+.dashboard-entries{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:12px}
+.dashboard-entry{display:flex;flex-direction:column;gap:11px;background:#142137;border:1px solid #344b61;border-radius:11px;padding:16px;min-width:0}
+.dashboard-entry-top{display:flex;align-items:start;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.dashboard-entry strong{font-size:13px;color:#eef5ff;overflow-wrap:anywhere}
+.dashboard-date{color:#91acc5;font-size:10px}
+.dashboard-entry-desc{font-size:11px;color:#b3c5d9;line-height:1.65;margin:0;overflow-wrap:anywhere}
+.dashboard-link{align-self:start;border:0;background:transparent;color:#b7e8a2;font-size:12px;font-weight:760;padding:7px 0;margin-top:auto;text-decoration:underline;text-underline-offset:3px}
+.dashboard-more{margin:18px 0 0}
+.dashboard-empty{grid-column:1/-1;border:1px dashed #3c536a;border-radius:10px;background:#101e30;padding:19px;color:#b3c9db;font-size:12px}
+.dashboard-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-top:28px}
+.dashboard-shortcuts a{display:flex;flex-direction:column;gap:6px;border:1px solid #344b61;border-radius:11px;background:#142238;padding:16px;min-width:0}
+.dashboard-shortcuts a:hover{border-color:#9ec793;text-decoration:none;background:#1b3041}
+.dashboard-shortcuts strong{color:#ecf5fc;font-size:12px}
+.dashboard-shortcuts span{color:#a7bed3;font-size:11px;line-height:1.5}
+#dashboardControls[hidden],#dashboardAllow[hidden],#dashboardMore[hidden]{display:none!important}
+@media(max-width:920px){
+  .dashboard-intro{align-items:flex-start;flex-direction:column}
+  .dashboard-intro-actions{width:100%}
+  .dashboard-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:540px){
+  .dashboard-intro{padding:15px}
+  .dashboard-shortcuts{grid-template-columns:minmax(0,1fr)}
+  .dashboard-types{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashboard-type{padding:10px 7px}
+  .dashboard-intro-actions button{flex:1 1 130px}
+  .dashboard-toolbar{flex-wrap:wrap}
+}
+@media(prefers-reduced-motion:reduce){.dashboard-shortcuts a,.dashboard-type{transition:none}}
