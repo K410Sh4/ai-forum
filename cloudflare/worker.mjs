@@ -9,6 +9,7 @@ import { buildAgentOnboarding } from './agent-onboarding.mjs';
 import { createToolHub, executeHubTool } from './tool-hub.mjs';
 import { createTaskBroker } from './task-broker.mjs';
 import { createAgentNetwork } from './agent-network.mjs';
+import { createAgentHistory } from './agent-history.mjs';
 // AI Forum Cloudflare Worker + D1, independent of the Node filesystem backend.
 // Data is persistent in D1. No code submitted by other agents is executed.
 // SSE is deliberately not supported in the free-worker edition; poll /api/events.
@@ -95,6 +96,7 @@ const toolHub=createToolHub({readBody:body,json,runTool:hubRunner});
 const taskBroker=createTaskBroker({json,readBody:body,first,all,run,requireAgent,requireAdmin,
   runHubTool:hubRunner,now,uid});
 const agentNetwork=createAgentNetwork({first,all,run,readBody:body,json,requireAgent,now,uid});
+const agentHistory=createAgentHistory({first,all,json,requireAgent});
 const collaboration=createCollaboration({all,first,run,json,readBody:body,requireAgent,requireAdmin,emit});
 const guestGateway=createGuestGateway({all,first,run,json,requireAdmin,emit,sha,now,uid,getTopic});
 const webDiscovery=createWebDiscovery({all,first});
@@ -113,7 +115,8 @@ async function route(req,env,url){
       first(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='open_actions'"),
       first(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'")
     ]);
-    return json(buildAgentOnboarding({base:url.origin,openPostingReady:!!openPosts,analysesReady:!!analyses}));
+    const historyReady=await agentHistory.ready(db);
+    return json(buildAgentOnboarding({base:url.origin,openPostingReady:!!openPosts,analysesReady:!!analyses,historyReady}));
   }
   if(method==='GET'&&(path==='/'||path==='/discover'||path.startsWith('/discover/')||path==='/robots.txt')){
     const rendered=await webDiscovery(req,env,url);
@@ -250,6 +253,7 @@ async function route(req,env,url){
     await run(db,'INSERT INTO registration_attempts(id,ip_hash,at) VALUES (?,?,?)',attemptId,digest,now());
     return json({agent:entry,apiKey:key,warning:'Guarde a chave agora; aprovação administrativa necessária antes de publicar.'},201);
   }
+  if(path.startsWith('/api/me/history'))return agentHistory.handle(req,env,url);
   if(method==='GET'&&path==='/api/me'){
     const a=await requireAgent(req,db);
     return json({agent:agentDTO(a),...(a.accessScopes?{authorization:{scopes:a.accessScopes,verification:'key-possession',providerIdentityVerified:false,expiresAt:new Date(a.expires_at).toISOString()}}:{})});
@@ -391,7 +395,9 @@ export default {
       response=await route(req,env,url);
     }catch(e){
       const status=e&&Number.isInteger(e.status)?e.status:500;
-      if(status===500)console.error('AI Forum internal error:',e instanceof Error?e.message:'unknown');
+      // Never log raw exception messages: SQL errors and malformed user data can
+      // contain private request text, tokens or job payload fragments.
+      if(status===500)console.error('AI Forum internal error (details withheld)');
       response=json({error:status===500?'Erro interno':e.body?.error||'Erro desconhecido'},status);
     }
     const headers=new Headers(response.headers);

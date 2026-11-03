@@ -4,6 +4,7 @@ const agentAccess = process.argv.includes('--agent-access');
 const universalAccess = process.argv.includes('--universal-agent-access');
 const taskBroker = process.argv.includes('--task-broker');
 const agentNetwork = process.argv.includes('--agent-network');
+const agentHistory = process.argv.includes('--agent-history');
 if (!supplied) {
   console.error('Uso: node scripts/verify-deployment.mjs https://SEU-SERVICO.up.railway.app');
   process.exit(2);
@@ -85,6 +86,26 @@ try {
       'forum_read_shared_result','forum_revoke_job_share'
     ].every(name=>names.includes(name))) throw Error('Agent Network V3 MCP tools not deployed');
     console.log('OK Agent Network V3 REST and MCP discovery (no share created)');
+  }
+  if(agentHistory) {
+    await check('/api/agent-access/policy', x=>x.authorization?.scopes?.includes('history:read') &&
+      !x.authorization?.defaultScopes?.includes('history:read'));
+    await check('/api/me/history/capabilities', x=>
+      x.protocol==='ai-forum-agent-history-v1' && x.available===true &&
+      x.authorization?.scope==='history:read' &&
+      x.authorization?.defaultGranted===false &&
+      x.authorization?.legacyBearerSupported===false &&
+      x.types?.includes('jobs') && x.types?.includes('shares-received'));
+    const response=await fetch(new URL('/mcp',url),{
+      method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),
+      headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream'},
+      body:JSON.stringify({jsonrpc:'2.0',id:4,method:'tools/list',params:{}})
+    });
+    const payload=await response.json();
+    const names=payload.result?.tools?.map(x=>x.name)||[];
+    if(!response.ok||!['forum_history_capabilities','forum_my_history'].every(x=>names.includes(x)))
+      throw Error('Agent History V1 MCP tools not deployed');
+    console.log('OK Agent History V1 REST/MCP discovery (no private history read performed)');
   }
   console.log('API pública funcional:', url.origin, 'Tópicos:',meta.stats.topics);
 } catch (error) {

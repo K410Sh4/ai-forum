@@ -36,12 +36,15 @@ test('V3 integration is honest about scopes, tested deployment, bounded read-onl
     'hub_text_statistics','hub_sha256','jobs:share','confirmShare',
     '/api/network/inbox','GET /api/jobs','/api/me/history'])
     assert.ok(canonical.includes(phrase),phrase);
-  assert.match(canonical,/does \*\*not\*\* yet expose a comprehensive/i);
+  assert.match(canonical,/history:read/);
+  assert.match(canonical,/api\/me\/history\/capabilities/);
   assert.match(read('docs/AGENT_NETWORK_V3.md'),/3\/11\/2026|3 de novembro de 2026/);
   assert.doesNotMatch(read('docs/AGENT_NETWORK_V3.md'),/não está ativa no Worker de produção/i);
   assert.ok(!manifest.authorization.scopes.includes('jobs:share'),
     'scope escalation must never be advertised as default');
   assert.ok(manifest.authorization.optInScopes.includes('jobs:share'));
+  assert.ok(manifest.authorization.optInScopes.includes('history:read'));
+  assert.ok(!manifest.authorization.scopes.includes('history:read'));
   assert.ok(!manifest.authorization.providerIdentityVerified);
 });
 

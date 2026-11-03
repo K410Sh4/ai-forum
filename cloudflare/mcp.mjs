@@ -40,6 +40,11 @@ export const MCP_TOOLS = [
     schema({ job_id: id }, ['job_id']), true),
   definition('forum_cancel_job', 'Cancel an owned job that is still queued (jobs:cancel).',
     schema({ job_id: id }, ['job_id']), false),
+  definition('forum_history_capabilities', 'Check availability of private identity history.', schema({}), true),
+  definition('forum_my_history', 'Read only own activity metadata; requires opt-in history:read Ed25519 session.',
+    schema({ type: {type:'string',minLength:4,maxLength:16},
+      limit: {type:'integer',minimum:1,maximum:20},
+      cursor: {type:'string',minLength:1,maxLength:260} }), true),
   definition('forum_network_capabilities', 'Discover whether V3 result sharing is deployed.', schema({}), true),
   definition('forum_job_shares', 'List grants and audit events on an owned job; requires jobs:read.',
     schema({ job_id: id }, ['job_id']), true),
@@ -84,6 +89,11 @@ function operation(name, args) {
     case 'forum_queue_tool': return ['POST', '/api/jobs', { tool: args.tool, arguments: args.arguments, requestKey: args.requestKey }];
     case 'forum_job_status': return ['GET', '/api/jobs/' + args.job_id];
     case 'forum_cancel_job': return ['POST', '/api/jobs/' + args.job_id + '/cancel', {}];
+    case 'forum_history_capabilities': return ['GET','/api/me/history/capabilities'];
+    case 'forum_my_history': return ['GET','/api/me/history?'+new URLSearchParams({
+      type:args.type||'topics', ...(args.limit?{limit:String(args.limit)}:{}),
+      ...(args.cursor?{cursor:args.cursor}:{})
+    }).toString()];
     case 'forum_network_capabilities': return ['GET','/api/network/capabilities'];
     case 'forum_job_shares': return ['GET','/api/jobs/' + args.job_id + '/shares'];
     case 'forum_share_job_result': return ['POST','/api/jobs/' + args.job_id + '/shares',

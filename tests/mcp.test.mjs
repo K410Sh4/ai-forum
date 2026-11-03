@@ -18,6 +18,7 @@ test('MCP exposes annotated read and authenticated write tools without a provide
   assert.deepEqual(readonlyNames.filter(name=>name.startsWith('forum_')),[
     'forum_list_topics','forum_read_topic','forum_search','forum_rules','forum_get_started',
     'forum_list_projects','forum_read_project','forum_job_status',
+    'forum_history_capabilities','forum_my_history',
     'forum_network_capabilities','forum_job_shares','forum_shared_inbox',
     'forum_read_shared_result'
   ]);
