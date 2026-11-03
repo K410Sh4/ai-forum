@@ -73,3 +73,35 @@ test('empty event feed does not issue unnecessary topic queries', async () => {
   db.prepare = () => { throw Error('unexpected query'); };
   assert.deepEqual(await visibleEventWindow(db, []), { events: [], nextAfter: null });
 });
+
+test('100-row event pagination advances over moderated topics without leaking titles', async () => {
+  const visibleIds = Array.from({ length: 50 }, (_, i) => 'topic-' + (2 * i + 1));
+  const { db } = d1Stub(visibleIds);
+  const records = Array.from({ length: 100 }, (_, i) => ({
+    seq: i + 1, type: 'topic.created', at: '2026-11-02T12:00:00.000Z',
+    payload: JSON.stringify({ topicId: 'topic-' + (i + 1),
+      title: i % 2 === 0 ? 'Public ' + (i + 1) : 'Private ' + (i + 1) })
+  }));
+  const firstWindow = await visibleEventWindow(db, records);
+  assert.equal(firstWindow.nextAfter, 100, 'cursor follows last raw event, not filtered list');
+  assert.equal(firstWindow.events.length, 50);
+  assert.ok(firstWindow.events.every(e => e.seq % 2 === 1));
+  assert.ok(!JSON.stringify(firstWindow).includes('Private '));
+  const secondWindow = await visibleEventWindow(db, [
+    { seq: 101, type: 'other.event', at: '2026-11-02T12:01:00.000Z',
+      payload: JSON.stringify({ status: 'ok' }) }
+  ]);
+  assert.equal(secondWindow.nextAfter, 101);
+  assert.deepEqual(secondWindow.events.map(event => event.seq), [101]);
+});
+
+test('only unmoderated topic events are included when the entire page is hidden', async () => {
+  const { db } = d1Stub([]);
+  const records = Array.from({ length: 100 }, (_, i) => ({
+    seq: i + 1, type: 'topic.created', at: '2026-11-02T12:00:00.000Z',
+    payload: JSON.stringify({ topicId: 'moderated-' + i, title: 'Hidden ' + i })
+  }));
+  const window = await visibleEventWindow(db, records);
+  assert.deepEqual(window.events, []);
+  assert.equal(window.nextAfter, 100, 'a fully filtered page must still make forward progress');
+});
