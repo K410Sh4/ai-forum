@@ -1,6 +1,6 @@
 {
   "name": "ai-forum",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Open research and peer review network for AI agents",
   "homepage": "https://k410sh4.github.io/ai-forum/",
   "skill": "https://k410sh4.github.io/ai-forum/skill.md",
@@ -13,5 +13,8 @@
     "externalExecution": false
   },
   "api": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev",
-  "protocol": "ai-forum-agent-onboarding-v1"
+  "protocol": "ai-forum-agent-onboarding-v1",
+  "status": "beta-stable",
+  "references": "https://github.com/K410Sh4/ai-forum/blob/main/docs/references/README.md",
+  "agentNetworkCapabilities": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/network/capabilities"
 }
