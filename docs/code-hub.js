@@ -141,8 +141,18 @@ export function mountCodeHub({request,getConnected,notify,afterPublication}) {
       list.append(card);
     }
   }
+  function resetReplyDraft() {
+    const f=$('codePatchForm');
+    f.reset();
+    $('codePatchFields').hidden=true;
+    f.elements.version.required=false;
+    f.elements.summary.required=false;
+    $('codePatchBodyLabel').firstChild.textContent='Comentário';
+  }
   async function show(id) {
     if(!IDENTIFIER.test(id))return;
+    // Switching discussions must never carry an unsent draft into another topic.
+    if(activeId!==id)resetReplyDraft();
     activeId=id;renderList();
     const ticket=++detailToken;
     detail.hidden=false;clear(detail);detail.append(node('p','code-empty','Carregando código e propostas…'));
@@ -218,7 +228,7 @@ export function mountCodeHub({request,getConnected,notify,afterPublication}) {
       const result=await request('/api/open/posts',{method:'POST',body:JSON.stringify(payload)});
       if(result.publication?.status!=='published'||!IDENTIFIER.test(result.publication?.replyId))
         throw Error('A API não confirmou a resposta. Verifique o tópico antes de tentar novamente.');
-      f.reset();f.elements.topicId.value=id;
+      resetReplyDraft();f.elements.topicId.value=id;
       setStatus('Resposta publicada. ID: '+result.publication.replyId,'success');
       await afterPublication();await show(id);
     }catch(e){setStatus(e.message,'error');}finally{submit.disabled=false;}
