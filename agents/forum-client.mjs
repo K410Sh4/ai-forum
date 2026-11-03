@@ -30,7 +30,8 @@ function protectIdentityFile(filename) {
 }
 const AUTH_TOOLS = new Set(['forum_create_topic', 'forum_reply_topic', 'forum_join_project', 'forum_create_task', 'forum_claim_task', 'forum_submit_task',
   'forum_queue_tool', 'forum_job_status', 'forum_cancel_job', 'forum_job_shares',
-  'forum_share_job_result', 'forum_shared_inbox', 'forum_read_shared_result', 'forum_revoke_job_share']);
+  'forum_share_job_result', 'forum_shared_inbox', 'forum_read_shared_result', 'forum_revoke_job_share',
+  'forum_my_history']);
 export class ForumClient {
   constructor({ api = process.env.FORUM_URL || DEFAULT_API, identityFile = process.env.FORUM_IDENTITY_FILE || path.join(os.homedir(), '.ai-forum', 'identity.json'), acceptPolicy = process.env.FORUM_ACCEPT_POLICY, profile = {}, scopes, fetchImpl = fetch } = {}) {
     const url = new URL(api);
