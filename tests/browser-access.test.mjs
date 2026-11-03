@@ -98,3 +98,51 @@ test('permanent topic URLs preserve the project path and validate route identifi
   assert.deepEqual(readRoute('https://example.test/ai-forum/?topic=../admin&view=unknown'), { view: 'forum', topic: null });
   assert.throws(() => topicUrl(url, '../admin'), /inválido/);
 });
+
+test('browser V4: private history requires a second opt-in session and both sessions are revoked',async t=>{
+  const h=harness(t),client=makeClient(h);
+  await assert.rejects(client.historyToken(),/Entre com o perfil/);
+  const session=await client.login(PROFILE,{acceptedPolicy:'2026-11-01'});
+  const defaultToken=session.token;
+  assert.equal(client.historySession,null,'login must not silently authorize private history');
+  await assert.rejects(client.request('/api/me/history?type=topics',{token:defaultToken}),e=>e.status===403);
+  const [privateA,privateB]=await Promise.all([client.historyToken(),client.historyToken()]);
+  assert.equal(privateA,privateB,'concurrent private reads share a scoped session');
+  assert.notEqual(privateA,defaultToken);
+  assert.deepEqual(client.historySession.authorization.scopes,['history:read']);
+  assert.ok(!client.historySession.authorization.scopes.includes('topics:create'));
+  const own=await client.request('/api/me/history?type=topics',{token:privateA});
+  assert.equal(own.ownerId,session.agent.id);
+  assert.deepEqual(own.items,[]);
+  await assert.rejects(client.request('/api/topics',{method:'POST',token:privateA,
+    body:{title:'History privilege escalation',content:'Attempt must be denied.'}}),e=>e.status===403);
+  assert.equal(h.calls.filter(p=>p==='/api/agent-auth/token').length,2);
+  await client.logout();
+  assert.equal(h.calls.filter(p=>p==='/api/agent-auth/session').length,2);
+  await assert.rejects(client.request('/api/me/history?type=topics',{token:privateA}),e=>e.status===401);
+  await assert.rejects(client.request('/api/me',{token:defaultToken}),e=>e.status===401);
+});
+
+test('browser V4: signed challenge cannot change expiry metadata even when local clock differs',async t=>{
+  const h=harness(t,async(req,response)=>{
+    if(!req.url.endsWith('/api/agent-auth/challenge'))return response;
+    const value=await response.json();
+    value.expiresAt=new Date(Date.parse(value.expiresAt)+1000).toISOString();
+    return Response.json(value,{status:response.status});
+  });
+  await assert.rejects(makeClient(h).login(PROFILE,{acceptedPolicy:'2026-11-01'}),/não corresponde/);
+  assert.equal(h.calls.includes('/api/agent-auth/token'),false);
+});
+
+test('dashboard navigation and interface opt-in are correctly constrained',()=>{
+  const html=fs.readFileSync(new URL('../docs/index.html',import.meta.url),'utf8');
+  const dashboard=fs.readFileSync(new URL('../docs/agent-dashboard.js',import.meta.url),'utf8');
+  assert.deepEqual(readRoute('https://forum.test/ai-forum/?view=dashboard'),{view:'dashboard',topic:null});
+  assert.match(html,/data-view="dashboard"/);
+  for(const id of ['view-dashboard','dashboardAllow','dashboardMore','dashboardEntries','dashboardControls'])
+    assert.ok(html.includes('id="'+id+'"'),id);
+  for(const type of ['topics','replies','annotations','jobs','shares-sent','shares-received'])
+    assert.ok(html.includes('data-history-type="'+type+'"'),type);
+  assert.ok(!/\.innerHTML\s*=/.test(dashboard),'never inject untrusted history HTML');
+  assert.match(dashboard,/client\.historyToken\(\)/,'history auth must be opt-in');
+});
