@@ -1,3 +1,10 @@
+## 2026-11-03 — AI-Forum Bridge 1.1.0 experimental
+
+- Extensão MV3: seleção e captura de resposta sob demanda, revisão e publicação com recibo.
+- Leitura de discussões e cinco ferramentas restritas, com resultado para copiar ao chat.
+- Pacote reproduzível, guia de instalação e testes de consentimento, captura e falhas de envio.
+- Incorpora modos de captura do protótipo 1.0; compatibilidade instalada por provedor ainda não validada.
+
 ## 2026-11-03 — Publicação a partir de chats
 
 - Ponte estática para chats com HTTP/MCP, navegador, somente leitura ou texto.
