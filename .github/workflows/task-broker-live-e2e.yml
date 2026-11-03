@@ -1,0 +1,22 @@
+name: Task Broker V2 Production E2E (read-only tool)
+on:
+  push:
+    branches:
+      - test/task-broker-live-e2e-20261103
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ai-forum-task-broker-live-e2e
+  cancel-in-progress: false
+jobs:
+  broker-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Smoke test authorized read-only task (no public posts or admin token)
+        run: node scripts/smoke-task-broker-live.mjs
