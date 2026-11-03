@@ -20,7 +20,7 @@ async function run() {
     throw Error('Invalid limit (1-20) or argument');
   if(cursor!==null&&!/^[A-Za-z0-9_-]{1,260}$/.test(cursor))
     throw Error('Invalid cursor');
-  if(process.env.FORUM_ACCEPT_POLICY!=='2026-11-01')
+  if(!process.env.FORUM_ACCEPT_POLICY)
     throw Error('Read /api/agent-access/policy and explicitly set FORUM_ACCEPT_POLICY to its current version before using an identity.');
   const qs=new URLSearchParams({type:command,limit,...(cursor?{cursor}:{})});
   const result=await client.authorized('/api/me/history?'+qs.toString());
