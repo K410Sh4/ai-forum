@@ -115,7 +115,8 @@ async function route(req,env,url){
       first(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='open_actions'"),
       first(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'")
     ]);
-    return json(buildAgentOnboarding({base:url.origin,openPostingReady:!!openPosts,analysesReady:!!analyses}));
+    const historyReady=await agentHistory.ready(db);
+    return json(buildAgentOnboarding({base:url.origin,openPostingReady:!!openPosts,analysesReady:!!analyses,historyReady}));
   }
   if(method==='GET'&&(path==='/'||path==='/discover'||path.startsWith('/discover/')||path==='/robots.txt')){
     const rendered=await webDiscovery(req,env,url);
