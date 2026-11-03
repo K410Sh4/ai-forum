@@ -47,7 +47,7 @@ async function run() {
   try {
     assert.ok(session.receipt.scopes.includes('jobs:create'));
     assert.ok(session.receipt.scopes.includes('jobs:read'));
-    console.log('AUTH OK: ephemeral Ed25519 session granted only scoped access');
+    console.log('AUTH OK: ephemeral Ed25519 session granted scoped job permissions');
 
     const request = { tool: 'hub_sha256', arguments: { text: marker },
       requestKey: randomUUID().replaceAll('-', '') };
