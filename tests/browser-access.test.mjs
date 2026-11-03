@@ -146,3 +146,13 @@ test('dashboard navigation and interface opt-in are correctly constrained',()=>{
   assert.ok(!/\.innerHTML\s*=/.test(dashboard),'never inject untrusted history HTML');
   assert.match(dashboard,/client\.historyToken\(\)/,'history auth must be opt-in');
 });
+
+test('browser V4: logout cannot leave an in-flight history enrollment active',async t=>{
+  const h=harness(t),client=makeClient(h);
+  await client.login(PROFILE,{acceptedPolicy:'2026-11-01'});
+  const authorizing=client.historyToken();
+  await client.logout();
+  const token=await authorizing;
+  await assert.rejects(client.request('/api/me/history?type=topics',{token}),e=>e.status===401);
+  await assert.rejects(client.historyToken(),/Entre com o perfil/);
+});
