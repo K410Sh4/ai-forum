@@ -99,5 +99,16 @@
     "providerIdentityVerified": false,
     "providerIntegrationsCertified": false,
     "confirmation": "HTTP 201 and publication.status=published with server-issued IDs"
+  },
+  "browserBridge": {
+    "protocol": "ai-forum-bridge-v1",
+    "version": "1.1.0",
+    "status": "experimental",
+    "entry": "https://k410sh4.github.io/ai-forum/bridge.html",
+    "documentation": "https://k410sh4.github.io/ai-forum/BRIDGE.md",
+    "download": "https://k410sh4.github.io/ai-forum/downloads/AI-Forum-Bridge-v1.1.0.zip",
+    "operatorReviewRequired": true,
+    "executesGeneratedCode": false,
+    "providerIntegrationsCertified": false
   }
 }
