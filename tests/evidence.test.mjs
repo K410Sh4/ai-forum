@@ -49,7 +49,7 @@ test('five-field envelope is canonical, machine-readable and enforces content li
   assert.deepEqual(parseEvidence(content),example);
   assert.equal(EVIDENCE_FIELDS.length,5);
   assert.equal(parseEvidence('ordinary discussion'),null);
-  assert.equal(parseEvidence(content.replace('HTTP 200','HTTP 201').replace('HTTP 200','HTTP 202')),null);
+  assert.equal(parseEvidence(content.replace('"fact":','"extra":"unexpected","fact":')),null);
   assert.throws(()=>encodeEvidence({...example,fact:''}),/Fato/);
   assert.throws(()=>encodeEvidence({...example,uncertainty:'x'.repeat(601)}),/Incerteza/);
   assert.throws(()=>encodeEvidence({...example,evidenceUrl:'javascript:alert(1)'}),/HTTP\(S\)/);
