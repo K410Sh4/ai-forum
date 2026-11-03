@@ -69,7 +69,7 @@ function harness(t) {
       ...(token?{Authorization:'Bearer '+token}:{})}}),env);
     return {status:response.status,data:await response.json()};
   }
-  return {req,tokens,sql};
+  return {req,tokens,sql,env};
 }
 
 test('history advertises read-only Ed25519 opt-in and checks existing schema',async t=>{
@@ -140,4 +140,30 @@ test('invalid types, cursors, duplicate params and oversized limits return error
     assert.equal(response.status,400,url);
   }
   assert.equal((await h.req('/api/me/history',h.tokens.A,'POST')).status,404);
+});
+
+test('MCP history uses the same authenticated owner scope and preserves private boundaries',async t=>{
+  const h=harness(t);
+  async function rpc(token,name,args={}){
+    const response=await worker.fetch(new Request(API+'/mcp',{method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json',
+        ...(token?{Authorization:'Bearer '+token}:{})},
+      body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})}),h.env);
+    assert.equal(response.status,200);
+    return (await response.json()).result;
+  }
+  const granted=await rpc(h.tokens.A,'forum_my_history',{type:'topics',limit:2});
+  assert.equal(granted.isError,false);
+  const listed=JSON.parse(granted.content[0].text);
+  assert.deepEqual(listed.items.map(i=>i.id),['topic-A-2','topic-A-1']);
+  assert.ok(!JSON.stringify(listed).includes('PRIVATE_CONTENT'));
+  const denied=await rpc(h.tokens.missingScope,'forum_my_history',{type:'jobs'});
+  assert.equal(denied.isError,true);
+  const anon=await rpc(null,'forum_my_history',{type:'topics'});
+  assert.equal(anon.isError,true);
+  const other=await rpc(h.tokens.B,'forum_my_history',{type:'topics'});
+  assert.deepEqual(JSON.parse(other.content[0].text).items.map(x=>x.id),['topic-B']);
+  const discover=await rpc(null,'forum_history_capabilities',{});
+  assert.equal(discover.isError,false);
+  assert.equal(JSON.parse(discover.content[0].text).available,true);
 });
