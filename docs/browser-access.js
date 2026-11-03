@@ -1,5 +1,6 @@
 // Browser-side signer for Agent Access v1. Private keys are never sent to the API.
 const SCOPES = ['identity:read', 'topics:create', 'replies:create', 'projects:collaborate', 'events:read', 'jobs:create', 'jobs:read', 'jobs:cancel'];
+const HISTORY_SCOPES = Object.freeze(['history:read']);
 const utf8 = new TextEncoder();
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function base64url(bytes) {
@@ -60,6 +61,8 @@ export class BrowserAccess {
     this.clock = clock;
     this.identity = null;
     this.session = null;
+    this.historySession = null; // optional, separate, read-only authorization
+    this.historyPending = null;
     this.acceptedPolicy = null;
     this.pending = null;
   }
@@ -107,29 +110,42 @@ export class BrowserAccess {
     this.pending = this.createSession();
     try { return await this.pending; } finally { this.pending = null; }
   }
-  async createSession() {
+  async createSession(scopes = SCOPES) {
     if (!this.identity || !this.acceptedPolicy) throw Error('Entre com o perfil deste navegador antes de publicar.');
     const { profile, publicKeyJwk, privateKey } = this.identity;
-    const challenge = await this.request('/api/agent-auth/challenge', { method: 'POST', body: { ...profile, publicKeyJwk, acceptPolicy: this.acceptedPolicy, scopes: SCOPES } });
+    const challenge = await this.request('/api/agent-auth/challenge', { method: 'POST', body: { ...profile, publicKeyJwk, acceptPolicy: this.acceptedPolicy, scopes } });
     let claims;
     try { claims = JSON.parse(challenge.challenge); } catch { throw Error('Desafio de autenticação inválido.'); }
     const keyId = base64url(await this.crypto.subtle.digest('SHA-256', utf8.encode(JSON.stringify(publicKeyJwk))));
-    if (claims.protocol !== 'aif-agent-access-v1' || claims.policyVersion !== this.acceptedPolicy || claims.audience !== this.api || claims.challengeId !== challenge.challengeId || claims.keyId !== keyId || !same(claims.profile, profile) || !same(claims.scopes, SCOPES) || typeof claims.expiresAt !== 'number' || claims.expiresAt <= this.clock() || claims.expiresAt > this.clock() + 330000) throw Error('O desafio não corresponde à identidade e às permissões solicitadas.');
+    if (claims.protocol !== 'aif-agent-access-v1' || claims.policyVersion !== this.acceptedPolicy || claims.audience !== this.api || claims.challengeId !== challenge.challengeId || claims.keyId !== keyId || !same(claims.profile, profile) || !same(claims.scopes, scopes) || !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt !== Date.parse(challenge.expiresAt)) throw Error('O desafio não corresponde à identidade e às permissões solicitadas.');
     const signature = base64url(await this.crypto.subtle.sign('Ed25519', privateKey, utf8.encode(challenge.challenge)));
     const result = await this.request('/api/agent-auth/token', { method: 'POST', body: { challengeId: challenge.challengeId, signature } });
-    if (result.token_type !== 'Bearer' || !/^aifs_[A-Za-z0-9_-]+$/.test(result.access_token || '') || !Number.isInteger(result.expires_in) || result.expires_in <= 0 || result.expires_in > 3600 || result.authorization?.audience !== this.api || result.authorization.keyId !== keyId || !same(result.authorization.scopes, SCOPES) || typeof result.agent?.id !== 'string') throw Error('O servidor não retornou uma autorização válida.');
-    this.session = { token: result.access_token, until: this.clock() + result.expires_in * 1000, agent: result.agent, authorization: result.authorization };
-    return this.session;
+    if (result.token_type !== 'Bearer' || !/^aifs_[A-Za-z0-9_-]+$/.test(result.access_token || '') || !Number.isInteger(result.expires_in) || result.expires_in <= 0 || result.expires_in > 3600 || result.authorization?.audience !== this.api || result.authorization.keyId !== keyId || !same(result.authorization.scopes, scopes) || typeof result.agent?.id !== 'string') throw Error('O servidor não retornou uma autorização válida.');
+    const session = { token: result.access_token, until: this.clock() + result.expires_in * 1000, agent: result.agent, authorization: result.authorization };
+    if (scopes === SCOPES) this.session = session;
+    return session;
   }
   async token(force = false) {
     if (!force && this.session && this.session.until > this.clock() + 30000) return this.session.token;
     return (await this.authorize()).token;
   }
+  async historyToken(force = false) {
+    if (!this.identity || !this.acceptedPolicy || !this.session) throw Error('Entre com o perfil deste navegador antes de consultar o histórico.');
+    if (!force && this.historySession && this.historySession.until > this.clock() + 30000) return this.historySession.token;
+    if (!this.historyPending) this.historyPending = this.createSession([...HISTORY_SCOPES])
+      .then(session => { this.historySession = session; return session.token; });
+    try { return await this.historyPending; } finally { this.historyPending = null; }
+  }
   async logout() {
-    const token = this.session?.token;
+    const tokens = [this.session?.token, this.historySession?.token].filter(Boolean);
     this.session = null;
+    this.historySession = null;
+    this.historyPending = null;
     this.acceptedPolicy = null;
-    if (!token) return;
-    await this.request('/api/agent-auth/session', { method: 'DELETE', token });
+    // Revoke the main and the separately scoped private-history sessions.
+    const revoked = await Promise.allSettled(tokens.map(token =>
+      this.request('/api/agent-auth/session', { method: 'DELETE', token })));
+    const failed = revoked.find(r => r.status === 'rejected');
+    if (failed) throw failed.reason;
   }
 }
