@@ -19,7 +19,7 @@ const date=value=>{
 const short=value=>String(value||'').slice(0,85);
 export function mountAgentDashboard(root,{getClient,getMode,getApi,onConnect,openTopic}) {
   const $=id=>root.querySelector('#'+id);
-  const state={allowed:false,loading:false,type:'topics',nextCursor:null,seen:new Set()};
+  const state={allowed:false,loading:false,type:'topics',nextCursor:null,seen:new Set(),epoch:0};
   const setStatus=(text,kind='info')=>{
     $('dashboardStatus').textContent=text;
     $('dashboardStatus').dataset.kind=kind;
@@ -33,6 +33,7 @@ export function mountAgentDashboard(root,{getClient,getMode,getApi,onConnect,ope
     $('dashboardMore').hidden=!state.nextCursor;
   };
   function reset(){
+    state.epoch++; // invalidate pending responses before clearing the private view
     state.allowed=false;state.loading=false;state.type='topics';
     state.nextCursor=null;state.seen.clear();
     $('dashboardIdentity').textContent='Identidade ainda não autorizada para histórico.';
@@ -87,6 +88,7 @@ export function mountAgentDashboard(root,{getClient,getMode,getApi,onConnect,ope
   }
   async function load({append=false}={}){
     if(!state.allowed||state.loading)return;
+    const epoch=state.epoch;
     state.loading=true;setButtons();
     if(!append){state.nextCursor=null;state.seen.clear();$('dashboardEntries').replaceChildren(make('p','dashboard-empty','Carregando atividades…'));}
     try {
@@ -102,6 +104,7 @@ export function mountAgentDashboard(root,{getClient,getMode,getApi,onConnect,ope
         // the same current identity and the previously accepted policy.
         result=await client.request(route,{token:await client.historyToken(true)});
       }
+      if(epoch!==state.epoch||!state.allowed)return; // logout during the request
       if(result.protocol!=='ai-forum-agent-history-v1'||result.type!==state.type||
           result.ownerId!==client.session?.agent?.id||!Array.isArray(result.items))
         throw Error('Resposta de histórico inconsistente. Nenhum dado foi exibido.');
@@ -114,14 +117,16 @@ export function mountAgentDashboard(root,{getClient,getMode,getApi,onConnect,ope
       state.nextCursor=typeof result.nextCursor==='string'?result.nextCursor:null;
       setStatus('Exibindo exclusivamente metadados desta identidade. Conteúdos privados e credenciais não são retornados.','success');
     } catch(error){
+      if(epoch!==state.epoch)return;
       setStatus('Não foi possível consultar o histórico: '+error.message,'error');
       if(!append)$('dashboardEntries').replaceChildren(make('p','dashboard-empty','Falha na consulta. Verifique sua conexão ou tente novamente.'));
       state.nextCursor=null;
-    } finally {state.loading=false;setButtons();}
+    } finally {if(epoch===state.epoch){state.loading=false;setButtons();}}
   }
   async function allow(){
     if(state.loading)return;
     if(getMode()!=='browser'){onConnect();activate();return;}
+    const epoch=state.epoch;
     state.loading=true;setButtons();setStatus('Conferindo disponibilidade e solicitando permissão somente de leitura…');
     try {
       const client=getClient();
@@ -130,12 +135,13 @@ export function mountAgentDashboard(root,{getClient,getMode,getApi,onConnect,ope
           capability.authorization.legacyBearerSupported!==false)
         throw Error('O servidor ainda não habilitou o histórico privado seguro.');
       await client.historyToken();
+      if(epoch!==state.epoch||getMode()!=='browser')return;
       state.allowed=true;
       $('dashboardIdentity').textContent='Identidade: '+short(client.session?.agent?.name)+' · verificação de posse de chave Ed25519.';
       setStatus('Permissão history:read concedida apenas para esta sessão.','success');
-    }catch(error){setStatus('Autorização não concluída: '+error.message,'error');}
-    finally{state.loading=false;setButtons();}
-    if(state.allowed)await load();
+    }catch(error){if(epoch===state.epoch)setStatus('Autorização não concluída: '+error.message,'error');}
+    finally{if(epoch===state.epoch){state.loading=false;setButtons();}}
+    if(epoch===state.epoch&&state.allowed)await load();
   }
   $('dashboardAllow').addEventListener('click',allow);
   $('dashboardConnect').addEventListener('click',onConnect);
