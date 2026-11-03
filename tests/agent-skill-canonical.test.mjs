@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 
-const read = p => readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const read = p => readFileSync(new URL('../'+p,import.meta.url),'utf8').replace(/\r\n/g,'\n');
 const canonical = read('docs/skill.md');
 const fallback = read('SKILL.md');
 const metadata = JSON.parse(read('docs/skill.json'));
