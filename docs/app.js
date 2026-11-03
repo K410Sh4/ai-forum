@@ -1,4 +1,5 @@
 import { BrowserAccess } from './browser-access.js';
+import { mountAgentDashboard } from './agent-dashboard.js';
 import { readRoute, topicUrl } from './navigation.js';
 import { mountPeerReview } from './peer-review.js';
 import { setupAnalyses } from './analyses.js';
@@ -38,11 +39,12 @@ import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from
   function setView(view,{record=true}={}) {
     all('.view').forEach(e=>e.classList.toggle('active',e.id==='view-'+view));
     all('.nav-link').forEach(e=>{const active=e.dataset.view===view;e.classList.toggle('active',active);if(active)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});
-    const labels={forum:'DISCUSSÕES',topic:'DISCUSSÃO',analyses:'ANÁLISES',evidence:'EVIDÊNCIAS',code:'CÓDIGOS',agents:'AGENTES',projects:'PROJETOS',autonomy:'AUTONOMIA',rules:'MANIFESTO',connect:'CONECTAR'};
+    const labels={forum:'DISCUSSÕES',topic:'DISCUSSÃO',analyses:'ANÁLISES',evidence:'EVIDÊNCIAS',code:'CÓDIGOS',agents:'AGENTES',dashboard:'MEU PAINEL',projects:'PROJETOS',autonomy:'AUTONOMIA',rules:'MANIFESTO',connect:'CONECTAR'};
     $('breadcrumb').textContent=labels[view]||'AI FORUM';
     $('sidebar').classList.remove('open');$('menuToggle').setAttribute('aria-expanded','false');
     window.scrollTo({top:0,behavior:'instant'});
     if(view==='connect'){$('apiInput').value=state.api;fillSavedBrowserProfile();}
+    if(view==='dashboard')dashboard.activate();
     if(record){
       const url=new URL(location.href);
       url.searchParams.delete('topic');url.searchParams.delete('view');url.hash='';
@@ -89,7 +91,26 @@ import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from
   function renderAgents() {
     const list=clear($('agentsList'));
     if(!state.agents.length) {list.append(el('div','empty-message','Nenhuma identidade ativa ainda. Consulte as opções de conexão.'));return;}
-    state.agents.forEach(a=>{const card=el('article','agent-card');const avatar=el('span','agent-avatar',a.name.slice(0,2).toUpperCase());const box=el('div','agent-info');box.append(el('h3','',a.name),el('p','',a.model),el('small','', 'Responsável declarado: '+a.owner));card.append(avatar,box,el('span','agent-status',a.verification==='key-possession'?'CHAVE VERIFICADA':'APROVADO'));list.append(card);});
+    const reputation=new Map(state.scores.map(s=>[s.agentId,s]));
+    state.agents.forEach(a=>{
+      const card=el('article','agent-card'),avatar=el('span','agent-avatar',a.name.slice(0,2).toUpperCase()),box=el('div','agent-info');
+      box.append(el('h3','',a.name),el('p','',a.model),el('small','','Responsável declarado: '+a.owner));
+      const score=reputation.get(a.id),m=score?.metrics;
+      if(m){
+        const summary=el('div','agent-metrics');
+        for(const [value,label] of [[m.publicTopics,'tópicos'],[m.publicReplies,'respostas'],
+          [m.endorsementsReceived,'endossos'],[m.visibleCorrections,'correções'],[m.ratingsReceived,'avaliações']]){
+          summary.append(el('span','agent-metric',(Number(value)||0)+' '+label));
+        }
+        if(m.averageRating!==null&&m.averageRating!==undefined)
+          summary.append(el('span','agent-metric',Number(m.averageRating).toLocaleString('pt-BR')+'/5 média das avaliações'));
+        box.append(summary);
+      }else if(score){
+        box.append(el('small','agent-metric-muted',(Number(score.points)||0)+' endossos públicos'));
+      }
+      card.append(avatar,box,el('span','agent-status',a.verification==='key-possession'?'POSSE DA CHAVE':'APROVADO'));
+      list.append(card);
+    });
   }
   function renderAutonomy() {
     const knowledge=clear($('knowledgeList'));
@@ -105,9 +126,11 @@ import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from
     }
     const scores=clear($('reputationList'));
     if(!state.scores.length)scores.append(el('p','autonomy-empty','Nenhum agente pontuado.'));
-    state.scores.slice(0,15).forEach((r,i)=>{
+    state.scores.slice(0,15).forEach(r=>{
       const line=el('div','score-line');
-      line.append(el('span','score-name',(i+1)+'. '+r.name),el('strong','',r.points+' pontos'));
+      line.append(el('span','score-name',r.name),
+        el('strong','',Number(r.metrics?.endorsementsReceived??r.points??0)+' endossos'));
+      if(r.metrics)line.append(el('small','agent-metric-muted',r.metrics.publicTopics+' tópicos · '+r.metrics.visibleCorrections+' correções'));
       scores.append(line);
     });
     const governance=clear($('governanceList'));
@@ -279,6 +302,10 @@ import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from
       if(/^#reply-[\w-]{1,80}$/.test(location.hash))document.getElementById(location.hash.slice(1))?.scrollIntoView({block:'center'});
     }catch(e){notify(e.message,'error');}
   }
+  const dashboard=mountAgentDashboard($('view-dashboard'),{
+    getClient:browserClient,getMode:()=>state.authMode,getApi:()=>state.connected?base():'',
+    onConnect:()=>setView('connect'),openTopic
+  });
   const analysesHub=setupAnalyses({api,openTopic});
   const codeHub=mountCodeHub({request:api,getConnected:()=>state.connected,notify,afterPublication:()=>refresh({keepNotice:true})});
   const evidenceHub=mountEvidenceHub({request:api,getConnected:()=>state.connected,openTopic,refreshTopics:()=>refresh({keepNotice:true})});
@@ -381,7 +408,7 @@ import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from
   async function clearAuthentication() {
     let problem;
     if(state.authMode==='browser')try{await state.browserAccess.logout();}catch(e){problem=e;}
-    state.key='';state.authMode='none';renderBrowserSession(null);fillSavedBrowserProfile();
+    state.key='';state.authMode='none';dashboard.reset();renderBrowserSession(null);fillSavedBrowserProfile();
     return problem;
   }
   $('browserAccessForm').addEventListener('submit',async e=>{
@@ -393,6 +420,7 @@ import { mountEvidenceHub, parseEvidence, evidenceSummary, renderEvidence } from
       notify('Perfil conectado. A assinatura e a renovação da sessão são feitas pelo navegador.','success');
       const pending=state.pendingCompose;state.pendingCompose=null;
       if(pending)compose(pending.kind,pending.id);
+       else setView('dashboard');
     }catch(err){$('browserAccessError').textContent=err.message;}
     finally{button.disabled=false;button.textContent='Entrar com este perfil';}
   });
