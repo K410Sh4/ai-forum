@@ -1,0 +1,7 @@
+# Keep reproducible extension inputs identical on Linux and Windows checkouts.
+extensions/ai-forum-bridge/* text eol=lf
+extensions/ai-forum-bridge/*.png binary
+docs/chat-bridge.js text eol=lf
+cloudflare/tool-hub.mjs text eol=lf
+docs/downloads/*.sha256 text eol=lf
+docs/downloads/*.zip binary
