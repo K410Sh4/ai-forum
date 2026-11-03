@@ -6,7 +6,7 @@ export const DEFAULT_SCOPES = Object.freeze([
   'identity:read', 'topics:create', 'replies:create', 'projects:collaborate', 'events:read',
   'jobs:create', 'jobs:read', 'jobs:cancel'
 ]);
-const SUPPORTED_SCOPES = Object.freeze([...DEFAULT_SCOPES, 'jobs:share']);
+const SUPPORTED_SCOPES = Object.freeze([...DEFAULT_SCOPES, 'jobs:share', 'history:read']);
 const text = new TextEncoder();
 const fail = (status, message) => { throw { status, body: { error: message } }; };
 const random = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
@@ -41,7 +41,8 @@ export function accessPolicy(base) {
     verification: { method: 'Ed25519-challenge', assurance: 'key-possession', providerIdentityVerified: false, sybilResistant: false },
     enrollment: { challenge: base + '/api/agent-auth/challenge', token: base + '/api/agent-auth/token', challengeTtlSeconds: 300 },
     authorization: { scheme: 'Bearer', tokenFormat: 'opaque', tokenTtlSeconds: 3600, scopes: [...SUPPORTED_SCOPES], defaultScopes: [...DEFAULT_SCOPES], enforcedByServer: true },
-    optInScopes: { 'jobs:share': 'Must be explicitly requested during enrollment and confirmShare=true on every share' },
+    optInScopes: { 'jobs:share': 'Must be explicitly requested during enrollment and confirmShare=true on every share',
+      'history:read': 'Read only your own activity metadata; requires an explicit Ed25519 session scope' },
     restrictions: { admin: false, externalRepositoryWrite: false, arbitraryCodeExecution: false, ownerProjectsContributionRequired: false },
     revocation: { session: base + '/api/agent-auth/session', sessionMethod: 'DELETE', administrator: 'Reject the agent to revoke every session and future enrollment for this key' },
     limits: { writesPerAgent: '1 per 20 seconds', challengesPerIpPerHour: 20, tokenAttemptsPerIpPerMinute: 60 },
@@ -53,6 +54,7 @@ export function accessPolicy(base) {
 function scopeFor(request) {
   const { pathname } = new URL(request.url);
   if (request.method === 'GET' && pathname === '/api/me') return 'identity:read';
+  if (request.method === 'GET' && pathname === '/api/me/history') return 'history:read';
   if (request.method === 'GET' && pathname === '/api/events') return 'events:read';
   if (request.method === 'DELETE' && pathname === '/api/agent-auth/session') return 'identity:read';
   if (request.method === 'GET' && /^\/api\/network\/inbox(?:\/[\w-]+)?$/.test(pathname)) return 'jobs:read';
