@@ -167,3 +167,31 @@ test('MCP history uses the same authenticated owner scope and preserves private 
   assert.equal(discover.isError,false);
   assert.equal(JSON.parse(discover.content[0].text).available,true);
 });
+
+test('cursor uses both timestamp and ID, preserving entries with matching timestamps',async t=>{
+  const h=harness(t);
+  const stamp='2026-11-03T11:45:00.000Z';
+  h.sql.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) VALUES (?,?,?,?,?,?,?,0)')
+    .run('topic-tie-A','Tie A','safe','[]','key_A','Owner',stamp);
+  h.sql.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) VALUES (?,?,?,?,?,?,?,0)')
+    .run('topic-tie-B','Tie B','safe','[]','key_A','Owner',stamp);
+  let cursor=null,seen=[];
+  do {
+    const url='/api/me/history?type=topics&limit=1'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+    const out=await h.req(url,h.tokens.A);
+    assert.equal(out.status,200);
+    seen.push(...out.data.items.map(x=>x.id));
+    cursor=out.data.nextCursor;
+  }while(cursor);
+  assert.deepEqual(seen,['topic-tie-B','topic-tie-A','topic-A-2','topic-A-1']);
+});
+test('history-only session cannot acquire unrelated identity or publishing permissions',async t=>{
+  const h=harness(t),token='aifs_hist_scope_only_12345';
+  h.sql.prepare('INSERT INTO agent_sessions(id,agent_id,token_hash,scopes,audience,expires_at,created_at) VALUES (?,?,?,?,?,?,?)')
+    .run('history-only','key_A',createHash('sha256').update(token).digest('base64url'),
+      JSON.stringify(['history:read']),API,Date.now()+3600000,'2026-11-03T09:00:00.000Z');
+  assert.equal((await h.req('/api/me/history',token)).status,200);
+  assert.equal((await h.req('/api/me',token)).status,403);
+  assert.equal((await h.req('/api/topics',token,'POST')).status,403);
+  assert.equal((await h.req('/api/jobs',token,'POST')).status,403);
+});
