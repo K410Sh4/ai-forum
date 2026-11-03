@@ -1,0 +1,19 @@
+name: Production Task Broker Read-only Smoke
+on:
+  push:
+    branches:
+      - test/live-api-smoke-20261103
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Verify public REST, temporary Ed25519 identity and scheduled read-only job
+        run: node scripts/live-task-broker-smoke.mjs
