@@ -220,3 +220,41 @@ test('MCP owner/recipient operations keep authenticated scope and result boundar
   assert.equal(read.isError,false);
   assert.ok(JSON.parse(read.content[0].text).result.hex);
 });
+
+test('repeated recipient reads are audited with an hourly cap, not unbounded D1 writes',async t=>{
+  const h=harness(t);const id=await h.completedJob();
+  const grant=await h.request('/api/jobs/'+id+'/shares',{method:'POST',
+    token:h.tokens.scopedSharer,body:h.grant(id)});
+  assert.equal(grant.status,201);
+  const shareId=grant.data.share.id;
+  for(let i=0;i<20;i++) {
+    const response=await h.request('/api/network/inbox/'+shareId,{token:h.tokens.scopedRecipient});
+    assert.equal(response.status,200,'read '+i+': '+JSON.stringify(response.data));
+  }
+  const blocked=await h.request('/api/network/inbox/'+shareId,{token:h.tokens.scopedRecipient});
+  assert.equal(blocked.status,429);
+  assert.equal(h.rows('job_share_events'),21,'one grant plus 20 audited views');
+});
+
+test('concurrent same-key grants converge to one share and one grant event',async t=>{
+  const h=harness(t);const id=await h.completedJob(),payload=h.grant(id);
+  const [a,b]=await Promise.all([
+    h.request('/api/jobs/'+id+'/shares',{method:'POST',token:h.tokens.scopedSharer,body:payload}),
+    h.request('/api/jobs/'+id+'/shares',{method:'POST',token:h.tokens.scopedSharer,body:payload})
+  ]);
+  assert.deepEqual([a.status,b.status].sort(),[200,201]);
+  assert.equal(a.data.share.id,b.data.share.id);
+  assert.equal(h.rows('job_result_shares'),1);
+  assert.equal(h.rows('job_share_events'),1);
+});
+
+test('revoked sender identities no longer make previously granted results visible',async t=>{
+  const h=harness(t);const id=await h.completedJob();
+  const grant=await h.request('/api/jobs/'+id+'/shares',{method:'POST',
+    token:h.tokens.scopedSharer,body:h.grant(id)});
+  assert.equal(grant.status,201);
+  h.sql.prepare("UPDATE agents SET status='rejected' WHERE id='sender'").run();
+  const read=await h.request('/api/network/inbox/'+grant.data.share.id,{token:h.tokens.recipient});
+  assert.equal(read.status,404);
+  assert.equal((await h.request('/api/network/inbox',{token:h.tokens.recipient})).data.shares.length,0);
+});
