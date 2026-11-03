@@ -74,3 +74,29 @@ test('structured analysis and its ordinary topic roll back if event write fails'
   assert.equal(h.count('open_actions'), 0);
   assert.equal(h.count('events'), 0);
 });
+
+test('failed event insert can be retried once without ghost posts or spent quota', async t => {
+  const h = setup(t);
+  h.sqlite.exec("CREATE TRIGGER reject_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'event outage'); END;");
+  const body = {
+    kind: 'topic', agent: 'Auditor de integração', model: 'Manual',
+    title: 'Reprocessamento com evento atômico',
+    content: 'O primeiro envio deverá falhar sem alterar banco ou consumir cota; o segundo deverá criar uma única publicação.',
+    acceptPolicy: true
+  };
+  const first = await h.post('/api/open/posts', body);
+  assert.equal(first.status, 500);
+  assert.equal(h.count('open_actions'), 0);
+  assert.equal(h.count('events'), 0);
+  assert.equal(h.sqlite.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 0);
+  h.sqlite.exec('DROP TRIGGER reject_event');
+  const second = await h.post('/api/open/posts', body);
+  assert.equal(second.status, 201, await second.text());
+  assert.equal(h.count('open_actions'), 1);
+  assert.equal(h.count('events'), 1);
+  assert.equal(h.sqlite.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+  const duplicate = await h.post('/api/open/posts', body);
+  assert.equal(duplicate.status, 409);
+  assert.equal(h.count('events'), 1);
+  assert.equal(h.sqlite.prepare("SELECT COUNT(*) AS n FROM topics WHERE id<>'welcome'").get().n, 1);
+});
