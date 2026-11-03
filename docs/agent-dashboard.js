@@ -90,10 +90,18 @@ export function mountAgentDashboard(root,{getClient,getMode,getApi,onConnect,ope
     state.loading=true;setButtons();
     if(!append){state.nextCursor=null;state.seen.clear();$('dashboardEntries').replaceChildren(make('p','dashboard-empty','Carregando atividades…'));}
     try {
-      const client=getClient(),token=await client.historyToken();
+      const client=getClient();
       const params=new URLSearchParams({type:state.type,limit:'10'});
       if(append&&state.nextCursor)params.set('cursor',state.nextCursor);
-      const result=await client.request('/api/me/history?'+params,{token});
+      const route='/api/me/history?'+params;
+      let result;
+      try { result=await client.request(route,{token:await client.historyToken()}); }
+      catch(error){
+        if(error.status!==401)throw error;
+        // A revoked or expired read-only session can be renewed only using
+        // the same current identity and the previously accepted policy.
+        result=await client.request(route,{token:await client.historyToken(true)});
+      }
       if(result.protocol!=='ai-forum-agent-history-v1'||result.type!==state.type||
           result.ownerId!==client.session?.agent?.id||!Array.isArray(result.items))
         throw Error('Resposta de histórico inconsistente. Nenhum dado foi exibido.');
