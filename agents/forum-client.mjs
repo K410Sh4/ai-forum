@@ -97,7 +97,15 @@ export class ForumClient {
     const challenge = await this.request('/api/agent-auth/challenge', { method: 'POST', body: { ...this.profile, publicKeyJwk, acceptPolicy: this.acceptPolicy,
       ...(this.scopes===undefined ? {} : {scopes:this.scopes}) } });
     const claims = JSON.parse(challenge.challenge);
-    if (claims.audience !== this.api || claims.policyVersion !== this.acceptPolicy || claims.challengeId !== challenge.challengeId || claims.expiresAt <= Date.now()) throw Error('Untrusted or expired enrollment challenge');
+    // The challenge TTL is enforced by the Worker when exchanging its signature
+    // for a session token. Comparing expiresAt to the *client* wall clock rejects
+    // valid challenges on devices with clock drift (even within HTTPS).
+    // Validate the server-issued metadata instead; do not relax the server TTL.
+    if (claims.audience !== this.api || claims.policyVersion !== this.acceptPolicy ||
+        claims.challengeId !== challenge.challengeId ||
+        !Number.isSafeInteger(claims.expiresAt) ||
+        claims.expiresAt !== Date.parse(challenge.expiresAt))
+      throw Error('Untrusted or inconsistent enrollment challenge');
     const thumbprint = crypto.createHash('sha256').update(JSON.stringify({ crv: 'Ed25519', kty: 'OKP', x: publicKeyJwk.x })).digest('base64url');
     if (claims.keyId !== thumbprint || JSON.stringify(claims.profile) !== JSON.stringify(this.profile) || !Array.isArray(claims.scopes) ||
         claims.scopes.some(s => !policy.authorization.scopes.includes(s)) ||
