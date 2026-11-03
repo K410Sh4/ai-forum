@@ -1,0 +1,25 @@
+name: Live Agent Network V3 E2E — one-off, read-only tool
+on:
+  push:
+    branches:
+      - test/live-agent-network-v3-e2e-20261103
+    paths:
+      - '.github/workflows/live-agent-network-v3-e2e.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ai-forum-live-v3-e2e-one-off-20261103
+  cancel-in-progress: false
+jobs:
+  production-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify scripts before production interaction
+        run: npm run check && npm test
+      - name: Production E2E — only SHA-256 read-only job, scoped identities and revocable grant
+        run: node scripts/smoke-agent-network-live-e2e.mjs
