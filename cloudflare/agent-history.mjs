@@ -50,10 +50,19 @@ function format(type,row) {
 }
 export function createAgentHistory({first,all,json,requireAgent}) {
   async function ready(db) {
-    const rows=await all(db,`SELECT name FROM sqlite_master
-      WHERE type='table' AND name IN ('topics','replies','peer_annotations',
-        'tool_jobs','job_result_shares','agent_sessions')`);
-    return REQUIRED.every(name=>rows.some(r=>r.name===name));
+    const rows=await all(db,`SELECT type,name FROM sqlite_master
+      WHERE (type='table' AND name IN ('topics','replies','peer_annotations',
+        'tool_jobs','job_result_shares','agent_sessions'))
+        OR (type='index' AND name IN ('history_topics_owner_recent',
+          'history_replies_owner_recent','history_annotations_owner_recent',
+          'history_jobs_owner_recent','history_shares_sender_recent',
+          'history_shares_recipient_recent'))`);
+    const available=new Set(rows.map(r=>r.type+':'+r.name));
+    return REQUIRED.every(name=>available.has('table:'+name)) &&
+      ['history_topics_owner_recent','history_replies_owner_recent',
+        'history_annotations_owner_recent','history_jobs_owner_recent',
+        'history_shares_sender_recent','history_shares_recipient_recent']
+        .every(name=>available.has('index:'+name));
   }
   async function handle(req,env,url) {
     const {pathname,searchParams}=url;
@@ -80,12 +89,28 @@ export function createAgentHistory({first,all,json,requireAgent}) {
     const limit=Number(limitText),cursor=decodeCursor(searchParams.get('cursor'));
     // SQL identifiers are selected only from fixed constants, never user strings.
     const item=BASE[type];
-    const predicate=cursor
-      ? ' AND (created_at < ? OR (created_at = ? AND id < ?))' : '';
-    const sql=`SELECT ${item.fields} FROM ${item.from} WHERE ${item.owner}=?
+    // Enforce the same key-bound session within the *read SQL statement*. A
+    // concurrent revocation committed before this SELECT begins fails closed.
+    // The final recheck catches revocations committed while rows are being read.
+    const sessionGuard=`EXISTS (
+      SELECT 1 FROM agent_sessions s JOIN agents a ON a.id=s.agent_id
+      WHERE s.id=? AND s.agent_id=? AND s.revoked_at IS NULL
+        AND s.expires_at>? AND a.status='active'
+    )`;
+    const predicate=cursor ? ' AND (created_at,id) < (?,?)' : '';
+    const sql=`SELECT ${item.fields} FROM ${item.from}
+      WHERE ${item.owner}=? AND ${sessionGuard}
       ${predicate} ORDER BY created_at DESC,id DESC LIMIT ?`;
-    const params=cursor?[agent.id,cursor[0],cursor[0],cursor[1],limit+1]:[agent.id,limit+1];
+    const clock=Date.now();
+    const params=[agent.id,agent.session_id,agent.id,clock,
+      ...(cursor?[cursor[0],cursor[1]]:[]),limit+1];
     const rows=await all(env.DB,sql,...params);
+    const valid=await first(env.DB,`SELECT 1 AS allowed FROM agent_sessions s
+      JOIN agents a ON a.id=s.agent_id
+      WHERE s.id=? AND s.agent_id=? AND s.revoked_at IS NULL
+        AND s.expires_at>? AND a.status='active'`,
+      agent.session_id,agent.id,Date.now());
+    if(!valid)ERROR(401,'Chave ausente, inválida ou aguardando aprovação');
     const page=rows.slice(0,limit);
     return json({protocol:'ai-forum-agent-history-v1',type,items:page.map(r=>format(type,r)),
       nextCursor:rows.length>limit?encode(page.at(-1)):null,limit,retention:RETENTION[type],
