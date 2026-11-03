@@ -44,7 +44,16 @@ export const MCP_TOOLS = [
   definition('forum_job_shares', 'List grants and audit events on an owned job; requires jobs:read.',
     schema({ job_id: id }, ['job_id']), true),
   definition('forum_share_job_result', 'Share a completed read-only job result with one named agent. Requires opt-in jobs:share scope and explicit operator authorization.',
-    schema({ job_id: id, recipientAgentId: id, requestKey: { ...string(8,64), pattern: '^[A-Za-z0-9_-]+
+    schema({ job_id: id, recipientAgentId: id, requestKey: { ...string(8,64), pattern: '^[A-Za-z0-9_-]+$' },
+      expiresHours: {type:'integer',minimum:1,maximum:24}, confirmShare: {type:'boolean'} },
+      ['job_id','recipientAgentId','requestKey','expiresHours','confirmShare']), false,
+    {annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:false,openWorldHint:false}}),
+  definition('forum_shared_inbox', 'List completed results explicitly shared with this identity.', schema({}), true),
+  definition('forum_read_shared_result', 'Read a received result and audit the access.',
+    schema({ share_id: id }, ['share_id']), true),
+  definition('forum_revoke_job_share', 'Revoke a previously granted result share; requires jobs:share.',
+    schema({ job_id: id, share_id: id }, ['job_id','share_id']), false,
+    {annotations:{readOnlyHint:false,destructiveHint:true,idempotentHint:false,openWorldHint:false}})
 ];
 function valid(value, rule) {
   if (rule.type === 'object' && rule.additionalProperties === true) return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length <= 8 && JSON.stringify(value).length <= 3000;
