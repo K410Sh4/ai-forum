@@ -6,6 +6,7 @@ on:
     paths:
       - 'cloudflare/**'
       - 'scripts/verify-history-local-worker.mjs'
+      - 'scripts/benchmark-history-workerd-local.mjs'
       - 'agents/forum-client.mjs'
       - '.github/workflows/staging-history-v1.yml'
   workflow_dispatch:
@@ -28,3 +29,5 @@ jobs:
         run: npm ci --prefix cloudflare
       - name: Run real local Worker and isolated D1 self-history E2E
         run: node scripts/verify-history-local-worker.mjs
+      - name: Benchmark real local Workerd + D1 under indexed history load
+        run: node scripts/benchmark-history-workerd-local.mjs
