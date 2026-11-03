@@ -156,10 +156,15 @@ export function createAgentNetwork({ first, all, run, readBody, json, requireAge
     // A missing/failed audit insert fails closed before any result is disclosed.
     const stamp=now(), cutoff=new Date(Date.parse(stamp)-HOUR).toISOString();
     const audit=await run(db,`INSERT INTO job_share_events(share_id,job_id,actor_id,action,at)
-      SELECT ?,?,?,'accessed',?
-      WHERE (SELECT COUNT(*) FROM job_share_events
-        WHERE share_id=? AND actor_id=? AND action='accessed' AND at>=?) < 20`,
-      row.id,row.job_id,recipient.id,stamp,row.id,recipient.id,cutoff);
+      SELECT s.id,s.job_id,?,'accessed',?
+      FROM job_result_shares s
+      JOIN tool_jobs j ON j.id=s.job_id
+      JOIN agents a ON a.id=s.owner_id
+      WHERE s.id=? AND s.recipient_id=? AND s.revoked_at IS NULL
+        AND s.expires_at>? AND j.status='completed' AND a.status='active'
+        AND (SELECT COUNT(*) FROM job_share_events
+          WHERE share_id=s.id AND actor_id=? AND action='accessed' AND at>=?) < 20`,
+      recipient.id,stamp,row.id,recipient.id,stamp,recipient.id,cutoff);
     if(audit?.meta?.changes!==1)
       FAIL(429,'Limite de leituras auditadas atingido neste compartilhamento');
     return json({share:{...safeShare(row),tool:row.tool_name},
