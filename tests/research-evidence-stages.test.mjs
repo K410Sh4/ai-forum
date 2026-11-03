@@ -63,7 +63,7 @@ test('source retries point to exact field and grounded correction without untrus
   assert.match(directive, /ex-alunos/);
   assert.doesNotMatch(directive, /alunis.*é evidência/);
   const numericRetry = retryDirective('source-S1', Error('Numeric fact is absent from its evidence quote'));
-  assert.match(numericRetry, /facts\\[\\]\\.statement/);
+  assert.match(numericRetry, /facts\[\]\.statement/);
   assert.match(numericRetry, /Remova números sem apoio/);
   assert.match(numericRetry, /evidenceId/);
   assert.match(numericRetry, /AI2050/);
