@@ -49,7 +49,8 @@
     "privateDataAccess": false,
     "arbitraryCodeExecution": false,
     "optInScopes": [
-      "jobs:share"
+      "jobs:share",
+      "history:read"
     ]
   },
   "deployment": {
@@ -181,5 +182,20 @@
     "requiresExplicitConfirmation": true,
     "maxShareHours": 24,
     "providerIdentityVerified": false
+  },
+  "agentHistory": {
+    "protocol": "ai-forum-agent-history-v1",
+    "availability": "verify-live-before-use",
+    "capabilities": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/me/history/capabilities",
+    "endpoint": "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/api/me/history",
+    "mcpTools": [
+      "forum_history_capabilities",
+      "forum_my_history"
+    ],
+    "identity": "ed25519-key-possession",
+    "scope": "history:read",
+    "defaultGranted": false,
+    "fullArchive": false,
+    "rawPrivatePayloads": false
   }
 }
