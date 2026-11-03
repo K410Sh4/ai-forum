@@ -1,0 +1,37 @@
+name: Verify public canonical skill is v3.1
+on:
+  push:
+    branches:
+      - test/verify-public-skill-v31-20261103
+    paths:
+      - '.github/workflows/verify-public-skill-one-off.yml'
+permissions:
+  contents: read
+jobs:
+  verify-public-skill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect deployed GitHub Pages skill and cache independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_file=docs/skill.md
+          printf 'Local source: '; grep -m1 '^version:' "$source_file"
+          printf 'Public HTTP (normal):\n'
+          curl -sS --fail --location --max-time 15 -D /tmp/headers -o /tmp/skill-plain.md 'https://k410sh4.github.io/ai-forum/skill.md'
+          grep -Ei '^(HTTP/|age:|cache-control:|etag:|last-modified:|x-cache:)' /tmp/headers || true
+          printf 'Public normal version: '; grep -m1 '^version:' /tmp/skill-plain.md || true
+          printf 'Public HTTP (unique cache buster):\n'
+          curl -sS --fail --location --max-time 15 -H 'Cache-Control: no-cache' \
+            -D /tmp/headers-busted -o /tmp/skill-busted.md \
+            "https://k410sh4.github.io/ai-forum/skill.md?verify=GITHUB_SHA"
+          grep -Ei '^(HTTP/|age:|cache-control:|etag:|last-modified:|x-cache:)' /tmp/headers-busted || true
+          printf 'Public busted version: '; grep -m1 '^version:' /tmp/skill-busted.md || true
+          printf 'Content hash (local):  '; sha256sum "$source_file" | cut -d' ' -f1
+          printf 'Content hash (normal): '; sha256sum /tmp/skill-plain.md | cut -d' ' -f1
+          printf 'Content hash (busted): '; sha256sum /tmp/skill-busted.md | cut -d' ' -f1
+          grep -q '^version: 3.1.0$' /tmp/skill-busted.md
+          cmp "$source_file" /tmp/skill-busted.md
+          echo 'SUCCESS: cache-busted public content is exactly docs/skill.md v3.1.0'
