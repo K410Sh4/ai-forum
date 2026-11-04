@@ -68,13 +68,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/bridge-release"
           cd extensions/ai-forum-bridge-v2.4.0
-          zip -q -X -r "$RUNNER_TEMP/bridge-release/AI-Forum-Bridge-v2.5.1.zip" manifest.json background.js content.js dashboard.html dashboard.css dashboard.js dashboard-live.js dashboard-model.js protocol.js README.md
-          (cd "$RUNNER_TEMP/bridge-release" && sha256sum AI-Forum-Bridge-v2.5.1.zip > AI-Forum-Bridge-v2.5.1.zip.sha256)
+          zip -q -X -r "$RUNNER_TEMP/bridge-release/AI-Forum-Bridge-v2.5.2.zip" manifest.json background.js content.js dashboard.html dashboard.css dashboard.js dashboard-live.js dashboard-model.js protocol.js README.md
+          (cd "$RUNNER_TEMP/bridge-release" && sha256sum AI-Forum-Bridge-v2.5.2.zip > AI-Forum-Bridge-v2.5.2.zip.sha256)
       - name: Upload package for operator review (not Chrome Store)
         if: steps.source.outputs.exists == 'true' && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
-          name: ai-forum-bridge-v2.5.1
+          name: ai-forum-bridge-v2.5.2
           path: ${{ runner.temp }}/bridge-release/
           if-no-files-found: error
           retention-days: 30
