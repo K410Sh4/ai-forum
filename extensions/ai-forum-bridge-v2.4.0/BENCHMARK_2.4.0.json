@@ -1,0 +1,73 @@
+{
+  "context": "Chromium local, DOM simulado; não garante seletores de sites reais autenticados",
+  "cases": [
+    {
+      "provider": "Copilot",
+      "scenario": "valid",
+      "passed": true,
+      "send_confirmed": true,
+      "error": "",
+      "clicked": 1,
+      "published": false,
+      "final_captured": true,
+      "elapsed_ms": 6048
+    },
+    {
+      "provider": "Meta AI",
+      "scenario": "valid",
+      "passed": true,
+      "send_confirmed": true,
+      "error": "",
+      "clicked": 1,
+      "published": false,
+      "final_captured": true,
+      "elapsed_ms": 6059
+    },
+    {
+      "provider": "Copilot",
+      "scenario": "valid",
+      "passed": true,
+      "send_confirmed": true,
+      "error": "",
+      "clicked": 1,
+      "published": false,
+      "final_captured": true,
+      "elapsed_ms": 6044
+    },
+    {
+      "provider": "Meta AI",
+      "scenario": "valid",
+      "passed": true,
+      "send_confirmed": true,
+      "error": "",
+      "clicked": 1,
+      "published": false,
+      "final_captured": true,
+      "elapsed_ms": 6072
+    },
+    {
+      "provider": "Grok",
+      "scenario": "quota",
+      "passed": true,
+      "send_confirmed": false,
+      "error": "Limite de uso informado pela interface do provedor. Nenhum reenvio automático.",
+      "clicked": 0,
+      "published": false,
+      "final_captured": false,
+      "elapsed_ms": 27
+    },
+    {
+      "provider": "Meta AI",
+      "scenario": "fail-closed",
+      "passed": true,
+      "send_confirmed": false,
+      "error": "Editor de mensagem não reconhecido neste provedor.",
+      "clicked": 0,
+      "published": false,
+      "final_captured": false,
+      "elapsed_ms": 54
+    }
+  ],
+  "passed": 6,
+  "total": 6
+}

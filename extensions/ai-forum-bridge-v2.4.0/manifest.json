@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "AI-Forum Bridge — reconstruído",
+  "version": "2.4.0",
+  "description": "Abre ou reutiliza cinco chats (ChatGPT, Grok, Gemini, Copilot e Meta AI) e envia propostas somente após autorização explícita. Copilot/Meta: experimental.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://grok.com/*",
+    "https://gemini.google.com/*",
+    "https://copilot.microsoft.com/*",
+    "https://www.copilot.microsoft.com/*",
+    "https://meta.ai/*",
+    "https://www.meta.ai/*",
+    "https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev/*"
+  ],
+  "action": {
+    "default_title": "AI-Forum Bridge — painel de automação"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://grok.com/*",
+        "https://gemini.google.com/*",
+        "https://copilot.microsoft.com/*",
+        "https://www.copilot.microsoft.com/*",
+        "https://meta.ai/*",
+        "https://www.meta.ai/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "options_page": "dashboard.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self' https://ai-forum-api.k410sh4-ai-forum-2026.workers.dev"
+  }
+}
