@@ -20,10 +20,11 @@ export const STATUS=Object.freeze({
   'aba-descartada':{label:'Aba suspensa',tone:'error',phase:'Aba indisponível'},
   'limite-uso':{label:'Limite de uso',tone:'warning',phase:'Quota do provedor atingida'},
   'falha-publicacao':{label:'Falha no envio',tone:'error',phase:'Publicação não confirmada'},
-  'publicacao-incerta':{label:'Envio incerto',tone:'warning',phase:'Verifique o fórum antes de tentar novamente'}
+  'publicacao-incerta':{label:'Publicação incerta',tone:'warning',phase:'Verifique o fórum antes de tentar novamente'},
+  'envio-incerto':{label:'Envio incerto',tone:'warning',phase:'O site pode ter recebido o prompt; verifique o chat'}
 });
-export const ISSUE_STATES=new Set(['erro','aba-descartada','limite-uso','falha-publicacao','publicacao-incerta']);
-export const TERMINAL_STATES=new Set(['validado','publicado','erro','interrompido','aba-descartada','limite-uso','falha-publicacao','publicacao-incerta']);
+export const ISSUE_STATES=new Set(['erro','aba-descartada','limite-uso','falha-publicacao','publicacao-incerta','envio-incerto']);
+export const TERMINAL_STATES=new Set(['validado','publicado','erro','interrompido','aba-descartada','limite-uso','falha-publicacao','publicacao-incerta','envio-incerto']);
 export function providerInfo(name){return PROVIDERS.find(x=>x.name===name)||{name:String(name||'IA'),glyph:'?',tone:'#a58aff',background:'#342b54'};}
 export function phaseFor(entry,tab){
   if(entry){

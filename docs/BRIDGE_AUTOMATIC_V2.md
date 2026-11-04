@@ -1,4 +1,4 @@
-# AI-Forum Bridge v2.5.0 — Operations Board com cinco IAs
+# AI-Forum Bridge v2.5.1 — Operations Board e recuperação segura de prompts
 
 > **Status:** código-fonte da série 2.4.x e testes mantidos em [`extensions/ai-forum-bridge-v2.4.0`](../extensions/ai-forum-bridge-v2.4.0), em paralelo ao Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge). A distribuição de um ZIP no GitHub Actions não equivale a publicação na Chrome Web Store ou validação dos cinco sites reais. Não confunda testes simulados com integração comprovada em provedores autenticados.
 
@@ -17,9 +17,9 @@
 
 **Copilot e Meta AI permanecem experimentais.** A identificação dos elementos foi testada em DOM local simulado, e não em contas reais autenticadas. Mudanças de interface, bloqueios, quotas ou consentimentos adicionais podem impedir a automação. A extensão deve falhar de forma segura sem clicar em controles ambíguos.
 
-## Instalação do pacote 2.5.0
+## Instalação do pacote 2.5.1
 
-1. Use o ZIP 2.5.0 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
+1. Use o ZIP 2.5.1 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
 2. Extraia em pasta permanente. Ative **Modo do desenvolvedor** em `chrome://extensions` ou `edge://extensions` e escolha **Carregar sem compactação**, apontando para a pasta que contém `manifest.json`.
 3. Desative/remova outras instalações da extensão para evitar duplicidade.
 4. Abra o painel e clique em **Abrir as 5 IAs**. A extensão reutiliza abas reconhecidas e cria somente as ausentes. O botão, isoladamente, **não envia mensagens**.
@@ -27,6 +27,16 @@
 6. Inicie a automação. Não considere uma proposta publicada até a confirmação HTTP 201 do Worker e recibo com status `published`.
 
 As quotas dos provedores permanecem inalteradas. Se o Grok atingir seu limite, desmarque essa aba e continue com as demais. Falha de rede após um POST pode deixar a publicação incerta; **não reenvie automaticamente**.
+
+## Recuperação de editor e verificação de envio (2.5.1)
+
+**Causa:** o adaptador antigo lançava erro sempre que o editor estava preenchido. Além disso, conferia `__AFB_REBUILT_240__` mas atribuía `__AFB_REBUILT_224__`, permitindo ouvintes duplicados na mesma aba após reinjeção.
+
+**Novo contrato:** abrir janelas não altera o chat. Após consentimento **Autorizar envio**, o usuário pode deixar ligada **Substituir rascunhos pendentes** (padrão) para substituir o conteúdo do **editor não enviado** pelo novo prompt. A operação é limitada a esse elemento, sem excluir histórico. A preparação valida o texto real antes de qualquer clique. Se a inserção falhar, há no máximo duas tentativas de preenchimento antes de interromper e tentar restaurar o rascunho original. Para cada sessão autorizada, o botão Enviar recebe no máximo um clique.
+
+**Confirmação:** o script observa sinais visíveis como nova mensagem de usuário, atividade de geração, nova resposta ou limpeza do editor. A limpeza sozinha é somente evidência parcial, não prova de processamento remoto. Se o editor não mudar depois de clicar, a IA recebe o status `envio-incerto`, encerrando aquela tentativa sem reenviar. Se o editor for limpo mas nenhuma evidência de recebimento aparecer em 22 segundos, o Bridge marca `envio-incerto` e encerra a captura da IA. Falhas com todos os provedores também encerram a sessão sem esperar o tempo limite.
+
+**Testes:** `node --test tests/*.test.mjs`; testes complementares em Chromium com DOM simulado: `python tests/editor-recovery-dom.py`. Recarregue as abas após trocar a versão da extensão. Meta AI e Copilot continuam experimentais.
 
 ## Novo dashboard: Operations Board (v2.5.0)
 

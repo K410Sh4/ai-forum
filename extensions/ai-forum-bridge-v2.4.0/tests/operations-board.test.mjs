@@ -36,7 +36,7 @@ test('JSON preview strips captured content, credentials and private properties',
 });
 test('dashboard markup binds every required action to a unique ID',()=>{
   const html=read('dashboard.html');
-  const ids=['liveIndicator','timer','openProviders','start','stop','reload','inspect','tabs','count','sessionStatus','objective','separateWindows','consentPrompt','consentPublish','resumePending','ownerMode','ownerKey','entries','resultCount','metricSelected','metricValidated','metricIssues','metricPending','metricPublished','progressBar','activityFeed','jsonPreview','operations','configuration','results','insights'];
+  const ids=['liveIndicator','timer','openProviders','start','stop','reload','inspect','tabs','count','sessionStatus','objective','separateWindows','consentPrompt','consentPublish','replacePending','ownerMode','ownerKey','entries','resultCount','metricSelected','metricValidated','metricIssues','metricPending','metricPublished','progressBar','activityFeed','jsonPreview','operations','configuration','results','insights'];
   for(const id of ids){
     const occurrences=[...html.matchAll(new RegExp('id="'+id+'"','g'))];
     assert.equal(occurrences.length,1,'expected one '+id);
@@ -44,6 +44,7 @@ test('dashboard markup binds every required action to a unique ID',()=>{
   assert.match(html,/id="consentPublish" type="checkbox"/);
   assert.match(html,/id="consentPrompt" type="checkbox"/);
   assert.match(html,/id="separateWindows" type="checkbox" checked/);
+  assert.match(html,/id="replacePending" type="checkbox" checked/);
   assert.match(html,/script src="\.\/dashboard\.js" type="module"/);
 });
 test('dashboard uses live Chrome storage events and avoids unsafe HTML injection',()=>{

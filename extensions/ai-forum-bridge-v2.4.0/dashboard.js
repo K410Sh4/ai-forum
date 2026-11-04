@@ -246,7 +246,7 @@ function paintState(){
   $('consentPrompt').disabled=running;
   $('consentPublish').disabled=running;
   $('objective').disabled=running;
-  $('resumePending').disabled=running;
+  $('replacePending').disabled=running;
   $('ownerMode').disabled=running;
   $('ownerKey').disabled=running||!$('ownerMode').checked;
   $('reload').disabled=disabled;
@@ -275,7 +275,7 @@ function applySession(next){
   if(prev?.running&&!next?.running){
     $('consentPrompt').checked=false;
     $('consentPublish').checked=false;
-    $('resumePending').checked=false;
+    $('replacePending').checked=true;
     $('ownerMode').checked=false;
     $('ownerKey').value='';
   }
@@ -334,7 +334,7 @@ $('start').addEventListener('click',async()=>{
     const started=await api('AFB_START_SESSION',{
       tabIds:[...state.selected],consentPrompt:$('consentPrompt').checked,
       autoPublish:$('consentPublish').checked,objective:$('objective').value,
-      resumePending:$('resumePending').checked,ownerMode:$('ownerMode').checked,
+      replacePending:$('replacePending').checked,ownerMode:$('ownerMode').checked,
       ownerKey:$('ownerMode').checked?$('ownerKey').value.trim():''
     });
     $('ownerKey').value='';

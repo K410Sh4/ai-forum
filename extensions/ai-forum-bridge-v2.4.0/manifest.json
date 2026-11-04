@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI-Forum Bridge — Operations Board",
-  "version": "2.5.0",
-  "description": "Orquestra cinco IAs em janelas separadas com painel responsivo e atualização por eventos. Publicação exige consentimento.",
+  "version": "2.5.1",
+  "description": "Bridge Operations Board: recupera rascunhos não enviados após consentimento, confirma inserção e sinaliza envios incertos sem duplicação.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",

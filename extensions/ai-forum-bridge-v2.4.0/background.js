@@ -15,7 +15,7 @@ const set=async x=>{
   }
   await chrome.storage.session.set({[KEY]:x});
 };
-const terminal=new Set(['validado','publicado','erro','limite-uso','falha-publicacao','publicacao-incerta','interrompido','aba-descartada']);
+const terminal=new Set(['validado','publicado','erro','limite-uso','falha-publicacao','publicacao-incerta','envio-incerto','interrompido','aba-descartada']);
 const isPanel=sender=>sender.id===chrome.runtime.id && (sender.url||'').startsWith(chrome.runtime.getURL('dashboard.html'));
 async function tabList(){
   const tabs=await chrome.tabs.query({});
@@ -95,7 +95,7 @@ async function expire(){const s=await get();if(s?.running && Date.now()>=s.deadl
 async function start(message){
   await expire();const prior=await get();if(prior?.running)throw Error('Existe uma sessão ativa. Interrompa antes de iniciar outra.');
   if(message.consentPrompt!==true)throw Error('Autorize explicitamente o envio de prompts.');
-  if(message.resumePending!==undefined && typeof message.resumePending!=='boolean')throw Error('Opção de retomada inválida.');
+  if(message.replacePending!==undefined && typeof message.replacePending!=='boolean')throw Error('Opção de substituição de rascunho inválida.');
   if(message.autoPublish!==true && message.autoPublish!==false)throw Error('Escolha o modo de publicação.');
   if(message.ownerMode!==true && message.ownerMode!==false && message.ownerMode!==undefined)throw Error('Modo proprietário inválido.');
   const ownerKey=message.ownerMode===true?String(message.ownerKey||'').trim():'';
@@ -124,14 +124,17 @@ async function start(message){
       if(real.discarded||real.frozen)throw Error('Aba descartada/congelada. Ative-a e inicie outra sessão.');
       await chrome.tabs.update(t.id,{autoDiscardable:false});
       await chrome.scripting.executeScript({target:{tabId:t.id},files:['content.js'],world:'ISOLATED'});
-      const result=await chrome.tabs.sendMessage(t.id,{type:'AFB_START',sessionId,token:entry.token,prompt,ttl:MAX_MS,resumePending:message.resumePending===true});
-      if(!result?.ok)throw Error(result?.error||'Injeção do prompt não confirmada.');
+      const result=await chrome.tabs.sendMessage(t.id,{type:'AFB_START',sessionId,token:entry.token,prompt,ttl:MAX_MS,replacePending:message.replacePending===true});
+      if(!result?.ok){const error=new Error(result?.error||'Injeção do prompt não confirmada.');error.code=result?.code||null;throw error;}
       await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const e=state.entries[t.id];if(e&&!terminal.has(e.status)){if(e.status==='preparando'||e.status==='aguardando'){e.status='aguardando';e.detail='Envio confirmado; aguardando a IA.';}e.tries=1;await set(state);}});
     }catch(e){
-      await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const en=state.entries[t.id];en.detail=String(e.message||e).slice(0,300);en.status=/Limite de uso/i.test(en.detail)?'limite-uso':'erro';en.tries=1;await set(state);});
+      await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const en=state.entries[t.id];en.detail=String(e.message||e).slice(0,300);en.status=e?.code==='SEND_UNCONFIRMED'||/Envio incerto/i.test(en.detail)?'envio-incerto':/Limite de uso/i.test(en.detail)?'limite-uso':'erro';en.tries=1;await set(state);});
       try{await chrome.tabs.update(t.id,{autoDiscardable:entry.previousAutoDiscardable});}catch{}
     }
   }));
+  // A session where every provider fails in preparation must also end now,
+  // rather than remaining apparently active until the eight-minute alarm.
+  await serial(async()=>{const latest=await get();if(latest?.id===sessionId)await completeIfTerminal(latest);});
   return await get();
 }
 async function completeIfTerminal(s){
@@ -164,7 +167,7 @@ async function progress(message,sender){
       }catch(error){e.status='erro';e.detail='Resposta concluída, mas inválida: '+String(error.message).slice(0,210);}
       e.chars=message.text.length;
     }else{
-      const states={aguardando:'aguardando',gerando:'gerando',validando:'validando',erro:'erro','limite-uso':'limite-uso',interrompido:'interrompido'};
+      const states={preparando:'preparando',aguardando:'aguardando',gerando:'gerando',validando:'validando',erro:'erro','limite-uso':'limite-uso','envio-incerto':'envio-incerto',interrompido:'interrompido'};
       if(!states[message.state])return {accepted:false};
       e.status=states[message.state];e.detail=String(message.detail||'').slice(0,250);e.chars=Number.isInteger(message.chars)?message.chars:0;
       if(terminal.has(e.status))e.draft=null;
