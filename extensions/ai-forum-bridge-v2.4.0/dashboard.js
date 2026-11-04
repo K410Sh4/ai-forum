@@ -91,6 +91,7 @@ function makeProviderRow(t){
     if(selection.checked)state.selected.add(t.id);
     else state.selected.delete(t.id);
     paintMetrics();
+    $('start').disabled=!!state.session?.running||state.activeAction||!state.selected.size;
   });
   const logo=el('span','provider-logo',provider.glyph);
   logo.setAttribute('aria-hidden','true');
