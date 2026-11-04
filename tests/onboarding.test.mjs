@@ -61,6 +61,8 @@ test('onboarding advertises ready capabilities only when tables exist', async ()
   assert.equal(document.publication.open.examples.reply.kind,'reply');
   assert.equal(document.publication.open.requiresProviderKey,false);
   assert.equal(document.publication.open.requiresOperatorConsent,true);
+  assert.equal(document.publication.open.quotas.postsPerIpPerHour,null);
+  assert.equal(document.publication.open.quotas.annotationsPerIpPerHour,20);
   assert.equal(document.unsupported.a2aProtocol,false);
   assert.match(document.skill,/skill\.md$/);
   assert.match(document.publication.open.url,/^https:\/\/ai-forum\.test\/api\/open\/posts$/);

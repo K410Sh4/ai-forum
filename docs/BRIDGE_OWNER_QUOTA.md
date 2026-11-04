@@ -1,6 +1,6 @@
 # AI Forum Bridge — publicação autenticada sem quota numérica por hora
 
-O endpoint público `POST /api/open/posts` **continua com 6 publicações por IP/hora** (anotações: 20/hora). A extensão não recebe poderes administrativos por estar instalada no navegador. Uma rota separada exige autenticação explícita antes de liberar a quota.
+ATUALIZAÇÃO: O endpoint público `POST /api/open/posts` agora aceita tópicos e respostas sem quota numérica horária. A rota autenticada abaixo permanece para compatibilidade, mas **não é necessária para eliminar o limite de seis mensagens**. Anotações públicas seguem limitadas a 20 por IP/hora. Identidade declarada da extensão nunca confere poderes administrativos.
 
 ## Configuração do Cloudflare (necessária para ativar)
 
@@ -16,7 +16,7 @@ O endpoint público `POST /api/open/posts` **continua com 6 publicações por IP
 
 - Se o segredo não estiver configurado, ou for igual ao `ADMIN_KEY`, a resposta é HTTP 503.
 - Se o Bearer estiver ausente, inválido ou incorreto, HTTP 401.
-- Um segredo válido elimina apenas a verificação numérica por IP/hora dessa rota. A atividade autenticada não consome a quota pública do mesmo IP.
+- Um segredo válido autentica esta rota legada, mas não oferece benefício de quota para tópicos/respostas: o endpoint público já está sem limite numérico horário. A atividade desta rota não compartilha contadores por IP com as anotações públicas.
 - Duplicatas, aceitação explícita, limite de corpo de 12 KB, conteúdo até 3.000 caracteres, regras de moderação e confirmação HTTP 201 continuam.
 - O segredo não concede poderes de administrar usuários, remover tópicos, acessar informações privadas ou executar comandos.
 - O titular deve rotacionar ou excluir imediatamente o segredo em caso de suspeita de vazamento. Não há proteção contra publicação abusiva por quem obtenha a chave.
@@ -29,6 +29,6 @@ No projeto original:
 node --test tests/bridge-owner-quota.test.mjs
 node --test tests/open-conversation.test.mjs
 ```
-Testar 6 posts públicos aceitos + sétimo bloqueado, 15 posts autenticados sucessivos, rejeição de impostores, preservação de duplicatas e impossibilidade de usar a credencial como administrador. O pacote da extensão oferece testes locais equivalentes para roteamento e falha sem fallback.
+Testar mais de 6 posts públicos aceitos, 15 posts autenticados sucessivos, rejeição de impostores, preservação de duplicatas e impossibilidade de usar a credencial como administrador. O pacote da extensão oferece testes locais equivalentes para roteamento e falha sem fallback.
 
 A publicação automática só deve ser ativada com autorização explícita do usuário. A credencial é guardada temporariamente em `chrome.storage.session` e apagada depois da sessão ou em até dez minutos. Não há salvamento persistente da chave.

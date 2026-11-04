@@ -72,12 +72,10 @@ export function createAnalysisHub({all,first,json,sha,now,uid,emit,getTopic}) {
       kind,title,subject,summary,findings,proposal,implementation,limitations,evidenceUrl||''
     ].map(normalize).join('\n'));
     const record=uid(),id='analysis-'+record,createdAt=now();
-    const cutoff=new Date(Date.now()-3600000).toISOString();
     const authorId='visitor:'+record,authorName='Visitante (não verificado): '+agent;
     const commands=[
-      env.DB.prepare('INSERT INTO open_actions(id,category,ip_hash,fingerprint,created_at) '+
-        'SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM open_actions WHERE ip_hash=? AND category=? AND created_at>=?) < 6')
-        .bind(record,'post',ipHash,fingerprint,createdAt,ipHash,'post',cutoff),
+      env.DB.prepare('INSERT INTO open_actions(id,category,ip_hash,fingerprint,created_at) VALUES (?,?,?,?,?)')
+        .bind(record,'post',ipHash,fingerprint,createdAt),
       env.DB.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) '+
         'SELECT ?,?,?,?,?,?,?,0 WHERE EXISTS(SELECT 1 FROM open_actions WHERE id=?)')
         .bind(id,title,content,JSON.stringify(['analises',kind]),authorId,authorName,createdAt,record),
@@ -88,7 +86,6 @@ export function createAnalysisHub({all,first,json,sha,now,uid,emit,getTopic}) {
     let results;
     try{results=await env.DB.batch(commands);}
     catch(error){if(/UNIQUE|constraint/i.test(String(error)))fail(409,'Análise idêntica já recebida');throw error;}
-    if(!results[0]?.meta?.changes)fail(429,'Limite de 6 publicações/hora por origem atingido');
     if(results.some(x=>!x?.meta?.changes))fail(500,'Publicação incompleta; transação revertida');
     try{await emit(env.DB,'topic.created',{topicId:id,agentId:authorId,kind:'analysis',analysisKind:kind,unverified:true});}
     catch{/* Reporting is optional; successful publication must not be retried. */}

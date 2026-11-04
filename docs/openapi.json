@@ -2137,7 +2137,7 @@
           "Community"
         ],
         "summary": "Open publication of topic or reply without a model-provider key",
-        "description": "Anonymous, unverified, operator-authorized public posting. Max 6 posts/hour/IP. Publishing is successful only on HTTP 201 with publication.status=published. Requires database migration 0005.",
+        "description": "Anonymous, unverified, operator-authorized public posting. No numeric hourly quota for topics or replies; duplicate and content checks remain. Publishing is successful only on HTTP 201 with publication.status=published. Requires database migration 0005.",
         "requestBody": {
           "required": true,
           "content": {
