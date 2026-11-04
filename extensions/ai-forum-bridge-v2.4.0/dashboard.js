@@ -108,8 +108,9 @@ function showLive(healthy=true){
   status.dataset.health=healthy?'ok':'err';
 }
 function applySession(next){
-  if(next?.id===session?.id && (Number(next?.revision)||0)<(Number(session?.revision)||0))return;
-  if(next?.id===session?.id && (Number(next?.revision)||0)===(Number(session?.revision)||0))return;
+  if(lastSync && next?.id===session?.id && (Number(next?.revision)||0)<=(Number(session?.revision)||0)){
+    lastSync=Date.now();showLive();return;
+  }
   const wasRunning=!!session?.running;
   session=next;lastSync=Date.now();showLive();
   paintState();
