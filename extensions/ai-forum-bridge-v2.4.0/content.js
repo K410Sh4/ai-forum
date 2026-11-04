@@ -44,6 +44,10 @@
   }[PROVIDER];
   const norm=s=>String(s||'').replace(/[\u200b\u200c\u200d\ufeff]/g,'').trim();
   const delay=ms=>new Promise(r=>setTimeout(r,ms));
+  // UI acknowledgements are advisory. Chat answers can arrive long after the
+  // button click, particularly when the browser is in the background.
+  const SOFT_CONFIRM_MS=22000;
+  const HARD_CONFIRM_MS=120000;
   const all=selector=>{try{return [...document.querySelectorAll(selector)];}catch{return [];}};
   const visible=el=>!!(el&&el.isConnected&&(!el.getClientRects||el.getClientRects().length>0)&&getComputedStyle(el).visibility!=='hidden'&&getComputedStyle(el).display!=='none');
   const inner=el=>norm(el?.innerText||el?.textContent||'');
@@ -322,22 +326,6 @@
     }).filter(Boolean).sort((a,b)=>b.score-a.score||b.index-a.index);
     return rated[0]||null;
   }
-  async function verifySend(el,oldUsers,busyBeforeClick){
-    let cleared=false;
-    for(let i=0;i<40;i++){
-      if(!job)return {confirmed:false,cleared:false};
-      if(all(CONFIG.user).length>oldUsers || newResponse())return {confirmed:true,cleared};
-      // Generation that was already in progress BEFORE the click cannot be
-      // counted as evidence that this prompt was submitted.
-      if(!busyBeforeClick&&busy())return {confirmed:true,cleared};
-      if(!editorValue(el))cleared=true;
-      // Some providers don't expose user bubbles or a busy indicator. An
-      // emptied composer is evidence of UI submission, but not proof.
-      if(cleared&&i>=8)return {confirmed:false,cleared:true};
-      await delay(150);
-    }
-    return {confirmed:false,cleared};
-  }
   // An entire JSON proposal is safer than searching for a JSON fragment
   // anywhere in the conversation. Ignore markdown code fences only.
   function standaloneBridgeJSON(text){
@@ -392,21 +380,26 @@
     if(Date.now()>job.deadline){report('erro','Tempo máximo da sessão excedido.');stop();return;}
     if(location.origin!==job.origin){report('erro','A aba mudou para outra origem.');stop();return;}
     job.scans++;
-    // Do not leave a superficially successful click hanging for eight minutes:
-    // if no user bubble, generation activity or response is observed, mark
-    // the delivery uncertain and require visual inspection before retrying.
-    if(!job.sendEvidence&&(all(CONFIG.user).length>job.userBefore||busy()))job.sendEvidence=true;
+    // The absence of an immediately visible user bubble is not proof of
+    // failure. Continue monitoring after a soft warning; never click again.
+    if(!job.sendEvidence&&(all(CONFIG.user).length>job.userBefore||(!job.busyBeforeClick&&busy())))job.sendEvidence=true;
     const response=newResponse();
+    const elapsed=Date.now()-job.sentAt;
     if(!response){
-      if(!job.sendEvidence&&Date.now()-job.sentAt>22000){
-        report('envio-incerto','Sem confirmação de recebimento em 22 segundos após o clique. Verifique a conversa; não reenviar automaticamente.');
+      if(!job.sendEvidence&&elapsed>=HARD_CONFIRM_MS){
+        report('envio-incerto','Nenhuma resposta ou confirmação visual após dois minutos. Verifique o chat antes de iniciar outra sessão.');
         stop();return;
       }
-      if(Date.now()-job.sentAt>9000&&Date.now()-job.lastDiagnostic>6500){
-        job.lastDiagnostic=Date.now();report('aguardando',`Nenhuma resposta nova encontrada (${candidates().length} regiões; busca JSON: ${deepScans} verificações, ${document.visibilityState==='hidden'?'aba oculta':'aba visível'}).`);
+      if(!job.sendEvidence&&elapsed>=SOFT_CONFIRM_MS&&!job.softWarned){
+        job.softWarned=true;
+        report('aguardando','Envio ainda não confirmado. Mantendo captura ativa para respostas tardias, sem reenviar.');
+      }else if(elapsed>9000&&Date.now()-job.lastDiagnostic>12000){
+        job.lastDiagnostic=Date.now();
+        report('aguardando',`Aguardando nova resposta (${candidates().length} regiões; JSON: ${deepScans} verificações; ${document.visibilityState==='hidden'?'aba oculta':'aba visível'}). Captura ativa, sem reenvio.`);
       }
       return;
     }
+    job.sendEvidence=true;
     const now=Date.now(),text=response.text;
     if(text!==job.text){job.text=text;job.lastChange=now;report('gerando',`Texto capturado (${PROVIDER}); aguardando conclusão.`,text);}
     const syntacticallyComplete=hasCompleteBridgeJSON(text);
@@ -430,7 +423,7 @@
     job={token:message.token,sessionId:message.sessionId,origin:location.origin,
       prompt:message.prompt,promptExamples:jsonExamplesInPrompt(message.prompt),marker:message.prompt.match(/AFB-[a-f0-9-]{20,}/i)?.[0]||null,
       baseline,baselineTexts,sentAt:0,lastChange:Date.now(),text:'',seenBusy:false,jsonComplete:false,
-      deadline:Date.now()+Math.min(480000,Math.max(15000,message.ttl||480000)),wasSent:false,clickAttempted:false,sendEvidence:false,userBefore:0,scans:0,lastDiagnostic:0};
+      deadline:Date.now()+Math.min(480000,Math.max(15000,message.ttl||480000)),wasSent:false,clickAttempted:false,sendEvidence:false,softWarned:false,busyBeforeClick:false,userBefore:0,scans:0,lastDiagnostic:0};
     const userBefore=all(CONFIG.user).length;job.userBefore=userBefore;
     if(visibleLimitNotice())throw Error('Limite de uso informado pela interface do provedor. Nenhum reenvio automático.');
     // Explicit recovery replaces a leftover composer draft with the freshly
@@ -440,23 +433,18 @@
     if(prepared.replaced)report('preparando','Rascunho antigo substituído; prompt novo validado. Aguardando botão Enviar.');
     else if(prepared.reused)report('preparando','Prompt já presente no editor; aguardando botão Enviar.');
     else report('preparando','Prompt inserido e validado; aguardando botão Enviar.');
-    const busyBeforeClick=busy();
+    // Never block response capture on an unreliable acknowledgement check.
+    // A button click is an attempt, not evidence of successful delivery.
+    job.busyBeforeClick=busy();
     const method=await sendComposer(el);
     job.sentAt=Date.now();job.wasSent=true;
-    report('aguardando','Botão Enviar acionado UMA vez ('+method+'); verificando a confirmação visual.');
-    const verification=await verifySend(el,userBefore,busyBeforeClick);
-    job.sendEvidence=verification.confirmed;
-    if(!verification.confirmed&&!verification.cleared){
-      const error=new Error('Envio incerto: o clique foi realizado, mas o editor ainda contém texto. Verifique a conversa antes de iniciar outra sessão.');
-      error.code='SEND_UNCONFIRMED';
-      throw error;
-    }
-    report('aguardando',verification.confirmed?'Envio confirmado por atividade visível da IA; observando resposta.':'Editor limpo após o envio; aguardando a resposta para confirmação definitiva.');
+    report('aguardando','Envio acionado uma vez ('+method+'); observando confirmação e resposta, sem repetição.');
     observer=new MutationObserver(()=>{
       if(job&&!scanTimer)scanTimer=setTimeout(()=>{scanTimer=null;inspect();},250);
     });
     observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['aria-busy','data-is-streaming','data-state']});
-    tick=setInterval(inspect,1000);inspect();
+    tick=setInterval(inspect,1000);
+    inspect();
     if(!listenersAdded){listenersAdded=true;document.addEventListener('visibilitychange',()=>{if(job)inspect();});}
     return {ok:true,provider:PROVIDER};
   }
