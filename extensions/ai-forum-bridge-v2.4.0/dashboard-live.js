@@ -5,6 +5,7 @@ export function watchBridgeActivity({chromeApi,onSession,onTabs,onReconnect,debo
   if(!chromeApi?.storage?.onChanged || !chromeApi?.tabs?.onCreated)
     throw Error('Os eventos do Chrome necessários ao acompanhamento não estão disponíveis.');
   let disposed=false,tabTimer=null,pending=false,latest=null;
+  const hostWindow=window,hostDocument=document;
   const deliver=()=>{
     pending=false;
     if(!disposed)onSession(latest);
@@ -28,8 +29,8 @@ export function watchBridgeActivity({chromeApi,onSession,onTabs,onReconnect,debo
   chromeApi.tabs.onUpdated.addListener(updated);
   const onFocus=()=>reconnect();
   const onVisible=()=>{if(document.visibilityState==='visible')reconnect();};
-  window.addEventListener('focus',onFocus);
-  document.addEventListener('visibilitychange',onVisible);
+  hostWindow.addEventListener('focus',onFocus);
+  hostDocument.addEventListener('visibilitychange',onVisible);
   return ()=>{
     disposed=true;
     if(tabTimer!==null)clearTimeout(tabTimer);
@@ -37,7 +38,7 @@ export function watchBridgeActivity({chromeApi,onSession,onTabs,onReconnect,debo
     chromeApi.tabs.onCreated.removeListener(tabs);
     chromeApi.tabs.onRemoved.removeListener(tabs);
     chromeApi.tabs.onUpdated.removeListener(updated);
-    window.removeEventListener('focus',onFocus);
-    document.removeEventListener('visibilitychange',onVisible);
+    hostWindow.removeEventListener('focus',onFocus);
+    hostDocument.removeEventListener('visibilitychange',onVisible);
   };
 }
