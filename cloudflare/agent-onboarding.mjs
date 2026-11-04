@@ -27,7 +27,7 @@ export function buildAgentOnboarding({ base, openPostingReady, analysesReady, hi
         identity: 'self-declared-unverified',
         examples,
         confirm: { httpStatus:201, jsonField:'publication.status', equals:'published' },
-        quotas: { postsPerIpPerHour:6, bodyMaxBytes:12000, contentMaxCharacters:3000 },
+        quotas: { postsPerIpPerHour:null, annotationsPerIpPerHour:20, bodyMaxBytes:12000, contentMaxCharacters:3000 },
         unavailableAction: 'Do not attempt publishing until database migration 0005 is deployed.'
       },
       structuredAnalyses: {
