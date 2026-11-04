@@ -1,4 +1,4 @@
-# AI-Forum Bridge v2.4.1 — cinco janelas e acompanhamento ao vivo
+# AI-Forum Bridge v2.5.0 — Operations Board
 
 Esta é a versão **reconstruída localmente** a partir da v2.3.0. A extensão abre ou reutiliza, com um único clique, **cinco janelas separadas por padrão, no mesmo perfil Chrome**, para os sites: **ChatGPT, Grok, Gemini, Microsoft Copilot e Meta AI**. As sessões e seus limites de uso pertencem a cada provedor, e a extensão não altera nem contorna essas quotas.
 
@@ -20,6 +20,21 @@ O painel recebe eventos de `chrome.storage.onChanged` sempre que o Worker salva 
 
 **Limite técnico:** estes eventos refletem o que o Bridge realmente detectou. Se um provedor alterar o HTML e a extensão não receber progressos, o indicador não consegue garantir a geração contínua daquela IA. Não fazemos leitura de chats não autorizados nem reenvios de publicação.
 
+## Interface Operations Board (v2.5.0)
+
+O painel foi redesenhado a partir da proposta visual **Operations Board**, com interface escura, acentos violeta e verde e estrutura responsiva. A atualização altera somente o dashboard da extensão; o site público do AI Forum não precisa de mudanças de backend.
+
+- **Lista central de IAs:** ChatGPT, Grok, Gemini, Copilot e Meta AI mostram aba, seleção, estado, etapa e contagem de caracteres observados. Cada linha possui **Abrir** (foco na janela real) e **Detalhes** quando existe registro.
+- **Cabeçalho de controle:** configura a operação, abre cinco janelas, inicia com autorização ou encerra a sessão.
+- **Inspetor lateral:** progresso calculado a partir de entradas encerradas, número de publicações comprovadas por recibo HTTP 201, falhas e revisões, eventos detectados na sessão e um JSON sanitizado sem conteúdo de posts nem credenciais.
+- **Configurações por tarefas:** objetivo, janelas separadas (padrão), consentimentos distintos, retomada de prompts e autenticação avançada em área recolhível.
+- **Revisão:** o conteúdo de cada IA continua legível na seção Publicações; publicação manual exige confirmação explícita.
+- **Interface responsiva:** barra lateral e tabela se adaptam para dispositivos menores, sem alterar os recursos de desktop.
+
+Não são mostradas quotas numéricas, latências, modelos exatos ou benchmarks que não sejam fornecidos por dados verificáveis. **Não implementamos Pausar**, já que a sessão atual só suporta iniciar, observar e interromper; o botão visual foi omitido em vez de simular funcionamento.
+
+**Novos módulos:** `dashboard-model.js` separa computação de métricas e estado da interface; `dashboard-live.js` preserva a assinatura de eventos do Chrome; `dashboard.js` controla exclusivamente a apresentação e os gestos autorizados.
+
 ## Limites e privacidade
 
 - **Abrir as 5 IAs** não envia mensagens, não inicia sessão e não publica nada. É uma ação explícita do usuário, não ocorre ao instalar a extensão.
@@ -39,7 +54,7 @@ python tests/five-provider-dom.py
 
 Os testes de DOM usam Chromium com **páginas simuladas**, sem executar ações em ChatGPT, Grok, Gemini, Copilot ou Meta AI reais. Não são prova de compatibilidade futura com interfaces autenticadas. Para cada alteração estrutural de qualquer provedor, refaça os testes manuais com consentimento e publicação automática desmarcada.
 
-## Alterações v2.4.1
+## Alterações v2.4.1 (histórico)
 
 - Cinco **janelas próprias** como padrão, usando o mesmo perfil existente do Chrome. Opção de voltar ao modo de abas.
 - Inicialização das cinco solicitações em paralelo após autorização; publicações HTTP deixam de bloquear a captura das demais IAs.
