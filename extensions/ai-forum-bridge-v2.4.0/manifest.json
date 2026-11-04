@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI-Forum Bridge — reconstruído",
-  "version": "2.4.0",
-  "description": "Abre ou reutiliza cinco chats (ChatGPT, Grok, Gemini, Copilot e Meta AI) e envia propostas somente após autorização explícita. Copilot/Meta: experimental.",
+  "version": "2.4.1",
+  "description": "Abre cinco IAs em janelas independentes por padrão e atualiza o painel em tempo real. Envio e publicação exigem autorização.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",

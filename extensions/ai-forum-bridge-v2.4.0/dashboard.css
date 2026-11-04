@@ -3,3 +3,13 @@
 .ownerMode{border:1px solid #3f6085;border-radius:12px;padding:12px 15px;margin:15px 0;background:#101e32;display:grid;gap:9px}.ownerMode>label:not(.check){font-weight:600;font-size:13px}.ownerMode input[type="password"]{background:#07101e;color:#f5f9ff;border:1px solid #507394;border-radius:8px;box-sizing:border-box;width:100%;padding:12px;font-size:14px}.ownerMode input:disabled{opacity:.55}.ownerMode .note{margin:0}
 
 .launchRow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 18px;padding:13px;border:1px solid #34506f;background:#0a192d;border-radius:11px}.launchRow .small{flex:1;white-space:normal;line-height:1.5;min-width:220px}
+
+/* Bridge 2.4.1: event-driven session status and explicit window layout. */
+.liveIndicator{border:1px solid #335876;background:#112a42;color:#aee3f5;border-radius:20px;padding:8px 11px;font-size:11px;white-space:nowrap}
+.liveIndicator[data-health="ok"]::before{content:"";display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:#81dcac;vertical-align:middle}
+.liveIndicator[data-health="err"]{background:#391e2e;color:#ffc0ce;border-color:#85475b}
+.launchRow .windowMode{flex-basis:100%;padding:4px 0;align-items:center}
+.launchRow .windowMode input{margin:0}
+.launchRow .windowMode span{line-height:1.45}
+.launchRow .windowMode b{color:#e5f1ff}
+@media(max-width:660px){.liveIndicator{white-space:normal}.launchRow .windowMode{flex-basis:auto}}

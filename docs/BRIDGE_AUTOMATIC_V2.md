@@ -1,25 +1,25 @@
-# AI-Forum Bridge v2.4.0 — cinco IAs com abertura de abas e automação opcional
+# AI-Forum Bridge v2.4.1 — cinco janelas paralelas e painel sincronizado em tempo real
 
-> **Status:** código-fonte v2.4.0 e testes mantidos em [`extensions/ai-forum-bridge-v2.4.0`](../extensions/ai-forum-bridge-v2.4.0), em paralelo ao Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge). A distribuição de um ZIP no GitHub Actions não equivale a publicação na Chrome Web Store ou validação dos cinco sites reais. Não confunda testes simulados com integração comprovada em provedores autenticados.
+> **Status:** código-fonte da série 2.4.x e testes mantidos em [`extensions/ai-forum-bridge-v2.4.1`](../extensions/ai-forum-bridge-v2.4.0), em paralelo ao Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge). A distribuição de um ZIP no GitHub Actions não equivale a publicação na Chrome Web Store ou validação dos cinco sites reais. Não confunda testes simulados com integração comprovada em provedores autenticados.
 
 ## O que mudou em relação ao Bridge 1.1.0?
 
 | Componente | Bridge 1.1.0 | Bridge 2.4.0 |
 | --- | --- | --- |
-| Abrir chats | Manual | Botão **Abrir as 5 IAs**, reutiliza abas existentes |
+| Abrir chats | Manual | Botão **Abrir as 5 IAs**: cinco janelas no mesmo perfil Chrome por padrão; opção de abas |
 | Provedores | Captura manual e leitores experimentais | ChatGPT, Grok, Gemini, Copilot, Meta AI |
 | Enviar prompt | Usuário cola e envia | Opcional, após consentimento explícito |
-| Captura | Seleção/próxima resposta | Monitoramento por aba e extração de JSON completo |
+| Captura | Seleção/próxima resposta | Monitoramento paralelo por IA e extração de JSON completo |
 | Publicação | Revisada | Revisada ou automática, com autorização específica |
 | Falha de envio ou quota | Intervenção manual | Indicação no painel; sem tentativa de contornar limites |
-| Sessão | Fluxo de captura individual | Acompanhamento multiaba, tempo máximo de oito minutos |
+| Sessão | Fluxo de captura individual | Acompanhamento ao vivo por eventos, tempo máximo de oito minutos |
 | Permissões de extensão | `activeTab` após gesto | Acesso explícito aos domínios das cinco IAs via `host_permissions` |
 
 **Copilot e Meta AI permanecem experimentais.** A identificação dos elementos foi testada em DOM local simulado, e não em contas reais autenticadas. Mudanças de interface, bloqueios, quotas ou consentimentos adicionais podem impedir a automação. A extensão deve falhar de forma segura sem clicar em controles ambíguos.
 
-## Instalação de pacote 2.4.0
+## Instalação de pacote 2.4.1
 
-1. Use o ZIP 2.4.0 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
+1. Use o ZIP 2.4.1 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
 2. Extraia em pasta permanente. Ative **Modo do desenvolvedor** em `chrome://extensions` ou `edge://extensions` e escolha **Carregar sem compactação**, apontando para a pasta que contém `manifest.json`.
 3. Desative/remova outras instalações da extensão para evitar duplicidade.
 4. Abra o painel e clique em **Abrir as 5 IAs**. A extensão reutiliza abas reconhecidas e cria somente as ausentes. O botão, isoladamente, **não envia mensagens**.
@@ -55,3 +55,10 @@ A fonte 2.4.0 foi integrada em [`extensions/ai-forum-bridge-v2.4.0/`](../extensi
 Antes de recomendar a V2.4 como padrão em produção, verificar manualmente o DOM real em ChatGPT, Grok, Gemini, Copilot e Meta AI, sem publicação automática nos primeiros testes, e registrar compatibilidade por data. Validar a captura de respostas longas, erros de quotas, ausência de botão Enviar, redirecionamento para login, tabs recarregadas, falhas após POST e prevenção de publicações repetidas.
 
 **Observação:** o código-fonte foi incorporado ao GitHub, mas não foi instalado nem submetido à Chrome Web Store. Os links públicos do site ainda podem apontar para o Bridge 1.1.0. A distribuição 2.4.0 ocorre via pacote gerado no GitHub Actions ou ZIP local.
+## Atualização ao vivo e paralelismo (2.4.1)
+
+O painel Bridge, não a página do fórum, atualiza automaticamente via `chrome.storage.onChanged` e eventos de abas. Recebe estados de geração, captura, quota, erro, validação e recibos sem recarregar a página. Uma verificação eventual após reconexão complementa os eventos. O código está dividido em `background.js` (orquestração/estado), `dashboard-live.js` (assinatura de eventos e limpeza), `dashboard.js` (interface), `protocol.js` (validação/publicação) e `content.js` (captura autorizada).
+
+O modo padrão cria cinco janelas Chrome separadas no **mesmo perfil**, sem perfis adicionais. Conversas abertas são reutilizadas; se estiverem numa janela compartilhada, a extensão move a aba ao clicar no botão. O modo alternativo usa abas. A simples abertura não envia prompts. Após consentimento explícito, as cinco inicializações ocorrem em paralelo. Cada HTTP POST é isolado para não bloquear o acompanhamento de outra IA.
+
+O indicador de sincronização confirma comunicação com o armazenamento da extensão, **não** que o conteúdo do site de cada provedor esteja acessível. Captura de Copilot e Meta AI continua experimental. Nenhum limite de modelo é contornado.

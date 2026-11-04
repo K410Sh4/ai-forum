@@ -7,7 +7,14 @@ const MAX_MS=8*60*1000; // Cinco abas podem gerar respostas em tempos diferentes
 let queue=Promise.resolve();
 const serial=fn=>{const x=queue.then(fn);queue=x.catch(()=>{});return x;};
 const get=async()=>(await chrome.storage.session.get(KEY))[KEY]||null;
-const set=async x=>chrome.storage.session.set({[KEY]:x});
+// Any material change becomes observable by all Bridge dashboard windows.
+const set=async x=>{
+  if(x && typeof x==='object'){
+    x.revision=(Number(x.revision)||0)+1;
+    x.updatedAt=Date.now();
+  }
+  await chrome.storage.session.set({[KEY]:x});
+};
 const terminal=new Set(['validado','publicado','erro','limite-uso','falha-publicacao','publicacao-incerta','interrompido','aba-descartada']);
 const isPanel=sender=>sender.id===chrome.runtime.id && (sender.url||'').startsWith(chrome.runtime.getURL('dashboard.html'));
 async function tabList(){
@@ -23,22 +30,45 @@ const LAUNCH_TARGETS=Object.freeze([
 ]);
 // Called only by the dashboard's explicit button. Never launches chats when
 // installed, when the panel opens, or on page load. Existing tabs are reused.
-async function openProviders(sender){
+// By default each provider receives a separate Chrome window in the CURRENT
+// browser profile. Reuse existing chats, moving a tab only when the user
+// explicitly clicks the launch button. No cross-profile copies or auto-send.
+async function openProviders(sender, mode='windows'){
   const current=await get();
-  if(current?.running)throw Error('Interrompa a sessão antes de abrir outras abas.');
-  const windowId=Number.isInteger(sender.tab?.windowId)?sender.tab.windowId:undefined;
-  const found=await chrome.tabs.query(windowId===undefined?{}:{windowId});
-  const chosen=[],opened=[],reused=[],failures=[];
+  if(current?.running)throw Error('Interrompa a sessão antes de reorganizar as janelas.');
+  if(!['windows','tabs'].includes(mode))throw Error('Modo de abertura inválido.');
+  const panelWindowId=Number.isInteger(sender.tab?.windowId)?sender.tab.windowId:undefined;
+  const found=await chrome.tabs.query({});
+  const chosen=[],opened=[],reused=[],failures=[],moved=[];
   for(const target of LAUNCH_TARGETS){
     let tab=found.find(t=>providerFromUrl(t.url)===target.provider);
-    if(tab){chosen.push(tab.id);reused.push(target.provider);continue;}
     try{
-      tab=await chrome.tabs.create({url:target.url,active:false,...(windowId===undefined?{}:{windowId})});
-      if(!Number.isInteger(tab?.id))throw Error('O navegador não retornou o identificador da aba.');
-      chosen.push(tab.id);opened.push(target.provider);found.push(tab);
+      if(mode==='windows'){
+        if(tab){
+          const neighbors=await chrome.tabs.query({windowId:tab.windowId});
+          if(neighbors.length!==1){
+            await chrome.windows.create({tabId:tab.id,focused:false,type:'normal'});
+            moved.push(target.provider);
+          }
+          reused.push(target.provider);
+        }else{
+          const window=await chrome.windows.create({url:target.url,focused:false,type:'normal'});
+          tab=window.tabs?.find(t=>providerFromUrl(t.url)===target.provider);
+          if(!Number.isInteger(tab?.id))throw Error('O Chrome não retornou a aba da janela criada.');
+          found.push(tab);opened.push(target.provider);
+        }
+      }else{
+        if(tab)reused.push(target.provider);
+        else{
+          tab=await chrome.tabs.create({url:target.url,active:false,...(panelWindowId===undefined?{}:{windowId:panelWindowId})});
+          if(!Number.isInteger(tab?.id))throw Error('O Chrome não retornou a aba criada.');
+          found.push(tab);opened.push(target.provider);
+        }
+      }
+      chosen.push(tab.id);
     }catch(e){failures.push({provider:target.provider,error:String(e?.message||e).slice(0,180)});}
   }
-  return {tabIds:chosen,opened,reused,failures};
+  return {mode,tabIds:chosen,opened,reused,moved,failures};
 }
 async function readyForContent(tabId){
   for(let i=0;i<40;i++){
@@ -58,7 +88,7 @@ async function restoreTabs(s){
 async function halt(reason='interrompido'){
   const s=await get();if(!s)return null;
   s.running=false;s.endedAt=Date.now();s.endedReason=reason;
-  for(const e of Object.values(s.entries))if(!terminal.has(e.status)){e.status=reason==='tempo-esgotado'?'erro':'interrompido';e.detail=reason==='tempo-esgotado'?'Limite de 4 minutos atingido.':'Interrompido pelo usuário.';}
+  for(const e of Object.values(s.entries))if(!terminal.has(e.status)){e.status=reason==='tempo-esgotado'?'erro':'interrompido';e.detail=reason==='tempo-esgotado'?'Limite de 8 minutos atingido.':'Interrompido pelo usuário.';}
   await set(s);await restoreTabs(s);await forgetOwnerCredential();await chrome.alarms.clear('afb-deadline');await chrome.alarms.clear('afb-owner-key-expiry');return s;
 }
 async function expire(){const s=await get();if(s?.running && Date.now()>=s.deadline)await halt('tempo-esgotado');}
@@ -84,8 +114,9 @@ async function start(message){
   await set(s);await chrome.alarms.create('afb-deadline',{when:s.deadline});
   // Public forum context is untrusted. If fetching fails, models generate independent topics.
   const ctx=await fetchPublicContext();
-  for(const t of chosen){
-    const current=await get();if(!current?.running || current.id!==sessionId)break;
+  // Providers are initialized concurrently; each chat continues independently.
+  await Promise.all(chosen.map(async t=>{
+    const current=await get();if(!current?.running || current.id!==sessionId)return;
     const entry=current.entries[t.id];
     const prompt=buildPrompt({provider:t.provider,objective:current.objective,context:ctx,marker:'AFB-'+crypto.randomUUID()});
     try {
@@ -100,41 +131,66 @@ async function start(message){
       await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const en=state.entries[t.id];en.detail=String(e.message||e).slice(0,300);en.status=/Limite de uso/i.test(en.detail)?'limite-uso':'erro';en.tries=1;await set(state);});
       try{await chrome.tabs.update(t.id,{autoDiscardable:entry.previousAutoDiscardable});}catch{}
     }
-  }
+  }));
   return await get();
+}
+async function completeIfTerminal(s){
+  if(!s.running||!Object.values(s.entries).every(x=>terminal.has(x.status)))return;
+  s.running=false;s.endedAt=Date.now();s.endedReason='concluida';
+  await set(s);
+  await restoreTabs(s);
+  await chrome.alarms.clear('afb-deadline');
+  if(s.autoPublish||!Object.values(s.entries).some(x=>x.status==='validado')){
+    await forgetOwnerCredential();await chrome.alarms.clear('afb-owner-key-expiry');
+  }
 }
 async function progress(message,sender){
   const tabId=sender.tab?.id;
   if(sender.id!==chrome.runtime.id||sender.frameId!==0||!Number.isInteger(tabId)||!providerFromUrl(sender.url))return false;
-  return serial(async()=>{
-    const s=await get();if(!s?.running||Date.now()>s.deadline||s.id!==message.sessionId)return false;
-    const e=s.entries[tabId];if(!e||e.provider!==providerFromUrl(sender.url)||e.token!==message.token||terminal.has(e.status))return false;
+  // Short serialized state transaction. The network call is deliberately
+  // OUTSIDE this lock so one slow publication never freezes other IA cards.
+  const result=await serial(async()=>{
+    const s=await get();if(!s?.running||Date.now()>s.deadline||s.id!==message.sessionId)return {accepted:false};
+    const e=s.entries[tabId];
+    if(!e||e.provider!==providerFromUrl(sender.url)||e.token!==message.token||terminal.has(e.status))return {accepted:false};
+    let publication=null;
     if(message.final===true){
-      if(message.state!=='concluido'||typeof message.text!=='string')return false;
-      try{e.draft=extractDraftFromText(message.text,e.provider+' (web)');e.status='validado';e.detail='Resposta JSON validada; publicação '+(s.autoPublish?'autorizada.':'aguardando aprovação.');}
-      catch(error){e.status='erro';e.detail='Resposta concluída, mas inválida: '+String(error.message).slice(0,210);}
-      e.chars=message.text.length;await set(s);
-      if(e.status==='validado'&&s.autoPublish){
-        e.status='publicando';e.detail='Enviando uma única vez ao fórum.';await set(s);
-        // O envio não é repetido automaticamente mesmo quando há falha de confirmação.
-        try{
-          const receipt=await publish(e.draft,fetch,await ownerCredential());
-          e.status='publicado';e.detail='HTTP 201 confirmado pelo servidor.';e.receipt=receipt;
-        }catch(err){e.status=/incerta|confirmação|confirmou/i.test(String(err.message))?'publicacao-incerta':'falha-publicacao';e.detail=String(err.message).slice(0,300);}
-        await set(s);
-      }
+      if(message.state!=='concluido'||typeof message.text!=='string')return {accepted:false};
+      try{
+        e.draft=extractDraftFromText(message.text,e.provider+' (web)');
+        e.status=s.autoPublish?'publicando':'validado';
+        e.detail=s.autoPublish?'JSON validado; enviando uma única vez ao fórum.':'JSON validado; aguardando revisão individual.';
+        if(s.autoPublish)publication={sessionId:s.id,tabId,draft:e.draft};
+      }catch(error){e.status='erro';e.detail='Resposta concluída, mas inválida: '+String(error.message).slice(0,210);}
+      e.chars=message.text.length;
     }else{
       const states={aguardando:'aguardando',gerando:'gerando',validando:'validando',erro:'erro','limite-uso':'limite-uso',interrompido:'interrompido'};
-      if(!states[message.state])return false;
+      if(!states[message.state])return {accepted:false};
       e.status=states[message.state];e.detail=String(message.detail||'').slice(0,250);e.chars=Number.isInteger(message.chars)?message.chars:0;
-      if(terminal.has(e.status)){e.draft=null;}
-      await set(s);
+      if(terminal.has(e.status))e.draft=null;
     }
-    if(Object.values(s.entries).every(x=>terminal.has(x.status))){s.running=false;s.endedAt=Date.now();s.endedReason='concluida';await set(s);await restoreTabs(s);await chrome.alarms.clear('afb-deadline');
-      if(s.autoPublish || !Object.values(s.entries).some(x=>x.status==='validado')){await forgetOwnerCredential();await chrome.alarms.clear('afb-owner-key-expiry');}
-    }
-    return true;
+    await set(s);await completeIfTerminal(s);
+    return {accepted:true,publication};
   });
+  if(!result.accepted)return false;
+  if(result.publication){
+    const task=result.publication;
+    let receipt=null,problem=null;
+    // No automatic retry: a lost response may mean the server accepted it.
+    try{receipt=await publish(task.draft,fetch,await ownerCredential());}
+    catch(err){problem=String(err.message||err);}
+    await serial(async()=>{
+      const latest=await get(),e=latest?.entries?.[task.tabId];
+      if(latest?.id!==task.sessionId||!e||e.status!=='publicando')return;
+      if(receipt){e.status='publicado';e.detail='HTTP 201 confirmado pelo servidor.';e.receipt=receipt;}
+      else{
+        e.status=/incerta|confirmação|confirmou/i.test(problem||'')?'publicacao-incerta':'falha-publicacao';
+        e.detail=(problem||'Erro de publicação').slice(0,300);
+      }
+      await set(latest);await completeIfTerminal(latest);
+    });
+  }
+  return true;
 }
 async function approve(tabId){
   return serial(async()=>{
@@ -168,7 +224,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   const run=(async()=>{
     switch(message?.type){
       case 'AFB_TABS':return tabList();
-      case 'AFB_OPEN_PROVIDERS':return openProviders(sender);
+      case 'AFB_OPEN_PROVIDERS':return openProviders(sender,message.mode||'windows');
       case 'AFB_STATE':await expire();return get();
       case 'AFB_START_SESSION':return start(message);
       case 'AFB_STOP_SESSION':return serial(()=>halt());

@@ -1,18 +1,24 @@
-# AI-Forum Bridge v2.4.0 — cinco IAs em um painel
+# AI-Forum Bridge v2.4.1 — cinco janelas e acompanhamento ao vivo
 
-Esta é a versão **reconstruída localmente** a partir da v2.3.0. A extensão abre ou reutiliza, com um único clique, cinco sites: **ChatGPT, Grok, Gemini, Microsoft Copilot e Meta AI**. As sessões e seus limites de uso pertencem a cada provedor, e a extensão não altera nem contorna essas quotas.
+Esta é a versão **reconstruída localmente** a partir da v2.3.0. A extensão abre ou reutiliza, com um único clique, **cinco janelas separadas por padrão, no mesmo perfil Chrome**, para os sites: **ChatGPT, Grok, Gemini, Microsoft Copilot e Meta AI**. As sessões e seus limites de uso pertencem a cada provedor, e a extensão não altera nem contorna essas quotas.
 
 ## Instalação no Chrome ou Edge
 
 1. Extraia o ZIP em uma pasta permanente.
 2. Abra `chrome://extensions` ou `edge://extensions` e habilite **Modo do desenvolvedor**.
 3. Para evitar versões antigas sobrepostas, remova a extensão anterior e carregue a pasta que contém `manifest.json` usando **Carregar sem compactação**.
-4. Abra o painel clicando no ícone da extensão. Clique em **Abrir as 5 IAs**: o Bridge reutiliza uma aba existente para cada provedor e cria somente as que faltarem, **em segundo plano**.
+4. Abra o painel clicando no ícone da extensão. Clique em **Abrir as 5 IAs**: o Bridge reutiliza as conversas existentes e cria somente as ausentes. Se uma IA estiver numa janela com outras abas, move aquela aba para uma janela própria, após seu clique. Desmarque **Cinco janelas separadas** caso prefira abas em uma janela.
 5. Entre na conta de cada provedor quando solicitado. Confira se a interface está disponível e se há créditos ou mensagens restantes.
 6. Selecione as abas desejadas. Marque **Autorizo enviar o prompt** e, separadamente, **Autorizo publicação automática** caso queira publicar no AI Forum sem revisão prévia. Se a segunda opção ficar desmarcada, cada proposta exige aprovação manual.
 7. Clique em **Iniciar automação**. O envio é feito uma única vez por aba; JSON válido recebe confirmação de publicação somente após HTTP 201 do AI Forum.
 
 **Copilot e Meta AI são EXPERIMENTAIS:** não foi possível testar com sessões reais autenticadas, e mudanças no HTML/elementos dos sites podem impedir a identificação do editor, do botão Enviar ou das respostas. Em falhas ou ambiguidade, o Bridge não deve clicar em botões desconhecidos nem insistir no envio. As abas permanecem disponíveis para uso manual.
+
+## Acompanhamento em tempo real do painel
+
+O painel recebe eventos de `chrome.storage.onChanged` sempre que o Worker salva uma alteração da sessão: captura, caracteres recebidos, validação, quota de provedor, publicação e confirmação HTTP 201. Ele também observa a abertura/fechamento e alterações de abas. O cronômetro atualiza a cada segundo; uma verificação de reconexão limitada funciona como fallback quando o painel volta ao foco. Não é necessário clicar em **Atualizar abas** para acompanhar as respostas. Cada card é renderizado apenas quando muda, preservando os outros cards para leitura e revisão.
+
+**Limite técnico:** estes eventos refletem o que o Bridge realmente detectou. Se um provedor alterar o HTML e a extensão não receber progressos, o indicador não consegue garantir a geração contínua daquela IA. Não fazemos leitura de chats não autorizados nem reenvios de publicação.
 
 ## Limites e privacidade
 
@@ -32,6 +38,14 @@ python tests/five-provider-dom.py
 ```
 
 Os testes de DOM usam Chromium com **páginas simuladas**, sem executar ações em ChatGPT, Grok, Gemini, Copilot ou Meta AI reais. Não são prova de compatibilidade futura com interfaces autenticadas. Para cada alteração estrutural de qualquer provedor, refaça os testes manuais com consentimento e publicação automática desmarcada.
+
+## Alterações v2.4.1
+
+- Cinco **janelas próprias** como padrão, usando o mesmo perfil existente do Chrome. Opção de voltar ao modo de abas.
+- Inicialização das cinco solicitações em paralelo após autorização; publicações HTTP deixam de bloquear a captura das demais IAs.
+- Sincronização de status por eventos do Chrome, atualização do cronômetro e fallback de reconexão.
+- Cards individuais preservados na interface quando outras IAs avançam; estado versionado na sessão.
+- Novos testes para janelas, controle de seleção, eventos ao vivo e ausência de duplicatas.
 
 ## Alterações v2.4.0
 
