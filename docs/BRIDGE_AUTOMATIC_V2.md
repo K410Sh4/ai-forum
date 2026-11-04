@@ -1,4 +1,4 @@
-# AI-Forum Bridge v2.5.2 — Operations Board e recuperação segura de prompts
+# AI-Forum Bridge v2.5.3 — Operations Board e recuperação segura de prompts
 
 > **Status:** código-fonte da série 2.4.x e testes mantidos em [`extensions/ai-forum-bridge-v2.4.0`](../extensions/ai-forum-bridge-v2.4.0), em paralelo ao Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge). A distribuição de um ZIP no GitHub Actions não equivale a publicação na Chrome Web Store ou validação dos cinco sites reais. Não confunda testes simulados com integração comprovada em provedores autenticados.
 
@@ -17,9 +17,9 @@
 
 **Copilot e Meta AI permanecem experimentais.** A identificação dos elementos foi testada em DOM local simulado, e não em contas reais autenticadas. Mudanças de interface, bloqueios, quotas ou consentimentos adicionais podem impedir a automação. A extensão deve falhar de forma segura sem clicar em controles ambíguos.
 
-## Instalação do pacote 2.5.2
+## Instalação do pacote 2.5.3
 
-1. Use o ZIP 2.5.2 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
+1. Use o ZIP 2.5.3 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
 2. Extraia em pasta permanente. Ative **Modo do desenvolvedor** em `chrome://extensions` ou `edge://extensions` e escolha **Carregar sem compactação**, apontando para a pasta que contém `manifest.json`.
 3. Desative/remova outras instalações da extensão para evitar duplicidade.
 4. Abra o painel e clique em **Abrir as 5 IAs**. A extensão reutiliza abas reconhecidas e cria somente as ausentes. O botão, isoladamente, **não envia mensagens**.
@@ -32,7 +32,7 @@ As quotas dos provedores permanecem inalteradas. Se o Grok atingir seu limite, d
 
 Um editor preenchido ao abrir a janela geralmente é um rascunho anterior: a ação **Abrir as 5 IAs** não tem permissão funcional para preenchê-lo ou enviá-lo. O preenchimento requer **Iniciar automação** e **Autorizar envio**.
 
-O Bridge 2.5.2 distingue o texto pronto do botão efetivamente habilitado. Ele aguarda até oito segundos antes de declarar que não encontrou um botão seguro; valida o conteúdo antes de clicar uma única vez. Uma sessão duplicada na aba não cancela a original, e dois pedidos concorrentes de início são bloqueados. Um indicador de geração preexistente deixa de contar como confirmação de envio novo. Resultados incertos não são reenviados automaticamente.
+O Bridge 2.5.3 distingue o texto pronto do botão efetivamente habilitado. Ele aguarda até oito segundos antes de declarar que não encontrou um botão seguro; valida o conteúdo antes de clicar uma única vez. Uma sessão duplicada na aba não cancela a original, e dois pedidos concorrentes de início são bloqueados. Um indicador de geração preexistente deixa de contar como confirmação de envio novo. Resultados incertos não são reenviados automaticamente.
 
 O teste `editor-recovery-dom.py` cobre nove cenários Chromium **simulados**, incluindo editores com texto antigo, prompt idêntico ao novo, botão atrasado e chamada duplicada. Ele não executa mensagens reais em provedores.
 
