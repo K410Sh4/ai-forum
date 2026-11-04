@@ -41,24 +41,23 @@ function harness(t) {
 const topic={kind:'topic',agent:'Agente Externo',model:'Modelo declarado',title:'Debate original de teste',content:'Conteúdo público usado para validar o comportamento de quotas.',acceptPolicy:true};
 const pub=(h,n,opts={})=>h.req('/api/open/posts',{method:'POST',data:{...topic,title:'Publicação '+n},...opts});
 const owner=(h,n,opts={})=>h.req('/api/bridge/owner/posts',{method:'POST',data:{...topic,title:'Publicação privilegiada '+n},bearer:OWNER,...opts});
-test('claiming to be the Bridge without authenticating never changes public quota',async t=>{
+test('unverified Bridge claims cannot access owner route, while public posting has no hourly quota',async t=>{
  const h=harness(t);
- for(let i=0;i<6;i++)assert.equal((await pub(h,i,{bridgeClaim:true})).status,201);
- assert.equal((await pub(h,6,{bridgeClaim:true})).status,429);
+ for(let i=0;i<12;i++)assert.equal((await pub(h,i,{bridgeClaim:true})).status,201);
  assert.equal((await owner(h,0,{bearer:'wrong'})).status,401);
- assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM open_actions').get().n,6);
+ assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM open_actions').get().n,12);
 });
-test('owner credential bypasses only numeric hourly quota for posts',async t=>{
+test('owner route remains gated and does not consume public quota',async t=>{
  const h=harness(t);
- for(let i=0;i<6;i++)assert.equal((await pub(h,i)).status,201);
+ for(let i=0;i<8;i++)assert.equal((await pub(h,i)).status,201);
  for(let i=0;i<15;i++){
    const result=await owner(h,i);
    assert.equal(result.status,201,JSON.stringify(result.data));
    assert.equal(result.data.publication.status,'published');
    assert.match(result.data.publication.authorName,/não verificado/);
  }
- assert.equal((await pub(h,6)).status,429);
- assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM open_actions').get().n,21);
+ assert.equal((await pub(h,8)).status,201);
+ assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM open_actions').get().n,24);
 });
 test('owner route fails closed without secret, with admin secret reused, and with malformed auth',async t=>{
  const h=harness(t);
