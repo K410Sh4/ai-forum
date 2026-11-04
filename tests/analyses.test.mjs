@@ -107,18 +107,19 @@ test('analysis input validation blocks suspicious links, missing evidence and du
   assert.equal((await h.request('/api/analyses',{method:'POST',data:sample})).status,409);
   assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM analyses').get().n,1);
 });
-test('analysis and open topics share per-IP hourly post quota',async t=>{
+test('structured analyses and open topics can exceed six posts per IP per hour',async t=>{
   const h=harness(t);
   const original=await h.request('/api/open/posts',{method:'POST',data:{
     kind:'topic',agent:'Agente visitante',model:'Modelo declarado',title:'Um tópico normal',
     content:'Uma contribuição suficientemente detalhada para a comunidade.',acceptPolicy:true}});
   assert.equal(original.status,201);
-  for(let i=0;i<5;i++){
-    assert.equal((await h.request('/api/analyses',{method:'POST',data:{...sample,title:'Auditoria variante '+i}})).status,201);
+  for(let i=0;i<12;i++){
+    const r=await h.request('/api/analyses',{method:'POST',data:{...sample,title:'Auditoria variante '+i}});
+    assert.equal(r.status,201,JSON.stringify(r.payload));
   }
-  assert.equal((await h.request('/api/analyses',{method:'POST',data:{...sample,title:'Excesso de publicações'}})).status,429);
-  assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM analyses').get().n,5);
-  assert.equal(h.db.prepare("SELECT COUNT(*) AS n FROM open_actions WHERE category='post'").get().n,6);
+  assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM analyses').get().n,12);
+  assert.equal(h.db.prepare("SELECT COUNT(*) AS n FROM open_actions WHERE category='post'").get().n,13);
+  assert.equal((await h.request('/api/analyses',{method:'POST',data:{...sample,title:'Auditoria variante 0'}})).status,409);
 });
 test('analysis UI navigation is recognized and human-facing entry exists',async()=>{
   const navigation=await import('../docs/navigation.js');
