@@ -7,7 +7,14 @@ const MAX_MS=8*60*1000; // Cinco abas podem gerar respostas em tempos diferentes
 let queue=Promise.resolve();
 const serial=fn=>{const x=queue.then(fn);queue=x.catch(()=>{});return x;};
 const get=async()=>(await chrome.storage.session.get(KEY))[KEY]||null;
-const set=async x=>chrome.storage.session.set({[KEY]:x});
+// Any material change becomes observable by all Bridge dashboard windows.
+const set=async x=>{
+  if(x && typeof x==='object'){
+    x.revision=(Number(x.revision)||0)+1;
+    x.updatedAt=Date.now();
+  }
+  await chrome.storage.session.set({[KEY]:x});
+};
 const terminal=new Set(['validado','publicado','erro','limite-uso','falha-publicacao','publicacao-incerta','interrompido','aba-descartada']);
 const isPanel=sender=>sender.id===chrome.runtime.id && (sender.url||'').startsWith(chrome.runtime.getURL('dashboard.html'));
 async function tabList(){
@@ -23,22 +30,45 @@ const LAUNCH_TARGETS=Object.freeze([
 ]);
 // Called only by the dashboard's explicit button. Never launches chats when
 // installed, when the panel opens, or on page load. Existing tabs are reused.
-async function openProviders(sender){
+// By default each provider receives a separate Chrome window in the CURRENT
+// browser profile. Reuse existing chats, moving a tab only when the user
+// explicitly clicks the launch button. No cross-profile copies or auto-send.
+async function openProviders(sender, mode='windows'){
   const current=await get();
-  if(current?.running)throw Error('Interrompa a sessão antes de abrir outras abas.');
-  const windowId=Number.isInteger(sender.tab?.windowId)?sender.tab.windowId:undefined;
-  const found=await chrome.tabs.query(windowId===undefined?{}:{windowId});
-  const chosen=[],opened=[],reused=[],failures=[];
+  if(current?.running)throw Error('Interrompa a sessão antes de reorganizar as janelas.');
+  if(!['windows','tabs'].includes(mode))throw Error('Modo de abertura inválido.');
+  const panelWindowId=Number.isInteger(sender.tab?.windowId)?sender.tab.windowId:undefined;
+  const found=await chrome.tabs.query({});
+  const chosen=[],opened=[],reused=[],failures=[],moved=[];
   for(const target of LAUNCH_TARGETS){
     let tab=found.find(t=>providerFromUrl(t.url)===target.provider);
-    if(tab){chosen.push(tab.id);reused.push(target.provider);continue;}
     try{
-      tab=await chrome.tabs.create({url:target.url,active:false,...(windowId===undefined?{}:{windowId})});
-      if(!Number.isInteger(tab?.id))throw Error('O navegador não retornou o identificador da aba.');
-      chosen.push(tab.id);opened.push(target.provider);found.push(tab);
+      if(mode==='windows'){
+        if(tab){
+          const neighbors=await chrome.tabs.query({windowId:tab.windowId});
+          if(neighbors.length!==1){
+            await chrome.windows.create({tabId:tab.id,focused:false,type:'normal'});
+            moved.push(target.provider);
+          }
+          reused.push(target.provider);
+        }else{
+          const window=await chrome.windows.create({url:target.url,focused:false,type:'normal'});
+          tab=window.tabs?.find(t=>providerFromUrl(t.url)===target.provider);
+          if(!Number.isInteger(tab?.id))throw Error('O Chrome não retornou a aba da janela criada.');
+          found.push(tab);opened.push(target.provider);
+        }
+      }else{
+        if(tab)reused.push(target.provider);
+        else{
+          tab=await chrome.tabs.create({url:target.url,active:false,...(panelWindowId===undefined?{}:{windowId:panelWindowId})});
+          if(!Number.isInteger(tab?.id))throw Error('O Chrome não retornou a aba criada.');
+          found.push(tab);opened.push(target.provider);
+        }
+      }
+      chosen.push(tab.id);
     }catch(e){failures.push({provider:target.provider,error:String(e?.message||e).slice(0,180)});}
   }
-  return {tabIds:chosen,opened,reused,failures};
+  return {mode,tabIds:chosen,opened,reused,moved,failures};
 }
 async function readyForContent(tabId){
   for(let i=0;i<40;i++){
@@ -58,7 +88,7 @@ async function restoreTabs(s){
 async function halt(reason='interrompido'){
   const s=await get();if(!s)return null;
   s.running=false;s.endedAt=Date.now();s.endedReason=reason;
-  for(const e of Object.values(s.entries))if(!terminal.has(e.status)){e.status=reason==='tempo-esgotado'?'erro':'interrompido';e.detail=reason==='tempo-esgotado'?'Limite de 4 minutos atingido.':'Interrompido pelo usuário.';}
+  for(const e of Object.values(s.entries))if(!terminal.has(e.status)){e.status=reason==='tempo-esgotado'?'erro':'interrompido';e.detail=reason==='tempo-esgotado'?'Limite de 8 minutos atingido.':'Interrompido pelo usuário.';}
   await set(s);await restoreTabs(s);await forgetOwnerCredential();await chrome.alarms.clear('afb-deadline');await chrome.alarms.clear('afb-owner-key-expiry');return s;
 }
 async function expire(){const s=await get();if(s?.running && Date.now()>=s.deadline)await halt('tempo-esgotado');}
@@ -84,7 +114,8 @@ async function start(message){
   await set(s);await chrome.alarms.create('afb-deadline',{when:s.deadline});
   // Public forum context is untrusted. If fetching fails, models generate independent topics.
   const ctx=await fetchPublicContext();
-  for(const t of chosen){
+  // Providers are initialized concurrently; each chat continues independently.
+  await Promise.all(chosen.map(async t=>{
     const current=await get();if(!current?.running || current.id!==sessionId)break;
     const entry=current.entries[t.id];
     const prompt=buildPrompt({provider:t.provider,objective:current.objective,context:ctx,marker:'AFB-'+crypto.randomUUID()});
@@ -100,7 +131,7 @@ async function start(message){
       await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const en=state.entries[t.id];en.detail=String(e.message||e).slice(0,300);en.status=/Limite de uso/i.test(en.detail)?'limite-uso':'erro';en.tries=1;await set(state);});
       try{await chrome.tabs.update(t.id,{autoDiscardable:entry.previousAutoDiscardable});}catch{}
     }
-  }
+  }));
   return await get();
 }
 async function progress(message,sender){
@@ -168,7 +199,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   const run=(async()=>{
     switch(message?.type){
       case 'AFB_TABS':return tabList();
-      case 'AFB_OPEN_PROVIDERS':return openProviders(sender);
+      case 'AFB_OPEN_PROVIDERS':return openProviders(sender,message.mode||'windows');
       case 'AFB_STATE':await expire();return get();
       case 'AFB_START_SESSION':return start(message);
       case 'AFB_STOP_SESSION':return serial(()=>halt());
