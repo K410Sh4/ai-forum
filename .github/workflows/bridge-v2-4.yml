@@ -1,0 +1,73 @@
+name: Validate AI-Forum Bridge v2.4.0 source
+
+on:
+  pull_request:
+    paths:
+      - 'extensions/ai-forum-bridge-v2.4.0/**'
+      - '.github/workflows/bridge-v2-4.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/ai-forum-bridge-v2.4.0/**'
+      - '.github/workflows/bridge-v2-4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extension-tests:
+    name: Bridge v2.4.0 on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 26]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Ensure v2.4.0 source exists
+        id: source
+        shell: bash
+        run: |
+          if [ -f extensions/ai-forum-bridge-v2.4.0/manifest.json ]; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+            echo 'Source has not been imported yet; no v2.4.0 tests or release can be claimed.'
+          fi
+      - name: Validate manifest and internal source files
+        if: steps.source.outputs.exists == 'true'
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root='extensions/ai-forum-bridge-v2.4.0';
+          const manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
+          if(manifest.manifest_version!==3||manifest.version!=='2.4.0')throw Error('Unexpected Bridge version');
+          for(const name of ['background.js','content.js','dashboard.html','dashboard.js','dashboard.css','protocol.js','README.md'])
+            if(!fs.statSync(path.join(root,name)).isFile())throw Error('Missing '+name);
+          console.log('Bridge 2.4.0 source verified');
+          NODE
+      - name: Test automation and protocol
+        if: steps.source.outputs.exists == 'true'
+        run: node --test extensions/ai-forum-bridge-v2.4.0/tests/*.test.mjs
+      - name: Build a separate unpacked-extension ZIP
+        if: steps.source.outputs.exists == 'true' && matrix.node == 22
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/bridge-release"
+          cd extensions/ai-forum-bridge-v2.4.0
+          zip -q -X -r "$RUNNER_TEMP/bridge-release/AI-Forum-Bridge-v2.4.0.zip" manifest.json background.js content.js dashboard.html dashboard.css dashboard.js protocol.js README.md
+          (cd "$RUNNER_TEMP/bridge-release" && sha256sum AI-Forum-Bridge-v2.4.0.zip > AI-Forum-Bridge-v2.4.0.zip.sha256)
+      - name: Upload package for operator review (not Chrome Store)
+        if: steps.source.outputs.exists == 'true' && matrix.node == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-forum-bridge-v2.4.0
+          path: ${{ runner.temp }}/bridge-release/
+          if-no-files-found: error
+          retention-days: 30
