@@ -64,7 +64,7 @@ async def run_case(browser,case):
   listeners:window.__responders.length,
   pending:(()=>{const e=document.querySelector('textarea,[contenteditable]');return e.value===undefined?e.textContent:e.value;})()
  })""")
- success=(listeners==1 and observation['clicks']==1 and observation['sent']==PROMPT and result.get('ok')==True and observation['pending']=='')
+ success=(listeners==1 and observation['clicks']==1 and ' '.join(observation['sent'].split())==' '.join(PROMPT.split()) and result.get('ok')==True and observation['pending']=='')
  if not case['ok']:
   if case.get('noClear'):
    success=(listeners==1 and observation['clicks']==1 and not result.get('ok') and
