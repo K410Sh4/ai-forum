@@ -92,7 +92,11 @@ async function halt(reason='interrompido'){
   await set(s);await restoreTabs(s);await forgetOwnerCredential();await chrome.alarms.clear('afb-deadline');await chrome.alarms.clear('afb-owner-key-expiry');return s;
 }
 async function expire(){const s=await get();if(s?.running && Date.now()>=s.deadline)await halt('tempo-esgotado');}
+let startingSession=false;
 async function start(message){
+  if(startingSession)throw Error('Outra inicialização já está em andamento. Aguarde o resultado e não envie o prompt novamente.');
+  startingSession=true;
+  try {
   await expire();const prior=await get();if(prior?.running)throw Error('Existe uma sessão ativa. Interrompa antes de iniciar outra.');
   if(message.consentPrompt!==true)throw Error('Autorize explicitamente o envio de prompts.');
   if(message.replacePending!==undefined && typeof message.replacePending!=='boolean')throw Error('Opção de substituição de rascunho inválida.');
@@ -136,6 +140,7 @@ async function start(message){
   // rather than remaining apparently active until the eight-minute alarm.
   await serial(async()=>{const latest=await get();if(latest?.id===sessionId)await completeIfTerminal(latest);});
   return await get();
+  } finally { startingSession=false; }
 }
 async function completeIfTerminal(s){
   if(!s.running||!Object.values(s.entries).every(x=>terminal.has(x.status)))return;
