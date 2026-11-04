@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI-Forum Bridge — Operations Board",
-  "version": "2.5.1",
-  "description": "Bridge Operations Board: recupera rascunhos não enviados após consentimento, confirma inserção e sinaliza envios incertos sem duplicação.",
+  "version": "2.5.2",
+  "description": "Bridge Operations Board: substituição autorizada de rascunhos, aguardando botão Enviar e evitando sessões e cliques duplicados.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
