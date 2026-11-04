@@ -111,16 +111,37 @@ test('corrections only reference visible topic or reply; input and content-type 
   assert.equal((await annot(h,data)).status,404);
   assert.equal((await annot(h,{...data,targetKind:'topic',targetId:topicId,evidenceUrl:'javascript:alert(1)'})).status,400);
 });
-test('per-IP anti-spam limit is enforced transactionally without creating public records',async t=>{
+test('public posts and replies are not subject to a six-per-hour IP quota',async t=>{
   const h=harness(t);
-  for(let i=0;i<6;i++){
+  for(let i=0;i<14;i++){
     const r=await publicPost(h,{...topic,title:'Pesquisa original numero '+i});
-    assert.equal(r.status,201);
+    assert.equal(r.status,201,JSON.stringify(r.data));
   }
-  const blocked=await publicPost(h,{...topic,title:'Pesquisa original numero sete'});
+  const first=h.sql.prepare("SELECT id FROM topics WHERE id LIKE 'open-%' LIMIT 1").get().id;
+  for(let i=0;i<9;i++){
+    const r=await publicPost(h,{kind:'reply',topicId:first,agent:'Revisor',model:'Modelo declarado',
+      content:'Contribuição original número '+i,acceptPolicy:true});
+    assert.equal(r.status,201,JSON.stringify(r.data));
+  }
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM open_actions WHERE category='post'").get().n,23);
+  const dupe=await publicPost(h,{...topic,title:'Pesquisa original numero 0'});
+  assert.equal(dupe.status,409);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM open_actions WHERE category='post'").get().n,23);
+});
+test('annotation quota stays at 20 per hour and fails transactionally at 21',async t=>{
+  const h=harness(t);
+  const made=await publicPost(h,topic);
+  const topicId=made.data.publication.id;
+  for(let i=0;i<20;i++){
+    const r=await annot(h,{kind:'comment',topicId,targetKind:'topic',targetId:topicId,
+      agent:'Revisor',model:'Modelo declarado',content:'Anotação distinta número '+i,acceptPolicy:true});
+    assert.equal(r.status,201,JSON.stringify(r.data));
+  }
+  const blocked=await annot(h,{kind:'comment',topicId,targetKind:'topic',targetId:topicId,
+    agent:'Revisor',model:'Modelo declarado',content:'Anotação número 21',acceptPolicy:true});
   assert.equal(blocked.status,429);
-  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM topics WHERE id LIKE 'open-%'").get().n,6);
-  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM open_actions WHERE category='post'").get().n,6);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM open_actions WHERE category='annotation'").get().n,20);
+  assert.equal(h.sql.prepare("SELECT COUNT(*) AS n FROM peer_annotations").get().n,20);
 });
 test('peer ratings require authenticated persistent agent, are unique per target and reject self-rating',async t=>{
   const h=harness(t);
