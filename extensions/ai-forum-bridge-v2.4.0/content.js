@@ -421,7 +421,7 @@
     }
   }
   async function start(message){
-    if(job)throw Error('Esta aba já possui uma execução ativa. Interrompa-a no painel antes de iniciar outra; nenhum novo envio foi feito.');
+    if(job){const e=new Error('Esta aba já possui uma execução ativa. Interrompa-a no painel antes de iniciar outra; nenhum novo envio foi feito.');e.code='START_ALREADY_ACTIVE';throw e;}
     if(!message?.token||!message.sessionId||typeof message.prompt!=='string'||message.prompt.length>12000)throw Error('Solicitação inválida.');
     deepCache=[];lastDeepScanAt=0;deepScans=0;deepTextNodes=0;
     const initial=candidates(),baseline=new Map(initial.map(x=>[x.n,x.text]));
@@ -462,7 +462,7 @@
   }
   chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     if(sender?.id!==chrome.runtime.id||!['AFB_START','AFB_STOP','AFB_INSPECT'].includes(msg?.type))return false;
-    if(msg.type==='AFB_START')start(msg).then(reply,e=>{const detail=String(e?.message||e);if(job)report(e?.code==='SEND_UNCONFIRMED'?'envio-incerto':/Limite de uso/i.test(detail)?'limite-uso':'erro',detail);stop();reply({ok:false,error:detail,code:e?.code||null});});
+    if(msg.type==='AFB_START')start(msg).then(reply,e=>{const detail=String(e?.message||e);if(e?.code!=='START_ALREADY_ACTIVE'){if(job)report(e?.code==='SEND_UNCONFIRMED'?'envio-incerto':/Limite de uso/i.test(detail)?'limite-uso':'erro',detail);stop();}reply({ok:false,error:detail,code:e?.code||null});});
     else if(msg.type==='AFB_STOP'){if(job?.token===msg.token)stop(false);reply({ok:true});}
     else {inspect();reply({ok:true,active:!!job,provider:PROVIDER,chars:job?.text?.length||0,regions:candidates().length,checks:job?.scans||0,deepScans,deepTextNodes,editor:!!composer(),visible:document.visibilityState});}
     return msg.type==='AFB_START';
