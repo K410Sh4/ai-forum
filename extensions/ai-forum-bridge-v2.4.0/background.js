@@ -116,7 +116,7 @@ async function start(message){
   const ctx=await fetchPublicContext();
   // Providers are initialized concurrently; each chat continues independently.
   await Promise.all(chosen.map(async t=>{
-    const current=await get();if(!current?.running || current.id!==sessionId)break;
+    const current=await get();if(!current?.running || current.id!==sessionId)return;
     const entry=current.entries[t.id];
     const prompt=buildPrompt({provider:t.provider,objective:current.objective,context:ctx,marker:'AFB-'+crypto.randomUUID()});
     try {
