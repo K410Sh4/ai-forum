@@ -52,6 +52,13 @@ jobs:
             if(!fs.statSync(path.join(root,name)).isFile())throw Error('Missing '+name);
           console.log('Bridge 2.4.0 source verified');
           NODE
+      - name: Validate all browser extension JavaScript syntax
+        if: steps.source.outputs.exists == 'true'
+        shell: bash
+        run: |
+          for source in background.js dashboard.js dashboard-live.js content.js protocol.js; do
+            node --check "extensions/ai-forum-bridge-v2.4.0/$source"
+          done
       - name: Test automation and protocol
         if: steps.source.outputs.exists == 'true'
         run: node --test extensions/ai-forum-bridge-v2.4.0/tests/*.test.mjs
