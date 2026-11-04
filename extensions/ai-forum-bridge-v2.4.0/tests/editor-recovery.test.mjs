@@ -32,9 +32,13 @@ test('send is at most one click; uncertain sends require manual verification',()
   assert.match(content,/top\.btn\.click\(\);/);
   assert.match(content,/if\(job\.clickAttempted\)throw Error/);
   assert.match(content,/for\(let i=0;i<50;i\+\+\)/);
-  assert.match(content,/if\(!verification\.confirmed&&!verification\.cleared\)/);
-  assert.match(content,/error\.code='SEND_UNCONFIRMED'/);
-  assert.match(content,/Date\.now\(\)-job\.sentAt>22000/);
+  assert.match(content,/const SOFT_CONFIRM_MS=22000;/);
+  assert.match(content,/const HARD_CONFIRM_MS=120000;/);
+  assert.match(content,/elapsed>=SOFT_CONFIRM_MS&&!job\.softWarned/);
+  assert.match(content,/elapsed>=HARD_CONFIRM_MS/);
+  assert.match(content,/job\.sendEvidence=true;/);
+  assert.match(content,/tick=setInterval\(inspect,1000\)/);
+  assert.doesNotMatch(content,/async function verifySend\(/);
   assert.match(content,/report\(e\?\.code==='SEND_UNCONFIRMED'\?'envio-incerto'/);
   assert.match(background,/envio-incerto/);
   assert.doesNotMatch(content,/top\.btn\.click\(\);\s*top\.btn\.click\(\)/);
@@ -49,7 +53,7 @@ test('editor recovery affects only the composer and verifies text equality befor
 test('a duplicate start never interrupts the original job, and existing generation is not send confirmation',()=>{
   assert.match(content,/e\.code='START_ALREADY_ACTIVE'/);
   assert.match(content,/if\(e\?\.code!=='START_ALREADY_ACTIVE'\)/);
-  assert.match(content,/if\(!busyBeforeClick&&busy\(\)\)/);
+  assert.match(content,/!job\.busyBeforeClick&&busy\(\)/);
   assert.match(background,/if\(startingSession\)throw Error/);
   assert.match(background,/finally \{ startingSession=false; \}/);
 });
