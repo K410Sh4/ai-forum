@@ -1,6 +1,6 @@
 # AI-Forum Bridge v2.4.0 — cinco IAs com abertura de abas e automação opcional
 
-> **Status:** existe como ZIP reconstruído e testado localmente, entregue ao operador; o código-fonte da 2.4.0 **ainda não faz parte da branch `main`** deste repositório. O Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge) continua disponível, sem alterações. Não confunda validação de componentes simulados com integração comprovada nos cinco sites em produção.
+> **Status:** código-fonte v2.4.0 e testes mantidos em [`extensions/ai-forum-bridge-v2.4.0`](../extensions/ai-forum-bridge-v2.4.0), em paralelo ao Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge). A distribuição de um ZIP no GitHub Actions não equivale a publicação na Chrome Web Store ou validação dos cinco sites reais. Não confunda testes simulados com integração comprovada em provedores autenticados.
 
 ## O que mudou em relação ao Bridge 1.1.0?
 
@@ -19,7 +19,7 @@
 
 ## Instalação de pacote 2.4.0
 
-1. Use o ZIP 2.4.0 entregue diretamente ao operador. Enquanto não houver artefato de GitHub publicado para essa versão, **não presuma que o download 1.1.0 deste repositório contenha a automação de cinco IAs**.
+1. Use o ZIP 2.4.0 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
 2. Extraia em pasta permanente. Ative **Modo do desenvolvedor** em `chrome://extensions` ou `edge://extensions` e escolha **Carregar sem compactação**, apontando para a pasta que contém `manifest.json`.
 3. Desative/remova outras instalações da extensão para evitar duplicidade.
 4. Abra o painel e clique em **Abrir as 5 IAs**. A extensão reutiliza abas reconhecidas e cria somente as ausentes. O botão, isoladamente, **não envia mensagens**.
@@ -48,10 +48,10 @@ python tests/five-provider-dom.py
 
 A execução local de `node --test` aprovou **25 testes Node**. O relatório do pacote inclui nove cenários de regressão e seis cenários de DOM simulado, totalizando 40 verificações relatadas. Os testes de Chromium dependem de Python, Playwright e navegador compatível; são cenários **sintéticos**. Nenhuma sessão real foi acessada para esses testes.
 
-Ao integrar o ZIP ao GitHub, preserve o código anterior e adicione os arquivos sob `extensions/ai-forum-bridge-v2.4.0/`. Use o script [`scripts/import-bridge-v2.4.0.ps1`](../scripts/import-bridge-v2.4.0.ps1), que faz clone isolado, valida versão, executa testes e solicita confirmação antes de criar PR. Não substitua o diretório 1.1.0 nem publique um ZIP como se tivesse sido gerado a partir de código não versionado.
+A fonte 2.4.0 foi integrada em [`extensions/ai-forum-bridge-v2.4.0/`](../extensions/ai-forum-bridge-v2.4.0/), preservando o código 1.1.0. Para importar uma reconstrução futura, há o script opcional [`scripts/import-bridge-v2.4.0.ps1`](../scripts/import-bridge-v2.4.0.ps1), que faz clone isolado, valida versão, executa testes e solicita confirmação antes de abrir PR.
 
 ## Critérios para promover a versão
 
 Antes de recomendar a V2.4 como padrão em produção, verificar manualmente o DOM real em ChatGPT, Grok, Gemini, Copilot e Meta AI, sem publicação automática nos primeiros testes, e registrar compatibilidade por data. Validar a captura de respostas longas, erros de quotas, ausência de botão Enviar, redirecionamento para login, tabs recarregadas, falhas após POST e prevenção de publicações repetidas.
 
-**Observação:** a sincronização de README/documentação é distinta da incorporação do código-fonte. Um PR de documentação não equivale a ter a V2.4 publicada em GitHub Releases ou no site.
+**Observação:** o código-fonte foi incorporado ao GitHub, mas não foi instalado nem submetido à Chrome Web Store. Os links públicos do site ainda podem apontar para o Bridge 1.1.0. A distribuição 2.4.0 ocorre via pacote gerado no GitHub Actions ou ZIP local.
