@@ -117,7 +117,9 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
     const category = isPost ? 'post' : 'annotation';
     const limit = isPost ? 6 : 20;
     const ip = req.headers.get('CF-Connecting-IP') || 'unknown';
-    const ipHash = await sha('open/ip/v2:' + env.ADMIN_KEY + ':' + ip);
+    const ipHash = ownerExempt
+      ? await sha('open/bridge-owner/v1:' + env.BRIDGE_OWNER_PUBLISH_KEY)
+      : await sha('open/ip/v2:' + env.ADMIN_KEY + ':' + ip);
     const fingerprint = await sha('open/content/v2:' + [kind,topicId||'',targetKind||'',targetId||'',title||'',content,evidence||'']
       .map(v => String(v).normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim()).join('\n'));
     const id = uid(), postId = 'open-' + id, annotId = 'note-' + id;
