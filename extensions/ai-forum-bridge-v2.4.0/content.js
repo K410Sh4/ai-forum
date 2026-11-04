@@ -370,8 +370,16 @@
     if(Date.now()>job.deadline){report('erro','Tempo máximo da sessão excedido.');stop();return;}
     if(location.origin!==job.origin){report('erro','A aba mudou para outra origem.');stop();return;}
     job.scans++;
+    // Do not leave a superficially successful click hanging for eight minutes:
+    // if no user bubble, generation activity or response is observed, mark
+    // the delivery uncertain and require visual inspection before retrying.
+    if(!job.sendEvidence&&(all(CONFIG.user).length>job.userBefore||busy()))job.sendEvidence=true;
     const response=newResponse();
     if(!response){
+      if(!job.sendEvidence&&Date.now()-job.sentAt>22000){
+        report('envio-incerto','Sem confirmação de recebimento em 22 segundos após o clique. Verifique a conversa; não reenviar automaticamente.');
+        stop();return;
+      }
       if(Date.now()-job.sentAt>9000&&Date.now()-job.lastDiagnostic>6500){
         job.lastDiagnostic=Date.now();report('aguardando',`Nenhuma resposta nova encontrada (${candidates().length} regiões; busca JSON: ${deepScans} verificações, ${document.visibilityState==='hidden'?'aba oculta':'aba visível'}).`);
       }
@@ -400,8 +408,8 @@
     job={token:message.token,sessionId:message.sessionId,origin:location.origin,
       prompt:message.prompt,promptExamples:jsonExamplesInPrompt(message.prompt),marker:message.prompt.match(/AFB-[a-f0-9-]{20,}/i)?.[0]||null,
       baseline,baselineTexts,sentAt:0,lastChange:Date.now(),text:'',seenBusy:false,jsonComplete:false,
-      deadline:Date.now()+Math.min(480000,Math.max(15000,message.ttl||480000)),wasSent:false,scans:0,lastDiagnostic:0};
-    const userBefore=all(CONFIG.user).length;
+      deadline:Date.now()+Math.min(480000,Math.max(15000,message.ttl||480000)),wasSent:false,sendEvidence:false,userBefore:0,scans:0,lastDiagnostic:0};
+    const userBefore=all(CONFIG.user).length;job.userBefore=userBefore;
     if(visibleLimitNotice())throw Error('Limite de uso informado pela interface do provedor. Nenhum reenvio automático.');
     // Explicit recovery replaces a leftover composer draft with the freshly
     // generated prompt, including a new marker; opening tabs never does this.
@@ -411,6 +419,7 @@
     job.sentAt=Date.now();job.wasSent=true;
     report('aguardando','Botão Enviar acionado ('+method+'); verificando a confirmação visual.');
     const verification=await verifySend(el,userBefore);
+    job.sendEvidence=verification.confirmed;
     if(!verification.confirmed&&!verification.cleared){
       const error=new Error('Envio incerto: o clique foi realizado, mas o editor ainda contém texto. Verifique a conversa antes de iniciar outra sessão.');
       error.code='SEND_UNCONFIRMED';
