@@ -182,6 +182,17 @@
     if(!norm(text))throw Error('O prompt autorizado está vazio.');
     el.focus();
     const original=pending;
+    if(equivalent(pending,text)){
+      // A previous attempt may have left exactly this prompt in the editor.
+      // Reuse it only for the currently authorized session and try to wake up
+      // a frontend that has not enabled the Send button yet.
+      if(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement){
+        el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));
+      }else{
+        el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));
+      }
+      return {replaced:false,reused:true,attempts:0};
+    }
     const replace=()=>{
       if(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement){
         nativeTextareaValue(el,text);
@@ -264,21 +275,30 @@
   }
   async function sendComposer(el){
     let options=[];
-    for(let i=0;i<24;i++){
+    for(let i=0;i<50;i++){
       if(!job)throw Error('Captura interrompida antes do envio.');
+      // A disabled send button is frequently a frontend debounce, not proof
+      // that the editor rejected the prompt. Wait up to 8 seconds, safely.
+      if(i%6===0 && visibleLimitNotice())throw Error('Limite de uso informado pela interface do provedor. Nenhum envio realizado.');
       options=submitCandidates(el);const enabled=options.filter(x=>x.enabled);
       if(enabled.length){
         const top=enabled[0];
         if(enabled[1]&&top.score===enabled[1].score)throw Error('Dois botões Enviar igualmente prováveis. Nenhum clique realizado.');
         if(!equivalent(editorValue(el),job.prompt))throw Error('Texto do editor mudou antes do envio; nenhum clique realizado.');
-        // Exactly one click per authorized session. Never click again when
-        // the first attempt might already have reached the provider.
-        top.btn.click();return top.evidence;
+        if(job.clickAttempted)throw Error('Um envio já foi tentado nesta sessão. Verifique o chat; nenhum segundo clique.');
+        // Mark intent BEFORE the click, including when a page handler throws.
+        job.clickAttempted=true;
+        try{top.btn.click();}
+        catch{
+          const error=new Error('Envio incerto: o botão disparou uma exceção. Verifique o chat; não repetir automaticamente.');
+          error.code='SEND_UNCONFIRMED';throw error;
+        }
+        return top.evidence;
       }
       await delay(160);
     }
-    if(visibleLimitNotice())throw Error('Limite de uso informado pela interface do provedor. Nenhum reenvio automático.');
-    throw Error(`Botão Enviar não identificado/habilitado (${options.length} candidatos). Nenhum reenvio automático.`);
+    if(visibleLimitNotice())throw Error('Limite de uso informado pela interface do provedor. Nenhum envio realizado.');
+    throw Error(`Botão Enviar não identificado/habilitado após 8 segundos (${options.length} candidatos). O prompt permanece no editor; nenhum clique realizado.`);
   }
   function newResponse(){
     if(!job)return null;
@@ -302,12 +322,14 @@
     }).filter(Boolean).sort((a,b)=>b.score-a.score||b.index-a.index);
     return rated[0]||null;
   }
-  async function verifySend(el,oldUsers){
+  async function verifySend(el,oldUsers,busyBeforeClick){
     let cleared=false;
     for(let i=0;i<40;i++){
       if(!job)return {confirmed:false,cleared:false};
       if(all(CONFIG.user).length>oldUsers || newResponse())return {confirmed:true,cleared};
-      if(busy())return {confirmed:true,cleared};
+      // Generation that was already in progress BEFORE the click cannot be
+      // counted as evidence that this prompt was submitted.
+      if(!busyBeforeClick&&busy())return {confirmed:true,cleared};
       if(!editorValue(el))cleared=true;
       // Some providers don't expose user bubbles or a busy indicator. An
       // emptied composer is evidence of UI submission, but not proof.
@@ -399,7 +421,7 @@
     }
   }
   async function start(message){
-    stop();
+    if(job)throw Error('Esta aba já possui uma execução ativa. Interrompa-a no painel antes de iniciar outra; nenhum novo envio foi feito.');
     if(!message?.token||!message.sessionId||typeof message.prompt!=='string'||message.prompt.length>12000)throw Error('Solicitação inválida.');
     deepCache=[];lastDeepScanAt=0;deepScans=0;deepTextNodes=0;
     const initial=candidates(),baseline=new Map(initial.map(x=>[x.n,x.text]));
@@ -408,17 +430,21 @@
     job={token:message.token,sessionId:message.sessionId,origin:location.origin,
       prompt:message.prompt,promptExamples:jsonExamplesInPrompt(message.prompt),marker:message.prompt.match(/AFB-[a-f0-9-]{20,}/i)?.[0]||null,
       baseline,baselineTexts,sentAt:0,lastChange:Date.now(),text:'',seenBusy:false,jsonComplete:false,
-      deadline:Date.now()+Math.min(480000,Math.max(15000,message.ttl||480000)),wasSent:false,sendEvidence:false,userBefore:0,scans:0,lastDiagnostic:0};
+      deadline:Date.now()+Math.min(480000,Math.max(15000,message.ttl||480000)),wasSent:false,clickAttempted:false,sendEvidence:false,userBefore:0,scans:0,lastDiagnostic:0};
     const userBefore=all(CONFIG.user).length;job.userBefore=userBefore;
     if(visibleLimitNotice())throw Error('Limite de uso informado pela interface do provedor. Nenhum reenvio automático.');
     // Explicit recovery replaces a leftover composer draft with the freshly
     // generated prompt, including a new marker; opening tabs never does this.
+    report('preparando','Preparando editor após autorização. Nenhuma mensagem enviada ainda.');
     const prepared=await setComposer(el,message.prompt,message.replacePending===true);
-    if(prepared.replaced)report('preparando','Rascunho não enviado substituído pelo prompt desta sessão.');
+    if(prepared.replaced)report('preparando','Rascunho antigo substituído; prompt novo validado. Aguardando botão Enviar.');
+    else if(prepared.reused)report('preparando','Prompt já presente no editor; aguardando botão Enviar.');
+    else report('preparando','Prompt inserido e validado; aguardando botão Enviar.');
+    const busyBeforeClick=busy();
     const method=await sendComposer(el);
     job.sentAt=Date.now();job.wasSent=true;
-    report('aguardando','Botão Enviar acionado ('+method+'); verificando a confirmação visual.');
-    const verification=await verifySend(el,userBefore);
+    report('aguardando','Botão Enviar acionado UMA vez ('+method+'); verificando a confirmação visual.');
+    const verification=await verifySend(el,userBefore,busyBeforeClick);
     job.sendEvidence=verification.confirmed;
     if(!verification.confirmed&&!verification.cleared){
       const error=new Error('Envio incerto: o clique foi realizado, mas o editor ainda contém texto. Verifique a conversa antes de iniciar outra sessão.');
