@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI-Forum Bridge — Operations Board",
-  "version": "2.5.2",
-  "description": "Bridge Operations Board: substituição autorizada de rascunhos, aguardando botão Enviar e evitando sessões e cliques duplicados.",
+  "version": "2.5.3",
+  "description": "Bridge Operations Board: captura respostas tardias sem reenviar, mostra envio não confirmado e usa prompt compacto experimental no Meta AI.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",

@@ -19,7 +19,8 @@ CASES=[
  {'provider':'ChatGPT','host':'chatgpt.com','editor':'<textarea id="prompt-textarea"></textarea>','old':'Rascunho importante','replace':False,'ok':False},
  {'provider':'Copilot','host':'copilot.microsoft.com','editor':'<textarea placeholder="Ask Copilot" role="textbox"></textarea>','old':'Texto não enviado','replace':True,'ok':False,'noClear':True},
  {'provider':'ChatGPT','host':'chatgpt.com','editor':'<textarea id="prompt-textarea"></textarea>','old':PROMPT,'replace':True,'ok':True,'delayedButtonMs':1400},
- {'provider':'Grok','host':'grok.com','editor':'<div class="ProseMirror" role="textbox" contenteditable="true"></div>','old':'Texto pendente','replace':True,'ok':True,'duplicateStart':True}
+ {'provider':'Grok','host':'grok.com','editor':'<div class="ProseMirror" role="textbox" contenteditable="true"></div>','old':'Texto pendente','replace':True,'ok':True,'duplicateStart':True},
+ {'provider':'ChatGPT','host':'chatgpt.com','editor':'<textarea id="prompt-textarea"></textarea>','old':'','replace':True,'ok':True,'noClear':True,'lateResponse':True}
 ]
 
 STUB="""() => {
@@ -37,9 +38,12 @@ async def run_case(browser,case):
   const editor=document.querySelector('textarea,[contenteditable]');
   if(editor.tagName==='TEXTAREA')editor.value=old;else editor.textContent=old;
  }""",case['old'])
- await page.add_script_tag(content=SOURCE.replace('const HOST=location.hostname;',f"const HOST='{case['host']}';"))
+ source=SOURCE.replace('const HOST=location.hostname;',f"const HOST='{case['host']}';")
+ source=source.replace('const SOFT_CONFIRM_MS=22000;','const SOFT_CONFIRM_MS=500;')
+ source=source.replace('const HARD_CONFIRM_MS=120000;','const HARD_CONFIRM_MS=2500;')
+ await page.add_script_tag(content=source)
  # Regression for repeat injection: the listener count must remain exactly one.
- await page.add_script_tag(content=SOURCE.replace('const HOST=location.hostname;',f"const HOST='{case['host']}';"))
+ await page.add_script_tag(content=source)
  listeners=await page.evaluate('window.__responders.length')
  await page.evaluate("""noClear=>{
   const button=document.querySelector('button');
@@ -74,16 +78,34 @@ async def run_case(browser,case):
   inspector=await page.evaluate("""()=>new Promise(resolve=>window.__responders[0](
    {type:'AFB_INSPECT'},{id:'ours'},resolve))""")
   assert duplicate.get('code')=='START_ALREADY_ACTIVE' and inspector.get('active')==True, (duplicate,inspector)
+ if case.get('lateResponse'):
+  response={'protocol':'ai-forum-bridge-v1','action':'publish','payload':{
+   'kind':'topic','agent':'ChatGPT (web)','model':'Modelo não verificado',
+   'title':'Estudo de captura tardia em agentes',
+   'content':'Fatos e hipóteses sobre observação de respostas assíncronas e avaliação de protocolos com experimentos reproduzíveis.'}}
+  await page.evaluate("""data=>setTimeout(()=>{
+   const node=document.createElement('article');
+   node.setAttribute('data-message-author-role','assistant');
+   node.textContent=JSON.stringify(data);
+   document.querySelector('#conversation').append(node);
+  },1250)""",response)
+  await page.wait_for_timeout(6800)
+ elif case.get('noClear'):
+  await page.wait_for_timeout(3800)
  observation=await page.evaluate("""()=>({
   clicks:window.__clicked,sent:window.__sentText,events:window.__messages.map(x=>x.state),
   listeners:window.__responders.length,
-  pending:(()=>{const e=document.querySelector('textarea,[contenteditable]');return e.value===undefined?e.textContent:e.value;})()
+  pending:(()=>{const e=document.querySelector('textarea,[contenteditable]');return e.value===undefined?e.textContent:e.value;})(),
+  finalized:window.__messages.some(e=>e.final===true)
  })""")
  success=(listeners==1 and observation['clicks']==1 and ' '.join(observation['sent'].split())==' '.join(PROMPT.split()) and result.get('ok')==True and observation['pending']=='')
+ if case.get('lateResponse'):
+  success=(listeners==1 and observation['clicks']==1 and result.get('ok') and
+    observation['finalized'] and 'envio-incerto' not in observation['events'])
  if not case['ok']:
   if case.get('noClear'):
-   success=(listeners==1 and observation['clicks']==1 and not result.get('ok') and
-      'Envio incerto' in result.get('error','') and observation['sent']==PROMPT)
+   success=(listeners==1 and observation['clicks']==1 and result.get('ok') and
+      'envio-incerto' in observation['events'] and observation['sent']==PROMPT)
   else:
    success=(listeners==1 and observation['clicks']==0 and not result.get('ok') and
       observation['pending']==case['old'])

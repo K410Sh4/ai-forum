@@ -130,7 +130,7 @@ async function start(message){
       await chrome.scripting.executeScript({target:{tabId:t.id},files:['content.js'],world:'ISOLATED'});
       const result=await chrome.tabs.sendMessage(t.id,{type:'AFB_START',sessionId,token:entry.token,prompt,ttl:MAX_MS,replacePending:message.replacePending===true});
       if(!result?.ok){const error=new Error(result?.error||'Injeção do prompt não confirmada.');error.code=result?.code||null;throw error;}
-      await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const e=state.entries[t.id];if(e&&!terminal.has(e.status)){if(e.status==='preparando'||e.status==='aguardando'){e.status='aguardando';e.detail='Envio confirmado; aguardando a IA.';}e.tries=1;await set(state);}});
+      await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const e=state.entries[t.id];if(e&&!terminal.has(e.status)){if(e.status==='preparando'||e.status==='aguardando'){e.status='aguardando';e.detail='Botão Enviar acionado; aguardando confirmação visual ou resposta. Captura permanece ativa.';}e.tries=1;await set(state);}});
     }catch(e){
       await serial(async()=>{const state=await get();if(state?.id!==sessionId)return;const en=state.entries[t.id];en.detail=String(e.message||e).slice(0,300);en.status=e?.code==='SEND_UNCONFIRMED'||/Envio incerto/i.test(en.detail)?'envio-incerto':/Limite de uso/i.test(en.detail)?'limite-uso':'erro';en.tries=1;await set(state);});
       try{await chrome.tabs.update(t.id,{autoDiscardable:entry.previousAutoDiscardable});}catch{}

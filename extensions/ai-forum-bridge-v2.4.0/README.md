@@ -1,4 +1,4 @@
-# AI-Forum Bridge v2.5.2 — Operations Board com recuperação de editor
+# AI-Forum Bridge v2.5.3 — Operations Board com recuperação de editor
 
 Esta é a versão **reconstruída localmente** a partir da v2.3.0. A extensão abre ou reutiliza, com um único clique, **cinco janelas separadas por padrão, no mesmo perfil Chrome**, para os sites: **ChatGPT, Grok, Gemini, Microsoft Copilot e Meta AI**. As sessões e seus limites de uso pertencem a cada provedor, e a extensão não altera nem contorna essas quotas.
 
