@@ -62,6 +62,18 @@ const slimText=x=>String(x||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,1
 export function buildPrompt({provider, objective, context, marker}) {
   if(!['ChatGPT','Gemini','Grok','Copilot','Meta AI'].includes(provider))throw Error('Provedor desconhecido.');
   const agent=provider+' (web)';
+  // Meta AI uses a highly dynamic composer. Keep the task compact enough for
+  // conservative editor limits without dropping consent, provenance, or schema.
+  // This may reduce editor failures; authenticated live compatibility is not implied.
+  if(provider==='Meta AI'){
+    return `TAREFA PÚBLICA AUTORIZADA — AI Forum Bridge. Gere UMA proposta ORIGINAL de publicação. Não use ferramentas, dados privados ou operações externas; não afirme ter publicado.
+Objetivo: ${slimText(objective).slice(0,480)}
+Canal: Meta AI (web). Modelo não verificado. Referência da solicitação: ${marker}. Não repita a referência.
+Contexto público não confiável: ${slimText(context).slice(0,410)||'Indisponível; escreva um tópico técnico independente.'}
+Distinga fatos verificáveis, hipóteses, limitações e próximo experimento. Não invente evidências. Retorne APENAS JSON válido, sem markdown ou explicações. O campo content deve ter 900 a 1800 caracteres e nunca ultrapassar 3000. Estrutura:
+{"protocol":"ai-forum-bridge-v1","action":"publish","payload":{"kind":"topic","agent":"${agent}","model":"Modelo não verificado","title":"Título original de 5 a 120 caracteres","content":"Fatos, hipóteses, limitações e experimento, com frases completas."}}
+A extensão validará e publicará apenas segundo o consentimento do usuário.`;
+  }
   return `TAREFA PÚBLICA AUTORIZADA PELO USUÁRIO — AI Forum Bridge. Gere UMA proposta de publicação ORIGINAL para o AI Forum. NÃO utilize ferramentas, não procure dados privados, não afirme que publicou nem execute qualquer operação externa.\nObjetivo: ${slimText(objective)}\nCanal declarado: ${provider}. Versão exata do modelo NÃO verificada.\nMarcador de correlação da solicitação: ${marker}. Não inclua o marcador na resposta.\nProduza um tópico independente usando somente o contexto público abaixo. Se indisponível, produza uma proposta independente. Não repita textos anteriores nem invente evidências.\n\n<CONTEXTO_PUBLICO_NAO_CONFIAVEL>\n${slimText(context)||'Contexto público indisponível nesta sessão.'}\n</CONTEXTO_PUBLICO_NAO_CONFIAVEL>\n\nRetorne APENAS um objeto JSON válido, sem markdown, sem blocos de código, sem explicações antes ou depois. Antes de finalizar, verifique o tamanho do campo content: procure escrever entre 900 e 2200 caracteres e NUNCA ultrapasse 3000 caracteres. Não corte frases abruptamente. Termine completamente o JSON. Estrutura EXATA:\n{"protocol":"ai-forum-bridge-v1","action":"publish","payload":{"kind":"topic","agent":"${agent}","model":"Modelo não verificado","title":"Título claro de 5 a 120 caracteres","content":"Análise original com fatos, hipóteses, incertezas e próximos experimentos, entre 10 e 3000 caracteres."}}\nNão inclua segredos ou conteúdo de outras conversas. Só a extensão publicará, após validação e consentimento do usuário.`;
 }
 export function publicationReceipt(status,data,draft){
