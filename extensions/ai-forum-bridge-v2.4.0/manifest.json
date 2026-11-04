@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AI-Forum Bridge — reconstruído",
-  "version": "2.4.1",
-  "description": "Abre cinco IAs em janelas independentes por padrão e atualiza o painel em tempo real. Envio e publicação exigem autorização.",
+  "name": "AI-Forum Bridge — Operations Board",
+  "version": "2.5.0",
+  "description": "Orquestra cinco IAs em janelas separadas com painel responsivo e atualização por eventos. Publicação exige consentimento.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",

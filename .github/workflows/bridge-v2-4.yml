@@ -1,4 +1,4 @@
-name: Validate AI-Forum Bridge v2.4.x source
+name: Validate AI-Forum Bridge 2.x source
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   extension-tests:
-    name: Bridge v2.4.0 on Node ${{ matrix.node }}
+    name: Bridge Operations Board on Node ${{ matrix.node }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Ensure v2.4.0 source exists
+      - name: Ensure Bridge 2.x source exists
         id: source
         shell: bash
         run: |
@@ -36,7 +36,7 @@ jobs:
             echo 'exists=true' >> "$GITHUB_OUTPUT"
           else
             echo 'exists=false' >> "$GITHUB_OUTPUT"
-            echo 'Source has not been imported yet; no v2.4.0 tests or release can be claimed.'
+            echo 'Bridge source is absent; no tests or release can be claimed.'
           fi
       - name: Validate manifest and internal source files
         if: steps.source.outputs.exists == 'true'
@@ -47,16 +47,16 @@ jobs:
           import path from 'node:path';
           const root='extensions/ai-forum-bridge-v2.4.0';
           const manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
-          if(manifest.manifest_version!==3||!/^2\.4\.[0-9]+$/.test(manifest.version))throw Error('Unexpected Bridge version');
-          for(const name of ['background.js','content.js','dashboard.html','dashboard.js','dashboard.css','protocol.js','dashboard-live.js','README.md'])
+          if(manifest.manifest_version!==3||!/^2\.[45]\.[0-9]+$/.test(manifest.version))throw Error('Unexpected Bridge version');
+          for(const name of ['background.js','content.js','dashboard.html','dashboard.js','dashboard.css','protocol.js','dashboard-live.js','dashboard-model.js','README.md'])
             if(!fs.statSync(path.join(root,name)).isFile())throw Error('Missing '+name);
-          console.log('Bridge 2.4.0 source verified');
+          console.log('Bridge Operations Board source verified');
           NODE
       - name: Validate all browser extension JavaScript syntax
         if: steps.source.outputs.exists == 'true'
         shell: bash
         run: |
-          for source in background.js dashboard.js dashboard-live.js content.js protocol.js; do
+          for source in background.js dashboard.js dashboard-live.js dashboard-model.js content.js protocol.js; do
             node --check "extensions/ai-forum-bridge-v2.4.0/$source"
           done
       - name: Test automation and protocol
@@ -68,13 +68,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/bridge-release"
           cd extensions/ai-forum-bridge-v2.4.0
-          zip -q -X -r "$RUNNER_TEMP/bridge-release/AI-Forum-Bridge-v2.4.1.zip" manifest.json background.js content.js dashboard.html dashboard.css dashboard.js dashboard-live.js protocol.js README.md
-          (cd "$RUNNER_TEMP/bridge-release" && sha256sum AI-Forum-Bridge-v2.4.1.zip > AI-Forum-Bridge-v2.4.1.zip.sha256)
+          zip -q -X -r "$RUNNER_TEMP/bridge-release/AI-Forum-Bridge-v2.5.0.zip" manifest.json background.js content.js dashboard.html dashboard.css dashboard.js dashboard-live.js dashboard-model.js protocol.js README.md
+          (cd "$RUNNER_TEMP/bridge-release" && sha256sum AI-Forum-Bridge-v2.5.0.zip > AI-Forum-Bridge-v2.5.0.zip.sha256)
       - name: Upload package for operator review (not Chrome Store)
         if: steps.source.outputs.exists == 'true' && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
-          name: ai-forum-bridge-v2.4.1
+          name: ai-forum-bridge-v2.5.0
           path: ${{ runner.temp }}/bridge-release/
           if-no-files-found: error
           retention-days: 30
