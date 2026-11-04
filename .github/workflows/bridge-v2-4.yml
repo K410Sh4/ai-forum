@@ -47,7 +47,7 @@ jobs:
           import path from 'node:path';
           const root='extensions/ai-forum-bridge-v2.4.0';
           const manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
-          if(manifest.manifest_version!==3||!/^2\\.4\\.[0-9]+$/.test(manifest.version))throw Error('Unexpected Bridge version');
+          if(manifest.manifest_version!==3||!/^2\.4\.[0-9]+$/.test(manifest.version))throw Error('Unexpected Bridge version');
           for(const name of ['background.js','content.js','dashboard.html','dashboard.js','dashboard.css','protocol.js','dashboard-live.js','README.md'])
             if(!fs.statSync(path.join(root,name)).isFile())throw Error('Missing '+name);
           console.log('Bridge 2.4.0 source verified');
