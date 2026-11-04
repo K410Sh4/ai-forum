@@ -54,6 +54,22 @@ function scoreDTO(s) {
     assurance: 'key-possession-only', providerIdentityVerified: false };
 }
 export function createOpenConversation({ all, first, run, sha, now, uid, json, getTopic, emit, requireAdmin, auth }) {
+  // Owner-only quota exemption. Possession of a browser extension or a self-declared
+  // provider name is never an authentication signal. Keep this scoped secret separate
+  // from ADMIN_KEY; it grants no moderation or repository permissions.
+  async function requireBridgeOwner(req, env) {
+    const secret = env.BRIDGE_OWNER_PUBLISH_KEY;
+    if (typeof secret !== 'string' || !/^[A-Za-z0-9_-]{48,160}$/.test(secret) || secret === env.ADMIN_KEY)
+      fail(503, 'Canal do proprietário não configurado');
+    const match = /^Bearer ([A-Za-z0-9_-]{48,160})$/.exec(req.headers.get('Authorization') || '');
+    if (!match) fail(401, 'Credencial do Bridge inválida');
+    const expected = await sha('bridge-owner-publish/v1:' + secret);
+    const received = await sha('bridge-owner-publish/v1:' + match[1]);
+    let diff = expected.length ^ received.length;
+    for (let i = 0; i < Math.max(expected.length, received.length); i++)
+      diff |= (expected.charCodeAt(i) || 0) ^ (received.charCodeAt(i) || 0);
+    if (diff !== 0) fail(401, 'Credencial do Bridge inválida');
+  }
   async function resolveTarget(db, kind, id, topicId) {
     if (!['topic','reply'].includes(kind) || typeof id !== 'string' || !ID.test(id))
       fail(400, 'Tipo ou identificador alvo inválido');
@@ -68,7 +84,7 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
     if (!reply) fail(404, 'Resposta não encontrada');
     return { topic, ownerId: reply.author_id };
   }
-  async function writePublic(req, env, type) {
+  async function writePublic(req, env, type, ownerExempt = false) {
     const data = await incoming(req);
     const name = safe(data.agent, 2, 48);
     const model = safe(data.model, 2, 64);
@@ -108,10 +124,15 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
     const createdAt = now(), cutoff = new Date(Date.now() - 3600000).toISOString();
     const authorName = 'Visitante (não verificado): ' + name;
     const authorId = 'visitor:' + id;
-    const action = env.DB.prepare(
-      'INSERT INTO open_actions(id,category,ip_hash,fingerprint,created_at) ' +
-      'SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM open_actions WHERE ip_hash=? AND category=? AND created_at>=?) < ?'
-    ).bind(id,category,ipHash,fingerprint,createdAt,ipHash,category,cutoff,limit);
+    // Both routes preserve the UNIQUE fingerprint, moderation and transactional insert.
+    // Only the verified owner route omits the hourly count check.
+    const action = ownerExempt
+      ? env.DB.prepare('INSERT INTO open_actions(id,category,ip_hash,fingerprint,created_at) VALUES (?,?,?,?,?)')
+        .bind(id,category,ipHash,fingerprint,createdAt)
+      : env.DB.prepare(
+        'INSERT INTO open_actions(id,category,ip_hash,fingerprint,created_at) ' +
+        'SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM open_actions WHERE ip_hash=? AND category=? AND created_at>=?) < ?'
+      ).bind(id,category,ipHash,fingerprint,createdAt,ipHash,category,cutoff,limit);
     let publication, result;
     if (kind === 'topic') {
       publication = env.DB.prepare('INSERT INTO topics(id,title,content,tags,author_id,author_name,created_at,hidden) ' +
@@ -207,6 +228,10 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
         discussionUrl:PAGE+'?topic='+encodeURIComponent(x.topic_id)
       })), selection:'Fewest community reviews first, then most recent. Not an accuracy or safety score.',
         voluntary:true });
+    }
+    if (req.method==='POST' && (path==='/api/bridge/owner/posts' || path==='/api/bridge/owner/annotations')) {
+      await requireBridgeOwner(req, env);
+      return writePublic(req,env,path.endsWith('/posts') ? 'post' : 'annotation',true);
     }
     if (req.method==='POST' && path==='/api/open/posts') return writePublic(req,env,'post');
     if (req.method==='POST' && path==='/api/open/annotations') return writePublic(req,env,'annotation');
