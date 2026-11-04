@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { providerFromUrl, buildPrompt } from '../protocol.js';
 
 const store={};let sends=0,posts=0;
-const created=[],tabs=[
+const created=[],windowsCreated=[],tabs=[
   {id:21,windowId:10,url:'https://chatgpt.com/c/current',title:'ChatGPT',autoDiscardable:true,status:'complete'},
   {id:22,windowId:10,url:'https://grok.com/chat/old',title:'Grok',autoDiscardable:true,status:'complete'},
   {id:23,windowId:10,url:'https://gemini.google.com/app/abc',title:'Gemini',autoDiscardable:true,status:'complete'}
@@ -18,6 +18,14 @@ globalThis.chrome={
     async update(id,x){Object.assign(tabs.find(t=>t.id===id),x);return tabs.find(t=>t.id===id);},
     async sendMessage(id,msg){if(msg.type==='AFB_START')sends++;return {ok:true};},
     async create(o){const tab={...o,id:24+created.length,title:'New chat',status:'complete',autoDiscardable:true,windowId:o.windowId||10};created.push(o);tabs.push(tab);return tab;}},
+  windows:{async create(o){
+    const windowId=100+windowsCreated.length;
+    let tab;
+    if(o.tabId!==undefined){tab=tabs.find(t=>t.id===o.tabId);tab.windowId=windowId;}
+    else {tab={id:24+created.length,windowId,url:o.url,title:'New chat',status:'complete',autoDiscardable:true};created.push(o);tabs.push(tab);}
+    windowsCreated.push({...o,id:windowId});
+    return {id:windowId,tabs:[tab]};
+  }},
   scripting:{async executeScript(){return []; }},
   alarms:{onAlarm:observable(),async create(){},async clear(){} }
 };
@@ -40,7 +48,7 @@ test('reconhece somente URLs https de cinco origens oficiais, sem subdomínios d
  }
  for(const url of ['http://copilot.microsoft.com/','https://copilot.microsoft.com.evil.test/','https://not-meta.ai/','https://evil.example/'])assert.equal(providerFromUrl(url),null);
 });
-test('somente o painel autorizado abre Copilot e Meta AI, reutiliza três abas e não envia prompts',async()=>{
+test('somente o painel abre cinco janelas no mesmo perfil e reutiliza chats sem prompts',async()=>{
  const rejected=await ask({type:'AFB_OPEN_PROVIDERS'},{id:'extension-id',url:'https://chatgpt.com/c/test',tab:{id:21}});
  assert.equal(rejected.ok,false);
  const result=await ask({type:'AFB_OPEN_PROVIDERS'});
@@ -49,10 +57,23 @@ test('somente o painel autorizado abre Copilot e Meta AI, reutiliza três abas e
  assert.deepEqual(result.data.reused,['ChatGPT','Grok','Gemini']);
  assert.deepEqual(result.data.tabIds,[21,22,23,24,25]);
  assert.equal(created.length,2);
- assert(created.every(x=>x.active===false));
+ assert.equal(windowsCreated.length,5); // 3 tabs moved + 2 windows created
+ assert(windowsCreated.every(x=>x.focused===false));
+ assert.equal(new Set(tabs.map(t=>t.windowId)).size,5);
+ assert.equal(result.data.mode,'windows');
+ assert.deepEqual(result.data.moved,['ChatGPT','Grok','Gemini']);
  assert.equal(sends,0);assert.equal(posts,0);
  const again=await ask({type:'AFB_OPEN_PROVIDERS'});
- assert.equal(again.ok,true);assert.equal(again.data.opened.length,0);assert.equal(created.length,2);
+ assert.equal(again.ok,true);assert.equal(again.data.opened.length,0);assert.equal(created.length,2);assert.equal(windowsCreated.length,5);
+});
+test('modo alternativo em abas reutiliza provedores existentes sem abrir novas janelas',async()=>{
+ const result=await ask({type:'AFB_OPEN_PROVIDERS',mode:'tabs'});
+ assert.equal(result.ok,true);
+ assert.equal(result.data.mode,'tabs');
+ assert.equal(result.data.opened.length,0);
+ assert.equal(windowsCreated.length,5);
+ const rejected=await ask({type:'AFB_OPEN_PROVIDERS',mode:'invalid'});
+ assert.equal(rejected.ok,false);
 });
 test('cinco abas exigem consentimento; cada uma produz no máximo uma publicação confirmada',async()=>{
  const denied=await ask({type:'AFB_START_SESSION',tabIds:[21,22,23,24,25],objective:'Objetivo original controlado de teste',consentPrompt:false,autoPublish:true});
