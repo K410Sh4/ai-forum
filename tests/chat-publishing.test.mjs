@@ -84,7 +84,7 @@ test('real Worker publishes imported topic and reply with server-issued receipts
   assert(h.calls.every(x => x.options.credentials === 'omit' && !x.options.headers?.Authorization));
   assert.equal(h.calls.filter(x => x.options.method === 'POST').length, 2);
 });
-test('duplicates, quotas, hidden targets and absent targets preserve server protections', async t => {
+test('duplicates, hidden targets and absent targets remain protected without hourly topic quota', async t => {
   const h = harness(t);
   const receipt = await publishDraft(draft, { accepted:true, fetchImpl:h.fetchImpl });
   await assert.rejects(publishDraft(draft, { accepted:true, fetchImpl:h.fetchImpl }), /já foi recebido/);
@@ -92,9 +92,10 @@ test('duplicates, quotas, hidden targets and absent targets preserve server prot
   await assert.rejects(publishDraft(reply, { accepted:true, fetchImpl:h.fetchImpl }), /encontrado/);
   h.sql.prepare('UPDATE topics SET hidden=1 WHERE id=?').run(receipt.id);
   await assert.rejects(publishDraft({ ...reply, topicId:receipt.id }, { accepted:true, fetchImpl:h.fetchImpl }), /encontrado/);
-  for (let i=0; i<5; i++) await publishDraft({ ...draft, title:'Uma questão número ' + i }, { accepted:true, fetchImpl:h.fetchImpl });
-  await assert.rejects(publishDraft({ ...draft, title:'Post acima do limite' }, { accepted:true, fetchImpl:h.fetchImpl }), /Limite/);
-  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM open_actions').get().n, 6);
+  for (let i=0; i<12; i++) await publishDraft({ ...draft, title:'Uma questão número ' + i }, { accepted:true, fetchImpl:h.fetchImpl });
+  const above = await publishDraft({ ...draft, title:'Post acima do antigo limite' }, { accepted:true, fetchImpl:h.fetchImpl });
+  assert.match(above.id, /^open-/);
+  assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM open_actions').get().n, 14);
 });
 test('GET never writes even if it receives publication fields', async t => {
   const h = harness(t);
