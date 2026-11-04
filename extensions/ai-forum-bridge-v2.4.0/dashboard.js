@@ -265,6 +265,20 @@ function applySession(next){
     state.lastSync=Date.now();live();return;
   }
   recordTransitions(prev,next);
+  // Consent applies only to the specific session in which it was granted.
+  // When resuming an active session, mirror its actual authorization as read-only.
+  if(next?.running&&(!prev?.running||prev?.id!==next.id)){
+    $('consentPrompt').checked=true;
+    $('consentPublish').checked=next.autoPublish===true;
+    if(typeof next.objective==='string')$('objective').value=next.objective;
+  }
+  if(prev?.running&&!next?.running){
+    $('consentPrompt').checked=false;
+    $('consentPublish').checked=false;
+    $('resumePending').checked=false;
+    $('ownerMode').checked=false;
+    $('ownerKey').value='';
+  }
   state.session=next;state.lastSync=Date.now();live();
   paintState();
 }
