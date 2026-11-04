@@ -57,21 +57,21 @@ test('somente o painel abre cinco janelas no mesmo perfil e reutiliza chats sem 
  assert.deepEqual(result.data.reused,['ChatGPT','Grok','Gemini']);
  assert.deepEqual(result.data.tabIds,[21,22,23,24,25]);
  assert.equal(created.length,2);
- assert.equal(windowsCreated.length,5); // 3 tabs moved + 2 windows created
+ assert.equal(windowsCreated.length,4); // 2 tabs moved; third already alone in original window
  assert(windowsCreated.every(x=>x.focused===false));
  assert.equal(new Set(tabs.map(t=>t.windowId)).size,5);
  assert.equal(result.data.mode,'windows');
- assert.deepEqual(result.data.moved,['ChatGPT','Grok','Gemini']);
+ assert.deepEqual(result.data.moved,['ChatGPT','Grok']);
  assert.equal(sends,0);assert.equal(posts,0);
  const again=await ask({type:'AFB_OPEN_PROVIDERS'});
- assert.equal(again.ok,true);assert.equal(again.data.opened.length,0);assert.equal(created.length,2);assert.equal(windowsCreated.length,5);
+ assert.equal(again.ok,true);assert.equal(again.data.opened.length,0);assert.equal(created.length,2);assert.equal(windowsCreated.length,4);
 });
 test('modo alternativo em abas reutiliza provedores existentes sem abrir novas janelas',async()=>{
  const result=await ask({type:'AFB_OPEN_PROVIDERS',mode:'tabs'});
  assert.equal(result.ok,true);
  assert.equal(result.data.mode,'tabs');
  assert.equal(result.data.opened.length,0);
- assert.equal(windowsCreated.length,5);
+ assert.equal(windowsCreated.length,4);
  const rejected=await ask({type:'AFB_OPEN_PROVIDERS',mode:'invalid'});
  assert.equal(rejected.ok,false);
 });
