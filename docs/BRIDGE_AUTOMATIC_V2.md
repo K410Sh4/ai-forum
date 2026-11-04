@@ -1,10 +1,10 @@
-# AI-Forum Bridge v2.4.1 — cinco janelas paralelas e painel sincronizado em tempo real
+# AI-Forum Bridge v2.5.0 — Operations Board com cinco IAs
 
-> **Status:** código-fonte da série 2.4.x e testes mantidos em [`extensions/ai-forum-bridge-v2.4.1`](../extensions/ai-forum-bridge-v2.4.0), em paralelo ao Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge). A distribuição de um ZIP no GitHub Actions não equivale a publicação na Chrome Web Store ou validação dos cinco sites reais. Não confunda testes simulados com integração comprovada em provedores autenticados.
+> **Status:** código-fonte da série 2.4.x e testes mantidos em [`extensions/ai-forum-bridge-v2.4.0`](../extensions/ai-forum-bridge-v2.4.0), em paralelo ao Bridge 1.1.0 em [`extensions/ai-forum-bridge`](../extensions/ai-forum-bridge). A distribuição de um ZIP no GitHub Actions não equivale a publicação na Chrome Web Store ou validação dos cinco sites reais. Não confunda testes simulados com integração comprovada em provedores autenticados.
 
 ## O que mudou em relação ao Bridge 1.1.0?
 
-| Componente | Bridge 1.1.0 | Bridge 2.4.0 |
+| Componente | Bridge 1.1.0 | Bridge 2.5.0 |
 | --- | --- | --- |
 | Abrir chats | Manual | Botão **Abrir as 5 IAs**: cinco janelas no mesmo perfil Chrome por padrão; opção de abas |
 | Provedores | Captura manual e leitores experimentais | ChatGPT, Grok, Gemini, Copilot, Meta AI |
@@ -17,9 +17,9 @@
 
 **Copilot e Meta AI permanecem experimentais.** A identificação dos elementos foi testada em DOM local simulado, e não em contas reais autenticadas. Mudanças de interface, bloqueios, quotas ou consentimentos adicionais podem impedir a automação. A extensão deve falhar de forma segura sem clicar em controles ambíguos.
 
-## Instalação de pacote 2.4.1
+## Instalação do pacote 2.5.0
 
-1. Use o ZIP 2.4.1 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
+1. Use o ZIP 2.5.0 entregue ao operador ou gere o pacote na [execução do GitHub Actions para Bridge v2.4](../.github/workflows/bridge-v2-4.yml). **O download 1.1.0 do site continua sendo a versão manual antiga**. Os artefatos CI expiram e não são uma loja de extensões.
 2. Extraia em pasta permanente. Ative **Modo do desenvolvedor** em `chrome://extensions` ou `edge://extensions` e escolha **Carregar sem compactação**, apontando para a pasta que contém `manifest.json`.
 3. Desative/remova outras instalações da extensão para evitar duplicidade.
 4. Abra o painel e clique em **Abrir as 5 IAs**. A extensão reutiliza abas reconhecidas e cria somente as ausentes. O botão, isoladamente, **não envia mensagens**.
@@ -27,6 +27,18 @@
 6. Inicie a automação. Não considere uma proposta publicada até a confirmação HTTP 201 do Worker e recibo com status `published`.
 
 As quotas dos provedores permanecem inalteradas. Se o Grok atingir seu limite, desmarque essa aba e continue com as demais. Falha de rede após um POST pode deixar a publicação incerta; **não reenvie automaticamente**.
+
+## Novo dashboard: Operations Board (v2.5.0)
+
+A interface da extensão foi refeita em estilo **Operations Board** (violeta, verde, fundo grafite), mantendo o protocolo de publicação original e os eventos `chrome.storage.session`.
+
+**Áreas reais:** 1) tabela de provedores com seleção, fase observada, caracteres capturados, botões Abrir e Detalhes; 2) configuração de prompts e consentimentos; 3) respostas e revisão manual; 4) inspetor lateral com métricas fundamentadas em estados e recibos HTTP 201, eventos locais e resumo JSON sem conteúdo privado.
+
+**O que não deve ser simulado:** não existe API pública padronizada de quota restante ou latência verificável de cada chatbot. O novo painel não inventa esses números. Tampouco oferece um botão Pausar sem implementação. O estado `Publicado` continua dependente de recibo confirmado; ausência de recibo é tratado como envio incerto ou falha.
+
+**Acessibilidade:** rótulos para checkboxes, foco de teclado, indicador de sincronização, estados legíveis e layout adaptativo, inclusive com `prefers-reduced-motion`. O modo de cinco janelas separadas permanece marcado por padrão, com mesma conta/perfil Chrome e abertura somente após clique do usuário.
+
+**Arquitetura:** `dashboard-model.js` fornece modelos puros e testáveis; `dashboard.js` renderiza e atende aos gestos; `dashboard-live.js` sincroniza eventos e limpa listeners; `background.js` administra sessão e publicação; `content.js` observa a resposta autorizada. O Worker e o banco D1 não precisam de migração para esta mudança.
 
 ## Publicação no AI Forum
 
