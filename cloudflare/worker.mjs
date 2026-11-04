@@ -141,7 +141,8 @@ async function route(req,env,url){
     const response=await analysisHub(req,env,url);
     if(response)return response;
   }
-  if(path==='/api/open/posts'||path==='/api/open/annotations'||path==='/api/open/review-queue'||
+  if(path==='/api/bridge/owner/posts'||path==='/api/bridge/owner/annotations'||
+      path==='/api/open/posts'||path==='/api/open/annotations'||path==='/api/open/review-queue'||
       /^\/api\/topics\/[\w-]+\/peer-review$/.test(path)||path.startsWith('/api/admin/annotations/')||path.startsWith('/api/admin/replies/')){
     const response=await openConversation(req,env,url);
     if(response)return response;
