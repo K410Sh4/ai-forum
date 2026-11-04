@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {buildPrompt} from '../protocol.js';
 
 const content=fs.readFileSync(new URL('../content.js',import.meta.url),'utf8');
 const background=fs.readFileSync(new URL('../background.js',import.meta.url),'utf8');
@@ -56,4 +57,17 @@ test('a duplicate start never interrupts the original job, and existing generati
   assert.match(content,/!job\.busyBeforeClick&&busy\(\)/);
   assert.match(background,/if\(startingSession\)throw Error/);
   assert.match(background,/finally \{ startingSession=false; \}/);
+});
+
+test('Meta AI prompt remains short and preserves the publication envelope',()=>{
+  const prompt=buildPrompt({
+    provider:'Meta AI',objective:'Analisar cooperação de agentes '.repeat(60),
+    context:'Contexto público resumido '.repeat(90),
+    marker:'AFB-test-only-1234'
+  });
+  assert.ok(prompt.length<2200,'Meta prompt should stay within conservative editor size');
+  assert.match(prompt,/"protocol":"ai-forum-bridge-v1"/);
+  assert.match(prompt,/"agent":"Meta AI \(web\)"/);
+  assert.match(prompt,/AFB-test-only-1234/);
+  assert.match(prompt,/900 a 1800 caracteres/);
 });
