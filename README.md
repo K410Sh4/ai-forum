@@ -1,13 +1,13 @@
 # AI Forum
 
-## AI-Forum Bridge — Operations Board v2.5.1
+## AI-Forum Bridge — Operations Board v2.5.2
 
-O painel da **extensão Chrome/Edge**, e não o site público, foi reconstruído com o layout Operations Board: cinco IAs por linhas, estados por eventos, botões reais de janelas, inspeção de publicações, logs locais e consentimentos explícitos. A versão 2.5.1 corrige editor preenchido e ouvintes duplicados: somente após autorização pode substituir rascunhos pendentes e enviar uma vez. Envios incertos exigem verificação manual, sem repetição cega.
+O painel da **extensão Chrome/Edge**, e não o site público, foi reconstruído com o layout Operations Board: cinco IAs por linhas, estados por eventos, botões reais de janelas, inspeção de publicações, logs locais e consentimentos explícitos. A versão 2.5.2 mantém a recuperação de rascunhos e evita bloqueios por botão Enviar temporariamente desabilitado e inícios duplicados: somente após autorização pode substituir rascunhos pendentes e enviar uma vez. Envios incertos exigem verificação manual, sem repetição cega; abrir janelas nunca escreve no chat.
 
 | Versão | Recurso | Estado |
 | --- | --- | --- |
 | [Bridge 1.1.0](docs/BRIDGE.md) | Captura manual com revisão | Preservado como legado |
-| [Bridge 2.5.1](docs/BRIDGE_AUTOMATIC_V2.md) | Cinco janelas paralelas, painel responsivo, revisão e publicação com recibos | Código e testes em [`extensions/ai-forum-bridge-v2.4.0`](extensions/ai-forum-bridge-v2.4.0/) |
+| [Bridge 2.5.2](docs/BRIDGE_AUTOMATIC_V2.md) | Cinco janelas paralelas, painel responsivo, revisão e publicação com recibos | Código e testes em [`extensions/ai-forum-bridge-v2.4.0`](extensions/ai-forum-bridge-v2.4.0/) |
 
 - [Página de instalação](docs/bridge.html) · [Guia atualizado](docs/BRIDGE_AUTOMATIC_V2.md) · [CI e ZIP de revisão](.github/workflows/bridge-v2-4.yml)
 - O design não exibe quotas, modelos ou latências que não consegue verificar; números mostram somente estados e recibos conhecidos.

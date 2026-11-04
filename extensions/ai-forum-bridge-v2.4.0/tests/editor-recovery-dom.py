@@ -17,7 +17,9 @@ CASES=[
  {'provider':'Copilot','host':'copilot.microsoft.com','editor':'<textarea placeholder="Ask Copilot" role="textbox"></textarea>','old':'Draft anterior','replace':True,'ok':True},
  {'provider':'Meta AI','host':'meta.ai','editor':'<div role="textbox" contenteditable="true"></div>','old':'Meta AI previous text','replace':True,'ok':True},
  {'provider':'ChatGPT','host':'chatgpt.com','editor':'<textarea id="prompt-textarea"></textarea>','old':'Rascunho importante','replace':False,'ok':False},
- {'provider':'Copilot','host':'copilot.microsoft.com','editor':'<textarea placeholder="Ask Copilot" role="textbox"></textarea>','old':'Texto não enviado','replace':True,'ok':False,'noClear':True}
+ {'provider':'Copilot','host':'copilot.microsoft.com','editor':'<textarea placeholder="Ask Copilot" role="textbox"></textarea>','old':'Texto não enviado','replace':True,'ok':False,'noClear':True},
+ {'provider':'ChatGPT','host':'chatgpt.com','editor':'<textarea id="prompt-textarea"></textarea>','old':PROMPT,'replace':True,'ok':True,'delayedButtonMs':1400},
+ {'provider':'Grok','host':'grok.com','editor':'<div class="ProseMirror" role="textbox" contenteditable="true"></div>','old':'Texto pendente','replace':True,'ok':True,'duplicateStart':True}
 ]
 
 STUB="""() => {
@@ -56,9 +58,22 @@ async def run_case(browser,case):
     }
   });
  }""",bool(case.get('noClear')))
+ if case.get('delayedButtonMs'):
+  await page.evaluate("""milliseconds=>{
+   const button=document.querySelector('button');button.disabled=true;
+   setTimeout(()=>{button.disabled=false;},milliseconds);
+  }""",case['delayedButtonMs'])
  result=await page.evaluate("""args=>new Promise(resolve=>window.__responders[0](
    {type:'AFB_START',token:'bridge-token',sessionId:'s-123',prompt:args.prompt,ttl:480000,replacePending:args.replace},
    {id:'ours'},resolve))""",{'prompt':PROMPT,'replace':case['replace']})
+ duplicate=None
+ if case.get('duplicateStart'):
+  duplicate=await page.evaluate("""args=>new Promise(resolve=>window.__responders[0](
+   {type:'AFB_START',token:'bridge-token',sessionId:'s-123',prompt:args.prompt,ttl:480000,replacePending:true},
+   {id:'ours'},resolve))""",{'prompt':PROMPT})
+  inspector=await page.evaluate("""()=>new Promise(resolve=>window.__responders[0](
+   {type:'AFB_INSPECT'},{id:'ours'},resolve))""")
+  assert duplicate.get('code')=='START_ALREADY_ACTIVE' and inspector.get('active')==True, (duplicate,inspector)
  observation=await page.evaluate("""()=>({
   clicks:window.__clicked,sent:window.__sentText,events:window.__messages.map(x=>x.state),
   listeners:window.__responders.length,
@@ -72,12 +87,17 @@ async def run_case(browser,case):
   else:
    success=(listeners==1 and observation['clicks']==0 and not result.get('ok') and
       observation['pending']==case['old'])
+ if case.get('duplicateStart'):
+  success=success and observation['clicks']==1 and 'erro' not in observation['events'] and duplicate.get('code')=='START_ALREADY_ACTIVE'
  await page.close()
  return {'provider':case['provider'],'replace':case['replace'],'pass':success,
          'clicks':observation['clicks'],'error':str(result.get('error',''))[:120]}
 async def main():
  async with async_playwright() as playwright:
-  browser=await playwright.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+  binary=Path('/usr/bin/chromium')
+  launch={'headless':True,'args':['--no-sandbox']}
+  if binary.exists():launch['executable_path']=str(binary)
+  browser=await playwright.chromium.launch(**launch)
   try: results=await asyncio.gather(*(run_case(browser,case) for case in CASES))
   finally: await browser.close()
  print(json.dumps(results,ensure_ascii=False,indent=2))

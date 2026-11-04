@@ -1,4 +1,4 @@
-# AI-Forum Bridge v2.5.1 — Operations Board com recuperação de editor
+# AI-Forum Bridge v2.5.2 — Operations Board com recuperação de editor
 
 Esta é a versão **reconstruída localmente** a partir da v2.3.0. A extensão abre ou reutiliza, com um único clique, **cinco janelas separadas por padrão, no mesmo perfil Chrome**, para os sites: **ChatGPT, Grok, Gemini, Microsoft Copilot e Meta AI**. As sessões e seus limites de uso pertencem a cada provedor, e a extensão não altera nem contorna essas quotas.
 
@@ -19,6 +19,19 @@ Esta é a versão **reconstruída localmente** a partir da v2.3.0. A extensão a
 O painel recebe eventos de `chrome.storage.onChanged` sempre que o Worker salva uma alteração da sessão: captura, caracteres recebidos, validação, quota de provedor, publicação e confirmação HTTP 201. Ele também observa a abertura/fechamento e alterações de abas. O cronômetro atualiza a cada segundo; uma verificação de reconexão limitada funciona como fallback quando o painel volta ao foco. Não é necessário clicar em **Atualizar abas** para acompanhar as respostas. Cada card é renderizado apenas quando muda, preservando os outros cards para leitura e revisão.
 
 **Limite técnico:** estes eventos refletem o que o Bridge realmente detectou. Se um provedor alterar o HTML e a extensão não receber progressos, o indicador não consegue garantir a geração contínua daquela IA. Não fazemos leitura de chats não autorizados nem reenvios de publicação.
+
+## Correções incrementais de envio e estados (v2.5.2)
+
+Esta atualização preserva a recuperação de rascunhos da versão 2.5.1 e melhora casos nos quais **o texto já apareceu, mas o botão Enviar ainda estava desabilitado**.
+
+- O botão **Abrir as 5 IAs** continua somente abrindo ou reorganizando janelas; nunca insere prompts. Texto visto imediatamente após a abertura é um rascunho preexistente ou restaurado pelo site, não prova de que o Bridge o escreveu.
+- Depois de consentir e iniciar, o Bridge usa ou substitui o texto pendente, valida o conteúdo e aguarda **até oito segundos** para um botão Enviar inequívoco ficar habilitado.
+- Após o clique, verifica resposta, novo balão de usuário ou início **novo** de geração; geração anterior ao clique não confirma novo envio.
+- Uma segunda mensagem de início não interrompe uma sessão ativa. Uma segunda inicialização concorrente do painel é recusada.
+- Um único clique por sessão autorizada. Sem confirmação, o painel exibe **Envio incerto**, e não executa tentativas cegas.
+- Testes adicionais em Chromium com editores simulados: botão que demora a habilitar, prompt já existente e segunda chamada de início.
+
+**Não há modo de contornar quotas ou autenticação de provedores.** Para instalar, atualize a pasta da extensão e **recarregue cada uma das cinco páginas de IA**. Os testes de DOM não certificam compatibilidade futura com interfaces reais.
 
 ## Correção de envio e recuperação de rascunhos (v2.5.1)
 

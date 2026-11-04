@@ -28,7 +28,10 @@ test('pending draft replacement requires session consent and an explicit user-vi
   assert.doesNotMatch(content,/Editor já contém texto\. Limpe-o antes de iniciar\./);
 });
 test('send is at most one click; uncertain sends require manual verification',()=>{
-  assert.match(content,/top\.btn\.click\(\);return top\.evidence;/);
+  assert.match(content,/job\.clickAttempted=true;/);
+  assert.match(content,/top\.btn\.click\(\);/);
+  assert.match(content,/if\(job\.clickAttempted\)throw Error/);
+  assert.match(content,/for\(let i=0;i<50;i\+\+\)/);
   assert.match(content,/if\(!verification\.confirmed&&!verification\.cleared\)/);
   assert.match(content,/error\.code='SEND_UNCONFIRMED'/);
   assert.match(content,/Date\.now\(\)-job\.sentAt>22000/);
@@ -41,4 +44,12 @@ test('editor recovery affects only the composer and verifies text equality befor
   assert.match(content,/replacement\.selectNodeContents\(el\)/);
   assert.match(content,/if\(!equivalent\(editorValue\(el\),job\.prompt\)\)throw Error/);
   assert.match(content,/for\(let attempt=0;attempt<2;attempt\+\+\)/);
+});
+
+test('a duplicate start never interrupts the original job, and existing generation is not send confirmation',()=>{
+  assert.match(content,/e\.code='START_ALREADY_ACTIVE'/);
+  assert.match(content,/if\(e\?\.code!=='START_ALREADY_ACTIVE'\)/);
+  assert.match(content,/if\(!busyBeforeClick&&busy\(\)\)/);
+  assert.match(background,/if\(startingSession\)throw Error/);
+  assert.match(background,/finally \{ startingSession=false; \}/);
 });
