@@ -31,6 +31,7 @@ test('send is at most one click; uncertain sends require manual verification',()
   assert.match(content,/top\.btn\.click\(\);return top\.evidence;/);
   assert.match(content,/if\(!verification\.confirmed&&!verification\.cleared\)/);
   assert.match(content,/error\.code='SEND_UNCONFIRMED'/);
+  assert.match(content,/Date\.now\(\)-job\.sentAt>22000/);
   assert.match(content,/report\(e\?\.code==='SEND_UNCONFIRMED'\?'envio-incerto'/);
   assert.match(background,/envio-incerto/);
   assert.doesNotMatch(content,/top\.btn\.click\(\);\s*top\.btn\.click\(\)/);
