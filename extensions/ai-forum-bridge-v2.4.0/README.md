@@ -28,7 +28,7 @@ Na seção **Configurar operação**, **Substituir rascunhos pendentes** vem mar
 1. o script localiza o editor do chat e, se houver texto, seleciona **somente o conteúdo do editor**, nunca mensagens do histórico;
 2. substitui o rascunho pelo novo prompt da sessão, usando APIs de texto e eventos suportados; valida o texto efetivamente inserido, com até duas tentativas de **preparação**, sem clicar Enviar;
 3. identifica um botão de envio inequívoco, clica **uma única vez**, e aguarda evidências da interface (mensagem do usuário, geração iniciada, resposta nova, limpeza do editor);
-4. quando o clique ocorreu mas não foi possível verificar que o provedor recebeu o prompt, informa **Envio incerto**. Não repete o clique, pois a primeira mensagem pode ter sido recebida;
+4. quando o clique ocorreu mas não foi possível verificar que o provedor recebeu o prompt, informa **Envio incerto** (sem evidência após 22 segundos), em vez de ficar aguardando por oito minutos. Não repete o clique, pois a primeira mensagem pode ter sido recebida;
 5. sem envio confirmado, não publica no AI Forum e não afirma que a IA respondeu.
 
 Desmarque a opção para preservar qualquer texto já escrito no editor: nesse modo, o Bridge informa o impedimento e não altera nem envia o conteúdo. Reiniciar uma nova sessão após um envio incerto requer **verificar visualmente o chat** para evitar mensagens duplicadas.
