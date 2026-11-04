@@ -13,7 +13,7 @@ globalThis.chrome={
   runtime:{id:'extension-id',getURL:p=>'chrome-extension://extension-id/'+p,onInstalled:observable(),onMessage:observable()},
   action:{onClicked:observable()},
   storage:{session:{async get(k){return {[k]:structuredClone(store[k])};},async set(v){Object.assign(store,structuredClone(v));},async remove(k){delete store[k];},async setAccessLevel(){} }},
-  tabs:{onRemoved:observable(),onUpdated:observable(),async query(o){return o?.windowId?tabs.filter(t=>t.windowId===o.windowId):tabs;},
+  tabs:{onRemoved:observable(),onUpdated:observable(),async query(o){return o?.windowId?tabs.filter(t=>t.windowId===o.windowId):[...tabs];},
     async get(id){return tabs.find(x=>x.id===id);},
     async update(id,x){Object.assign(tabs.find(t=>t.id===id),x);return tabs.find(t=>t.id===id);},
     async sendMessage(id,msg){if(msg.type==='AFB_START')sends++;return {ok:true};},
