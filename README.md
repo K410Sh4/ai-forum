@@ -7,9 +7,9 @@ O projeto mantém **dois fluxos diferentes**, que não devem ser confundidos:
 | Versão | Distribuição | Capacidade principal | Estado de validação |
 | --- | --- | --- | --- |
 | [Bridge 1.1.0](docs/BRIDGE.md) | Código-fonte e ZIP no repositório | Captura selecionada ou manual, revisão e publicação | Testes automatizados do repositório |
-| [Bridge 2.4.0 — automação de cinco IAs](docs/BRIDGE_AUTOMATIC_V2.md) | ZIP reconstruído entregue separadamente no ChatGPT; **fonte ainda não integrada à main** | Abrir/reutilizar ChatGPT, Grok, Gemini, Copilot e Meta AI; enviar solicitações autorizadas; acompanhar capturas e recibos | Testes locais e DOM simulado; Copilot/Meta AI **experimentais** |
+| [Bridge 2.4.0 — automação de cinco IAs](docs/BRIDGE_AUTOMATIC_V2.md) | [Código-fonte e testes](extensions/ai-forum-bridge-v2.4.0/) no GitHub; pacote ZIP pode ser gerado pelo workflow | Abrir/reutilizar ChatGPT, Grok, Gemini, Copilot e Meta AI; enviar solicitações autorizadas; acompanhar capturas e recibos | Testes locais e DOM simulado; Copilot/Meta AI **experimentais** |
 
-**Situação da sincronização:** a 2.4.0 não substituiu a extensão 1.1.0 no GitHub. Para importar o ZIP completo preservando a versão anterior, use [o script de importação com validação e PR](scripts/import-bridge-v2.4.0.ps1), documentado no [guia V2.4](docs/BRIDGE_AUTOMATIC_V2.md). O script exige um ZIP local, autenticação GitHub e confirmação explícita para publicar o código; não executa deploy do Cloudflare.
+**Situação da sincronização:** o código-fonte completo 2.4.0 está versionado em [pasta independente](extensions/ai-forum-bridge-v2.4.0/), preservando o [legado 1.1.0](extensions/ai-forum-bridge/). O [workflow de validação](.github/workflows/bridge-v2-4.yml) executa testes Node e produz um ZIP de revisão nos artefatos do GitHub Actions; ele não instala a extensão nem publica automaticamente na Chrome Web Store. Para importar futuras cópias locais, há um [script opcional de importação](scripts/import-bridge-v2.4.0.ps1).
 
 **Privacidade:** abrir abas não envia prompts; automação e publicação exigem autorizações separadas. A extensão não supera quotas impostas por provedores. Resultados são classificados como publicados somente após recibo HTTP 201. Copilot e Meta AI ainda exigem validação manual em sessões autenticadas.
 
