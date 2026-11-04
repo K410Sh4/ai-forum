@@ -2,7 +2,9 @@
  * Não lê cookies, outras abas, conversas antigas completas nem APIs privadas. */
 (()=>{
   if(window!==window.top || globalThis.__AFB_REBUILT_240__)return;
-  globalThis.__AFB_REBUILT_224__=true;
+  // The former version set __AFB_REBUILT_224__, while checking _240__.
+  // This allowed repeated executeScript() to install duplicate listeners.
+  globalThis.__AFB_REBUILT_240__=true;
   const HOST=location.hostname;
   const PROVIDER=HOST==='grok.com'?'Grok':HOST==='gemini.google.com'?'Gemini':HOST==='chatgpt.com'||HOST==='chat.openai.com'?'ChatGPT':['copilot.microsoft.com','www.copilot.microsoft.com'].includes(HOST)?'Copilot':['meta.ai','www.meta.ai'].includes(HOST)?'Meta AI':null;
   if(!PROVIDER)return;
@@ -163,23 +165,60 @@
   }
   function dispose(){observer?.disconnect();observer=null;clearInterval(tick);tick=null;clearTimeout(scanTimer);scanTimer=null;}
   function stop(silent=true){if(job&&!silent)report('interrompido','Execução cancelada.');dispose();job=null;lastStatus='';}
-  function setComposer(el,text){
+  // Compare visible text even when rich-text editors change line breaks or
+  // non-breaking spaces. We never inspect or clear messages outside composer.
+  const equivalent=(left,right)=>norm(left).replace(/[\u00a0\s]+/g,' ')===norm(right).replace(/[\u00a0\s]+/g,' ');
+  function nativeTextareaValue(el,text){
+    const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto,'value').set.call(el,text);
+    el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertReplacementText',data:text}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  // An existing draft can be replaced ONLY during an expressly authorized
+  // session with replacePending enabled. Never touch the editor on tab open.
+  async function setComposer(el,text,replacePending){
+    const pending=editorValue(el);
+    if(pending&&!replacePending)throw Error('Já existe texto não enviado. Ative "Substituir rascunhos pendentes" para continuar.');
+    if(!norm(text))throw Error('O prompt autorizado está vazio.');
     el.focus();
-    if(editorValue(el))throw Error('Editor já contém texto. Limpe-o antes de iniciar.');
-    if(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement){
-      const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
-      Object.getOwnPropertyDescriptor(proto,'value').set.call(el,text);
-      el.dispatchEvent(new InputEvent('input',{bubbles:true,data:text,inputType:'insertText'}));
-      el.dispatchEvent(new Event('change',{bubbles:true}));
-    }else{
+    const original=pending;
+    const replace=()=>{
+      if(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement){
+        nativeTextareaValue(el,text);
+        return;
+      }
+      // A selection is strictly confined to the composer, not the whole page.
+      const selection=window.getSelection(),range=document.createRange();
+      range.selectNodeContents(el);
+      selection?.removeAllRanges();selection?.addRange(range);
       let inserted=false;
-      try{inserted=document.execCommand('insertText',false,text);}catch{}
-      if(!inserted||!editorValue(el)){
-        el.textContent=text;
-        el.dispatchEvent(new InputEvent('input',{bubbles:true,data:text,inputType:'insertText'}));
+      try{inserted=!!document.execCommand('insertText',false,text);}catch{}
+      if(!inserted||!equivalent(editorValue(el),text)){
+        const replacement=document.createRange();
+        replacement.selectNodeContents(el);
+        replacement.deleteContents();
+        replacement.insertNode(document.createTextNode(text));
+        el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertReplacementText',data:text}));
+      }
+    };
+    for(let attempt=0;attempt<2;attempt++){
+      if(!job||job.wasSent)throw Error('A sessão mudou durante a preparação do editor.');
+      replace();
+      await delay(170);
+      if(equivalent(editorValue(el),text)){
+        return {replaced:!!original,attempts:attempt+1};
       }
     }
-    if(!editorValue(el))throw Error('O provedor não aceitou texto no editor.');
+    // Insertion failed before any send. Best-effort restoration avoids leaving
+    // half-written prompts in the editor or losing an unrelated user draft.
+    try{
+      if(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement)nativeTextareaValue(el,original);
+      else{
+        el.textContent=original;
+        el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertReplacementText',data:original}));
+      }
+    }catch{}
+    throw Error('O provedor não aceitou o prompt após duas tentativas de inserção. Nenhum envio realizado.');
   }
   const disallowed=/\b(stop|cancel|voice|speak|speech|microphone|mic|record|dictat|upload|attach|attachment|file|more|tools|search|parar|cancelar|voz|áudio|audio|gravar|microfone|anex|arquivo|ferramentas|pesquisa|plus|add)\b/i;
   function buttonMeta(el){return [el.id,el.className,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),el.getAttribute('data-test-id'),el.getAttribute('type'),el.querySelector('mat-icon')?.textContent,el.querySelector('svg')?.getAttribute('data-lucide'),el.querySelector('svg')?.getAttribute('class'),el.querySelector('use')?.getAttribute('href')].map(x=>typeof x==='string'?x:'').join(' ');}
@@ -231,7 +270,9 @@
       if(enabled.length){
         const top=enabled[0];
         if(enabled[1]&&top.score===enabled[1].score)throw Error('Dois botões Enviar igualmente prováveis. Nenhum clique realizado.');
-        if(!editorValue(el))throw Error('Campo vazio antes do envio.');
+        if(!equivalent(editorValue(el),job.prompt))throw Error('Texto do editor mudou antes do envio; nenhum clique realizado.');
+        // Exactly one click per authorized session. Never click again when
+        // the first attempt might already have reached the provider.
         top.btn.click();return top.evidence;
       }
       await delay(160);
@@ -262,12 +303,18 @@
     return rated[0]||null;
   }
   async function verifySend(el,oldUsers){
-    for(let i=0;i<30;i++){
-      if(!job)return false;
-      if(!editorValue(el)||all(CONFIG.user).length>oldUsers||newResponse())return true;
+    let cleared=false;
+    for(let i=0;i<40;i++){
+      if(!job)return {confirmed:false,cleared:false};
+      if(all(CONFIG.user).length>oldUsers || newResponse())return {confirmed:true,cleared};
+      if(busy())return {confirmed:true,cleared};
+      if(!editorValue(el))cleared=true;
+      // Some providers don't expose user bubbles or a busy indicator. An
+      // emptied composer is evidence of UI submission, but not proof.
+      if(cleared&&i>=8)return {confirmed:false,cleared:true};
       await delay(150);
     }
-    return false;
+    return {confirmed:false,cleared};
   }
   // An entire JSON proposal is safer than searching for a JSON fragment
   // anywhere in the conversation. Ignore markdown code fences only.
@@ -356,16 +403,20 @@
       deadline:Date.now()+Math.min(480000,Math.max(15000,message.ttl||480000)),wasSent:false,scans:0,lastDiagnostic:0};
     const userBefore=all(CONFIG.user).length;
     if(visibleLimitNotice())throw Error('Limite de uso informado pela interface do provedor. Nenhum reenvio automático.');
-    if(message.resumePending===true){
-      const pending=editorValue(el);
-      if(!pending.startsWith('TAREFA PÚBLICA AUTORIZADA PELO USUÁRIO')||!pending.includes('ai-forum-bridge-v1')||pending.length<400)
-        throw Error('Não existe um prompt pendente do AI Forum nesse editor. Nada foi enviado.');
-    }else setComposer(el,message.prompt);
+    // Explicit recovery replaces a leftover composer draft with the freshly
+    // generated prompt, including a new marker; opening tabs never does this.
+    const prepared=await setComposer(el,message.prompt,message.replacePending===true);
+    if(prepared.replaced)report('preparando','Rascunho não enviado substituído pelo prompt desta sessão.');
     const method=await sendComposer(el);
     job.sentAt=Date.now();job.wasSent=true;
-    report('aguardando','Botão Enviar acionado ('+method+'); verificando estado do editor.');
-    if(!await verifySend(el,userBefore))throw Error('Clique realizado, mas o provedor não confirmou o envio. Não repetir automaticamente.');
-    report('aguardando','Envio confirmado pela interface; observando resposta da IA.');
+    report('aguardando','Botão Enviar acionado ('+method+'); verificando a confirmação visual.');
+    const verification=await verifySend(el,userBefore);
+    if(!verification.confirmed&&!verification.cleared){
+      const error=new Error('Envio incerto: o clique foi realizado, mas o editor ainda contém texto. Verifique a conversa antes de iniciar outra sessão.');
+      error.code='SEND_UNCONFIRMED';
+      throw error;
+    }
+    report('aguardando',verification.confirmed?'Envio confirmado por atividade visível da IA; observando resposta.':'Editor limpo após o envio; aguardando a resposta para confirmação definitiva.');
     observer=new MutationObserver(()=>{
       if(job&&!scanTimer)scanTimer=setTimeout(()=>{scanTimer=null;inspect();},250);
     });
@@ -376,7 +427,7 @@
   }
   chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     if(sender?.id!==chrome.runtime.id||!['AFB_START','AFB_STOP','AFB_INSPECT'].includes(msg?.type))return false;
-    if(msg.type==='AFB_START')start(msg).then(reply,e=>{const detail=String(e?.message||e);if(job)report(/Limite de uso/i.test(detail)?'limite-uso':'erro',detail);stop();reply({ok:false,error:detail});});
+    if(msg.type==='AFB_START')start(msg).then(reply,e=>{const detail=String(e?.message||e);if(job)report(e?.code==='SEND_UNCONFIRMED'?'envio-incerto':/Limite de uso/i.test(detail)?'limite-uso':'erro',detail);stop();reply({ok:false,error:detail,code:e?.code||null});});
     else if(msg.type==='AFB_STOP'){if(job?.token===msg.token)stop(false);reply({ok:true});}
     else {inspect();reply({ok:true,active:!!job,provider:PROVIDER,chars:job?.text?.length||0,regions:candidates().length,checks:job?.scans||0,deepScans,deepTextNodes,editor:!!composer(),visible:document.visibilityState});}
     return msg.type==='AFB_START';
