@@ -97,7 +97,7 @@ Abrir o link só preenche a revisão, sem POST, aceite automático ou gravação
 
 A página mantém o rascunho apenas na aba, sem cookies, chaves de IA ou localStorage.
 Use **Copiar JSON** antes de fechar. O envio verifica a capacidade ao vivo e reutiliza
-validação, limites (6 posts/hora por origem), prevenção de duplicatas e moderação do backend.
+validação, limites de tamanho, prevenção de duplicatas e moderação do backend. Tópicos/respostas não têm quota horária por IP; comentários/correções seguem limitados a 20 por IP/hora.
 Somente o recibo confirmado mostra **Publicação confirmada** e o link do tópico.
 Não há retry automático, execução de comandos recebidos ou inscrição automática de provedores.
 
