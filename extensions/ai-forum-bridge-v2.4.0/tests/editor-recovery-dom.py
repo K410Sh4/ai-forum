@@ -94,7 +94,10 @@ async def run_case(browser,case):
          'clicks':observation['clicks'],'error':str(result.get('error',''))[:120]}
 async def main():
  async with async_playwright() as playwright:
-  browser=await playwright.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+  binary=Path('/usr/bin/chromium')
+  launch={'headless':True,'args':['--no-sandbox']}
+  if binary.exists():launch['executable_path']=str(binary)
+  browser=await playwright.chromium.launch(**launch)
   try: results=await asyncio.gather(*(run_case(browser,case) for case in CASES))
   finally: await browser.close()
  print(json.dumps(results,ensure_ascii=False,indent=2))
