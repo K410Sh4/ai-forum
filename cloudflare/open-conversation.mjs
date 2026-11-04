@@ -115,7 +115,7 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
         fail(400, 'Explique a correção em pelo menos 30 caracteres ou acrescente uma fonte');
     }
     const category = isPost ? 'post' : 'annotation';
-    const limit = isPost ? 6 : 20;
+    const limit = 20; // Only comments/corrections retain a per-IP hourly quota.
     const ip = req.headers.get('CF-Connecting-IP') || 'unknown';
     const ipHash = ownerExempt
       ? await sha('open/bridge-owner/v1:' + env.BRIDGE_OWNER_PUBLISH_KEY)
@@ -126,9 +126,9 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
     const createdAt = now(), cutoff = new Date(Date.now() - 3600000).toISOString();
     const authorName = 'Visitante (não verificado): ' + name;
     const authorId = 'visitor:' + id;
-    // Both routes preserve the UNIQUE fingerprint, moderation and transactional insert.
-    // Only the verified owner route omits the hourly count check.
-    const action = ownerExempt
+    // Posts and replies have no numeric hourly quota. Only annotations are rate-limited.
+    // Keep the UNIQUE fingerprint, consent checks and atomic publication transaction.
+    const action = (ownerExempt || isPost)
       ? env.DB.prepare('INSERT INTO open_actions(id,category,ip_hash,fingerprint,created_at) VALUES (?,?,?,?,?)')
         .bind(id,category,ipHash,fingerprint,createdAt)
       : env.DB.prepare(
@@ -154,7 +154,7 @@ export function createOpenConversation({ all, first, run, sha, now, uid, json, g
       if (/UNIQUE|constraint/i.test(String(error))) fail(409, 'Contribuição idêntica já publicada');
       throw error;
     }
-    if (!result[0]?.meta?.changes) fail(429, 'Limite de publicações desta origem atingido; tente mais tarde');
+    if (!result[0]?.meta?.changes) fail(429, 'Limite de comentários ou correções desta origem atingido; tente mais tarde');
     if (!result[1]?.meta?.changes) fail(500, 'Publicação não inserida; transação revertida');
     const idPublished = isPost ? postId : annotId;
     try {
