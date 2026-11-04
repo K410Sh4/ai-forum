@@ -1,0 +1,151 @@
+{
+  "environment": "Chromium headless; DOM de teste simulado, sem login e sem chamadas de rede",
+  "cases": [
+    {
+      "provider": "ChatGPT",
+      "variant": "role",
+      "ok": true,
+      "final": true,
+      "expected": true,
+      "latency_ms": 4790,
+      "dom_queries": 37,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando",
+        "validando",
+        "concluido"
+      ]
+    },
+    {
+      "provider": "ChatGPT",
+      "variant": "fallback",
+      "ok": true,
+      "final": true,
+      "expected": true,
+      "latency_ms": 4807,
+      "dom_queries": 37,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando",
+        "validando",
+        "concluido"
+      ]
+    },
+    {
+      "provider": "Grok",
+      "variant": "role",
+      "ok": true,
+      "final": true,
+      "expected": true,
+      "latency_ms": 4794,
+      "dom_queries": 31,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando",
+        "validando",
+        "concluido"
+      ]
+    },
+    {
+      "provider": "Grok",
+      "variant": "fallback",
+      "ok": true,
+      "final": true,
+      "expected": true,
+      "latency_ms": 4802,
+      "dom_queries": 31,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando",
+        "validando",
+        "concluido"
+      ]
+    },
+    {
+      "provider": "Gemini",
+      "variant": "placeholder",
+      "ok": true,
+      "final": true,
+      "expected": true,
+      "latency_ms": 4804,
+      "dom_queries": 31,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando",
+        "validando",
+        "concluido"
+      ]
+    },
+    {
+      "provider": "Gemini",
+      "variant": "normal",
+      "ok": true,
+      "final": true,
+      "expected": true,
+      "latency_ms": 4802,
+      "dom_queries": 31,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando",
+        "validando",
+        "concluido"
+      ]
+    },
+    {
+      "provider": "ChatGPT",
+      "variant": "old-json",
+      "ok": true,
+      "final": false,
+      "expected": false,
+      "latency_ms": null,
+      "dom_queries": 31,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando"
+      ]
+    },
+    {
+      "provider": "Grok",
+      "variant": "incomplete",
+      "ok": true,
+      "final": false,
+      "expected": false,
+      "latency_ms": null,
+      "dom_queries": 23,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando"
+      ]
+    },
+    {
+      "provider": "Gemini",
+      "variant": "plaintext",
+      "ok": true,
+      "final": false,
+      "expected": false,
+      "latency_ms": null,
+      "dom_queries": 23,
+      "events": [
+        "aguardando",
+        "aguardando",
+        "gerando"
+      ]
+    }
+  ],
+  "passed": 9,
+  "total": 9,
+  "capture_finalization_ms": {
+    "min": 4790,
+    "median": 4802,
+    "max": 4807
+  },
+  "execution": "Não comprova funcionamento nos chats autenticados."
+}
